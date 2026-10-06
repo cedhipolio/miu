@@ -1,0 +1,13 @@
+const out={};
+maLoadPrefs(); MA_PREFS.org="TSC CONSTRUCTION, LLC"; MA_PREFS.ta="EDEN TA"; maSavePrefs();
+maPanelOpen(true); maSetTab("stamp");
+out.tabs=[...document.querySelectorAll("#maPanel .ma-tab")].map(b=>b.dataset.ma);
+out.stampFields=["maLabel","maOrg","maTa","maDate","maScope"].map(id=>!!document.getElementById(id));
+maSetTab("notes"); out.notes=document.querySelectorAll("#maPanel .ma-item").length;
+maSetTab("parts"); out.parts=document.querySelectorAll("#maPanel .ma-item").length;
+maSetTab("import"); out.importOk=!!document.querySelector("#maPanel .ma-hint");
+out.asbuilt=MA_ASBUILT?{name:MA_ASBUILT.name,tokens:MA_ASBUILT.tokens.size}:null;
+out.diffs=MA_DIFFS.length;
+out.diffTop=MA_DIFFS.slice(0,5).map(d=>({p:d.page+1,v:d.printed,missing:(d.missing||[]).join(",")}));
+maSetTab("stamp");
+return JSON.stringify(out);

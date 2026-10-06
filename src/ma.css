@@ -1,0 +1,241 @@
+/* ==================================================================================================
+   Mount Analysis layer — the panel, its tabs, and the two marks that are specific to this tool.
+
+   Everything here follows the sheet it is appended to: the panel takes the same surface, rule and
+   shadow tokens the page rail and the redlines drawer take, so a theme change reaches it without a
+   second definition. Nothing in here sets a colour literally except the stamp's red, which is not a
+   theme colour — it is the red the mount analyses are actually marked up in.
+   ================================================================================================== */
+
+/* 6il — the Assist sections are DROPDOWNS now, not a docked rail: the same shape of floating panel a
+   tool's ▾ opens, positioned under the button that asked for it. `left`/`top` are written by
+   `maPlacePanel`. */
+#maPanel{position:fixed;top:76px;left:auto;right:16px;width:360px;max-width:94vw;
+  max-height:min(76vh,720px);background:var(--pop,var(--panel));
+  border:1px solid var(--line);border-radius:12px;z-index:64;display:none;flex-direction:column;
+  box-shadow:0 14px 42px var(--shadow);color:var(--ink);overflow:hidden}
+#maPanel.show{display:flex}
+html.booting #maPanel{visibility:hidden}
+body.maon .wrap{padding-right:0}
+
+#maPanel .mk-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+/* 6j9 — headings in caps, like the rest of the tool */
+#maPanel .mk-head b{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+#maPanel .mk-head .btn{margin-left:auto}
+#maPanel .ma-site{font-size:11px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
+
+#maPanel .ma-body{flex:1;min-height:0;overflow:auto;padding:14px;font:12px/1.45 Helvetica,Arial,sans-serif}
+/* 6iz — a section's fields sit one step in from its heading, the way the tool panels read */
+#maPanel .ma-sec > *:not(h4){margin-left:10px}
+#maPanel .ma-sec > h4{margin-left:0}
+#maPanel h4{margin:0 0 8px;font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint)}
+#maPanel .ma-sec{margin:0 0 20px}
+#maPanel .ma-hint{color:var(--muted);font-size:11px;line-height:1.5;margin:6px 0 0}
+#maPanel label.ma-f{display:block;margin:0 0 9px}
+#maPanel label.ma-f > span{display:block;font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 3px}
+#maPanel input[type=text],#maPanel input[type=date],#maPanel input[type=number],
+#maPanel select,#maPanel textarea{width:100%;box-sizing:border-box;background:var(--panel2);
+  color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 11px;
+  font:12px/1.35 Helvetica,Arial,sans-serif}
+#maPanel textarea{min-height:70px;resize:vertical}
+#maPanel input:focus,#maPanel select:focus,#maPanel textarea:focus{outline:2px solid var(--accent);
+  outline-offset:-1px;border-color:transparent}
+#maPanel .ma-row{display:flex;gap:8px}
+#maPanel .ma-row > *{flex:1;min-width:0}
+#maPanel .ma-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+/* 6iz — the same rounded language the tool panels use */
+#maPanel .ma-go{appearance:none;border:0;border-radius:999px;background:var(--accent);color:#fff;
+  font:600 12px/1 Helvetica,Arial,sans-serif;padding:10px 16px;cursor:pointer;letter-spacing:.02em}
+#maPanel .ma-go:hover{filter:brightness(1.08)}
+#maPanel .ma-go.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+#maPanel .ma-go:disabled{opacity:.45;cursor:default;filter:none}
+
+/* a saved note or a part: one line you can click to use, with its own small controls */
+#maPanel .ma-list{display:flex;flex-direction:column;gap:6px}
+#maPanel .ma-item{display:flex;align-items:flex-start;gap:8px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:11px;padding:8px 10px}
+#maPanel .ma-item .t{flex:1;min-width:0;cursor:pointer}
+#maPanel .ma-item .t b{display:block;font-size:12px;font-weight:600;color:var(--ink-strong);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#maPanel .ma-item .t small{display:block;color:var(--muted);font-size:10.5px;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#maPanel .ma-item .x{appearance:none;background:transparent;border:0;color:var(--faint);cursor:pointer;
+  font-size:13px;line-height:1;padding:2px 3px}
+#maPanel .ma-item .x:hover{color:var(--pop)}
+#maPanel .ma-empty{color:var(--faint);font-size:11px;padding:10px 2px}
+
+/* the as-built comparison: one row per value that disagrees */
+#maPanel .ma-diff{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;
+  margin:0 0 7px}
+#maPanel .ma-diff .h{display:flex;align-items:baseline;gap:6px;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint)}
+#maPanel .ma-diff .v{margin-top:4px;font-size:12px;color:var(--ink-strong)}
+#maPanel .ma-diff .v s{color:var(--muted);text-decoration-color:var(--pop)}
+#maPanel .ma-diff .v b{color:var(--accent)}
+#maPanel .ma-diff .go{margin-top:7px}
+
+/* Ontel's banded surfaces reach the panel the same way they reach the rail */
+html.pal-ontel #maPanel{
+  --bg:var(--band-bg); --panel:var(--band-panel); --panel2:var(--band-panel2);
+  --line:var(--band-line); --ink:var(--band-ink); --ink-strong:var(--band-ink-strong);
+  --muted:var(--band-muted); --faint:var(--band-faint); --pop:var(--band-pop);
+  --accent:var(--band-accent); --accent2:var(--band-accent2)}
+html.light.pal-ontel #maPanel{background:var(--panel);border-color:var(--line);color:var(--ink)}
+#maPanel{border-left-color:transparent;
+  box-shadow:calc(var(--emb-d) * -1) 0 calc(var(--emb-b)*2.4) var(--emb-page-lo, var(--emb-lo)),
+             inset 1px 0 0 var(--emb-hi)}
+#maPanel .mk-head{border-bottom-color:transparent;
+  box-shadow:inset 0 -1px 0 var(--emb-rule-hi, var(--emb-hi)), inset 0 -2px 0 var(--emb-rule-lo, var(--emb-lo))}
+
+
+/* while a note or a callout is waiting for the click that says where it goes */
+body.maplacing .page{cursor:crosshair}
+
+/* the markup library: a small grid of what you have uploaded */
+#maPanel .ma-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#maPanel .ma-mk{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:6px;cursor:pointer;display:flex;flex-direction:column;gap:5px;align-items:center}
+#maPanel .ma-mk:hover{border-color:var(--accent)}
+/* 6gr — a checker behind the thumbnail, not a white card: a markup with a transparent background
+   should LOOK transparent in the library, and line art still reads over it. */
+#maPanel .ma-mk img{max-width:100%;max-height:88px;object-fit:contain;display:block;border-radius:4px;
+  background-color:#f3f4f6;
+  background-image:linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%),
+                   linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%);
+  background-size:12px 12px;background-position:0 0,6px 6px}
+#maPanel .ma-mk .nm{font-size:10.5px;color:var(--muted);text-align:center;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#maPanel .ma-mk .x{position:absolute;top:2px;right:2px;appearance:none;background:var(--panel);
+  border:1px solid var(--line);border-radius:5px;color:var(--faint);font-size:11px;line-height:1;
+  padding:2px 4px;cursor:pointer;opacity:0;transition:opacity .12s}
+#maPanel .ma-mk:hover .x{opacity:1}
+#maPanel .ma-mk .x:hover{color:var(--pop)}
+
+/* a shape being dragged out: the marquee shows the shape you are about to get */
+.marquee.shape{border:1.5px dashed var(--accent,#3a8bd5);background:rgba(58,139,213,.08)}
+.marquee.shape.round{border-radius:50%}
+
+/* a shape mark on the page — the rule and the interior are set per mark, so nothing here paints it */
+.anno.shapemark .ed{min-width:0!important}
+
+/* ---- Analyze MA: the loading table as a form ---- */
+#maAnalyze{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.45);padding:16px}
+#maAnalyze.show{display:flex}
+#maAnalyze .az-box{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+  border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
+#maAnalyze .az-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+#maAnalyze .az-head > div:first-child{flex:1;min-width:0}
+#maAnalyze .az-title{font:800 12px/1.2 Helvetica,Arial,sans-serif;color:var(--ink-strong);
+  letter-spacing:.11em;text-transform:uppercase}
+#maAnalyze .az-sub{font:400 11.5px/1.4 Helvetica,Arial,sans-serif;color:var(--muted);margin-top:2px}
+#maAnalyze .az-body{flex:1;overflow:auto;padding:14px 16px}
+#maAnalyze .az-foot{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--line)}
+#maAnalyze .az-count{flex:1;font:400 11.5px/1 Helvetica,Arial,sans-serif;color:var(--muted);
+  letter-spacing:.04em;text-transform:uppercase}
+#maAnalyze .az-chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
+#maAnalyze .az-chip{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--faint);
+  border-radius:20px;padding:4px 10px;font:600 10.5px/1 Helvetica,Arial,sans-serif;cursor:pointer;
+  letter-spacing:.04em;text-transform:uppercase}
+#maAnalyze .az-chip.on{background:var(--accent);border-color:transparent;color:#fff}
+#maAnalyze .az-tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+#maAnalyze table.az-table{border-collapse:collapse;width:100%;font:12px/1.3 Helvetica,Arial,sans-serif}
+#maAnalyze .az-table th{position:sticky;top:0;background:var(--panel2);color:var(--faint);
+  font:600 10px/1.25 Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;
+  text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:normal;min-width:88px}
+#maAnalyze .az-table th.pg,#maAnalyze .az-table td.pg{min-width:0;width:38px;text-align:center;
+  color:var(--faint);font-variant-numeric:tabular-nums}
+#maAnalyze .az-table td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+#maAnalyze .az-table tr:last-child td{border-bottom:0}
+#maAnalyze .az-table input{width:100%;box-sizing:border-box;background:transparent;color:var(--ink);
+  border:1px solid transparent;border-radius:6px;padding:5px 6px;font:12px/1.3 Helvetica,Arial,sans-serif}
+#maAnalyze .az-table input:hover{border-color:var(--line)}
+#maAnalyze .az-table input:focus{outline:none;border-color:var(--accent);background:var(--panel2)}
+#maAnalyze .az-table input.blank{color:var(--faint);font-style:italic}
+#maAnalyze .az-table input.edited{background:rgba(250,50,55,.12);border-color:rgba(250,50,55,.5);
+  color:var(--ink-strong);font-weight:600}
+#maAnalyze .ma-empty{color:var(--faint);font-size:12px;padding:24px 4px;max-width:60ch;line-height:1.55}
+
+/* the Style group: three short rows rather than seven stacked controls.
+   The columns are `max-content`, not `1fr`: the ribbon measures a group by what is inside it to decide
+   its column width, and a fraction unit has no width of its own to measure — with `1fr` the whole
+   ribbon collapsed into a narrow strip down the left of the window. */
+#toolbar .grp-style .stylegrid{display:grid;grid-template-columns:repeat(2,max-content);
+  gap:5px 12px;align-items:center;justify-content:start;
+  /* The ribbon caps a group at four 30px button columns, which is right for a group of buttons and
+     far too narrow for one of labelled fields — the cap does not shrink a grid, it just lets it spill
+     over the group beside it. This group is measured by its own content instead; the ribbon wraps
+     around it. */
+  max-width:none!important;width:max-content}
+#toolbar .grp-style .stylegrid label.mini{display:flex;align-items:center;gap:5px;justify-content:flex-start;
+  white-space:nowrap;min-width:0}
+#toolbar .grp-style .stylegrid label.mini > span{font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--faint);flex:0 0 auto}
+#toolbar .grp-style .stylegrid input[type=number]{width:54px;min-width:0}
+#toolbar .grp-style .stylegrid label.wide{grid-column:1 / -1}
+#toolbar .grp-style .stylegrid select{width:110px}
+#toolbar .grp-style .stylegrid input.swatch{width:30px}
+/* Down the right the ribbon is a narrow column the user sets the width of, so the group gives up the
+   second column and every field takes the width it is given rather than the width it wants. */
+body.ribbonright #toolbar .grp-style .stylegrid{grid-template-columns:minmax(0,1fr);
+  width:100%!important;max-width:100%!important;gap:4px}
+body.ribbonright #toolbar .grp-style .stylegrid label.mini{justify-content:space-between;width:100%}
+body.ribbonright #toolbar .grp-style .stylegrid select{width:100%;min-width:0}
+body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
+
+/* a text box being dragged out reads as a text frame, not as a shape */
+.marquee.shape.textbox{border-style:solid;border-width:1px;background:rgba(58,139,213,.06)}
+
+/* =================================================================================================
+   6fa — THE ANGLE READOUT
+   A rotate handle used to turn a mark silently, which is no way to line a callout up with a member.
+   The reading sits on the mark's own centre and goes green the moment Snap has caught an angle.
+   ================================================================================================= */
+.deghud{position:fixed;z-index:4300;transform:translate(-50%,-50%);pointer-events:none;
+  background:rgba(17,20,26,.92);color:#fff;border:1px solid rgba(255,255,255,.18);
+  border-radius:8px;padding:4px 9px;font:700 12px/1 Helvetica,Arial,sans-serif;
+  letter-spacing:.02em;opacity:0;transition:opacity .1s}
+.deghud.show{opacity:1}
+.deghud.caught{background:#0b7a4b;border-color:#13a866}
+
+/* 6g1 — the measurement readout: the same chip as the angle, following the pointer */
+.deghud.lenhud{transform:none;font-variant-numeric:tabular-nums}
+
+/* 6ha — the markup's own edit button, beside the remove one it matches. Same plate, same reveal on
+   hover; the pencil says what it does and the two never overlap because each is anchored to its own
+   corner of the cell. */
+#maPanel .ma-mk .edit{position:absolute;top:2px;left:2px;appearance:none;background:var(--panel);
+  border:1px solid var(--line);border-radius:5px;color:var(--faint);font-size:11px;line-height:1;
+  padding:2px 5px;cursor:pointer;opacity:0;transition:opacity .12s}
+#maPanel .ma-mk:hover .edit{opacity:1}
+#maPanel .ma-mk .edit:hover{color:var(--accent);border-color:var(--accent)}
+
+/* 6hf — THE HELD STAMP. A markup picked up from the library follows the pointer until the sheet is
+   clicked: translucent, so the drawing under it still reads, hung from the pointer by its TOP-LEFT
+   corner, and drawn at the size it will land at. It is never a click target — the click has to reach
+   the page underneath it. */
+.maghost{position:fixed;left:-9999px;top:-9999px;z-index:70;pointer-events:none;
+  opacity:.72;outline:1.5px dashed var(--accent);outline-offset:2px;border-radius:2px;
+  box-shadow:0 6px 20px rgba(0,0,0,.28)}
+.maghost img{display:block;width:100%;height:100%;object-fit:fill}
+.maghost.grp{display:flex;align-items:center;justify-content:center;text-align:center;
+  background:var(--panel2);color:var(--ink);font-size:11px;font-weight:700;padding:6px;
+  box-sizing:border-box}
+
+/* 6hl — A SAVED SELECTION SHOWS ITSELF. The tile holds a drawing of the marks rather than a count of
+   them, on the same checker the picture markups sit on so the two read as one library. The drawing is
+   an SVG built from the marks, so it scales to the tile without a raster step. */
+#maPanel .ma-mk .ma-mkgrp{width:100%;height:88px;display:flex;align-items:center;justify-content:center;
+  border-radius:4px;overflow:hidden;padding:4px;box-sizing:border-box;
+  font-size:11px;font-weight:700;color:var(--muted);
+  background-color:#f3f4f6;
+  background-image:linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%),
+                   linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%);
+  background-size:12px 12px;background-position:0 0,6px 6px}
+#maPanel .ma-mk .ma-mksvg{max-width:100%;max-height:100%;width:100%;height:100%;display:block}
+/* the same drawing in the hand, at the size it will land at — no card behind it, because what you are
+   holding is the marks themselves */
+.maghost.grp{background:transparent;padding:0}
+.maghost.grp svg{width:100%;height:100%;display:block}

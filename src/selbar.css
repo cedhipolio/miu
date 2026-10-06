@@ -1,0 +1,356 @@
+/* =================================================================================================
+   SELECTION ACTION BAR
+   A dark bar across the bottom of the window whenever something is selected — the shape Ced sent from
+   Bluebeam. It keeps its own palette in both themes for the same reason the properties panel does: it
+   floats over a white page and has to read against one.
+   ================================================================================================= */
+.selbar{
+  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+  z-index:4100; display:flex; align-items:center; gap:2px;
+  max-width:calc(100vw - 24px); overflow-x:auto; overflow-y:visible;
+  background:#1f232b; color:#e6e9ef;
+  border:1px solid #363c48; border-radius:11px;
+  box-shadow:0 14px 40px rgba(0,0,0,.45);
+  padding:5px 7px; font-size:12px;
+}
+.selbar[hidden]{display:none}
+.selbar::-webkit-scrollbar{height:6px}
+.selbar::-webkit-scrollbar-thumb{background:#3a414f;border-radius:4px}
+
+.sb-count{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:24px;height:24px;padding:0 6px;margin-right:5px;
+  border-radius:6px;background:#2f3541;color:#fff;
+  font:700 12px/1 Helvetica,Arial,sans-serif;flex:0 0 auto;
+}
+.sb-b{
+  display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
+  background:transparent;border:0;border-radius:7px;color:#cfd6e2;
+  padding:6px 9px;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1;
+}
+.sb-b:hover{background:#2b313b;color:#fff}
+.sb-b.on{background:#2f7be0;color:#fff}
+.sb-i{font-size:14px;line-height:1;opacity:.92}
+/* 6jo — the drawn icons: the same optical weight as the words beside them, and they take the
+   button's colour, so hover and the pressed state need no second copy. */
+.sb-i.sb-svg{display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;opacity:1}
+.sb-i.sb-svg svg{display:block;width:15px;height:15px}
+.sb-b .ma-i{fill:currentColor}
+.sb-l{letter-spacing:.005em}
+.sb-more{padding:6px 8px}
+/* 6jf — the actions that came back are icons: the bar carries nine of them and five words, which is
+   about as wide as v32's five words and an overflow, and every one says what it is on hover. */
+.sb-ico{padding:6px 8px}
+.sb-ico .sb-i{font-size:13px}
+/* 6jg — the delete control, the same red disc in a rounded box the floating bars now carry */
+.sb-del{margin-left:4px;padding:5px 6px;border-radius:9px}
+.sb-del .sb-i{display:flex;align-items:center;justify-content:center;
+  width:17px;height:17px;border-radius:999px;background:#e03131;color:#fff;
+  font:700 10px/1 Helvetica,Arial,sans-serif;opacity:1}
+.sb-del:hover{background:#3a2229}
+.sb-del:hover .sb-i{background:#f03e3e}
+/* the back-to-top mark sits in the same corner, so it steps up while the bar is out */
+body.selbaron #markR{bottom:64px}
+
+/* the drop-up menus */
+.sb-menu{
+  position:fixed;z-index:4400;min-width:190px;padding:5px;
+  background:#1f232b;color:#e6e9ef;border:1px solid #3a414f;border-radius:9px;
+  box-shadow:0 14px 36px rgba(0,0,0,.5);
+}
+.sb-mi{display:block;width:100%;text-align:left;background:transparent;border:0;color:#cfd6e2;
+  padding:7px 9px;border-radius:6px;font-size:12px;cursor:pointer}
+.sb-mi:hover{background:#2f7be0;color:#fff}
+/* 6jc — a layer row: the name, how many marks are on it, and the eye that switches it off */
+.sb-mrow{display:flex;align-items:center;gap:2px}
+.sb-mrow > .sb-mi{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-mi.tick{color:#fff;font-weight:600}
+.sb-mnote{flex:0 0 auto;padding:0 2px;color:#7f8899;font:600 10px/1 Helvetica,Arial,sans-serif}
+.sb-maux{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:0;border-radius:6px;color:#6f7889;font-size:12px;cursor:pointer}
+.sb-maux.on{color:#cfd6e2}
+.sb-maux:hover{background:#2b313b;color:#fff}
+/* 6jf — the bar's layer button wears the layer's name, so it is readable at a glance */
+.sb-lay .sb-l{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-sep{height:1px;background:#2f3541;margin:4px 2px}
+/* 6j7 — the right-click menu: the same card, opened at a point, with a heading it can carry */
+.sb-menu.sb-ctx{min-width:230px;max-height:78vh;overflow:auto;border-radius:12px;padding:5px}
+.sb-mh{padding:7px 12px 5px;color:#8d96a6;font:700 9.5px/1 Helvetica,Arial,sans-serif;
+  letter-spacing:.12em;text-transform:uppercase}
+.sb-mi.off{opacity:.4;cursor:default}
+.sb-mi.off:hover{background:transparent;color:#cfd6e2}
+
+/* a locked mark says so, and a flattened one is marked as going into the page */
+.anno.locked{outline:1.5px dashed rgba(255,176,46,.85);outline-offset:1px}
+.anno.locked .ed{cursor:not-allowed}
+.anno.flatm{box-shadow:0 0 0 1.5px rgba(47,123,224,.55)}
+
+/* a saved selection in the markup library has no picture, so it shows what it holds */
+.ma-mk .ma-mkgrp{display:flex;align-items:center;justify-content:center;width:100%;height:56px;
+  border-radius:6px;background:var(--panel2,#20242c);color:var(--muted,#8d96a6);
+  font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.03em}
+
+/* =================================================================================================
+   6f8 — A BIGGER TARGET ON THE HANDLES
+   With the tool staying in your hand, a press that misses a handle by a pixel no longer lands on an
+   idle page: it starts another box. So each handle gets an invisible collar around it, which costs
+   nothing visually and makes the grab forgiving — the same trick the stroke hit-strips use.
+   ================================================================================================= */
+.anno .rz::after{content:"";position:absolute;left:-7px;top:-7px;right:-7px;bottom:-7px}
+.anno .rot::after{content:"";position:absolute;left:-7px;top:-7px;right:-7px;bottom:-7px}
+
+/* =================================================================================================
+   6ff — THE BAR'S OWN DIALOG
+   `prompt()` is blocked in a sandboxed frame, so the three actions that ask a question ask it here.
+   ================================================================================================= */
+.sb-ask{position:fixed;inset:0;z-index:4600;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,10,14,.55);backdrop-filter:blur(2px)}
+.sb-askcard{width:420px;max-width:calc(100vw - 40px);background:#1f232b;color:#e6e9ef;
+  border:1px solid #3a414f;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.6);padding:16px 16px 14px}
+.sb-asktitle{font:700 15px/1.2 Helvetica,Arial,sans-serif;margin-bottom:6px}
+.sb-askhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:0 0 11px}
+.sb-askinput{width:100%;box-sizing:border-box;background:#262b34;border:1px solid #3a414f;
+  border-radius:8px;color:#e6e9ef;font-size:13px;padding:9px 10px;outline:none}
+.sb-askinput:focus{border-color:#6ea8ff}
+.sb-asklabel{display:block;color:#8d96a6;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;margin:0 0 5px}
+.sb-askselect{display:block;width:100%;box-sizing:border-box;margin:5px 0 10px;
+  background:#262b34;border:1px solid #3a414f;border-radius:8px;color:#e6e9ef;
+  font-size:13px;padding:9px 10px;outline:none;cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,#8d96a6 50%),
+                   linear-gradient(135deg,#8d96a6 50%,transparent 50%);
+  background-position:calc(100% - 17px) 17px,calc(100% - 12px) 17px;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.sb-askselect:focus{border-color:#6ea8ff}
+.sb-askrow{display:flex;justify-content:flex-end;gap:8px;margin-top:13px}
+.sb-askb{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:8px;
+  padding:7px 14px;font-size:12px;cursor:pointer}
+.sb-askb:hover{background:#2f3541}
+.sb-askb.primary{background:#2f7be0;border-color:#2f7be0;color:#fff}
+.sb-askb.primary:hover{background:#3d88ec}
+
+/* =================================================================================================
+   6g1 — THE VERTICAL HANDLES COME BACK
+   Ced: "adjustment of shapes in vertical is not good." The reference the handles were copied from had
+   no top/bottom mid handles, which is fine for a text box that grows with its text and wrong for every
+   shape here: a box round a table row is resized in height far more often than a corner is dragged.
+   So a FREE box — a shape or a text box — gets all eight, and a cell redline keeps the four it had.
+
+   6g9 — AND ONLY WHILE IT IS SELECTED. The rule below carried `display:block!important`, which beat
+   the base `.anno .rz{display:none}` as well as the one it was written to beat — so every shape and
+   every text box on the page wore two little pills whether or not anything was selected. Ced:
+   "the top and bottom adjuster are visible even when the shape is not selected." Scoped to `.sel`
+   now, and hidden while the box is being typed into, like every other handle. */
+.anno.sel.shapemark .rz.n,.anno.sel.shapemark .rz.s,
+.anno.sel.textbox .rz.n,.anno.sel.textbox .rz.s{
+  display:block!important;width:22px;height:7px;border-radius:6px;left:calc(50% - 11px);
+}
+.anno.sel.shapemark .rz.n,.anno.sel.textbox .rz.n{top:-5px;cursor:ns-resize}
+.anno.sel.shapemark .rz.s,.anno.sel.textbox .rz.s{bottom:-5px;cursor:ns-resize}
+.anno.editing .rz.n,.anno.editing .rz.s{display:none!important}
+
+/* =================================================================================================
+   6g1 — CENTRED AT ANY ZOOM
+   Ced: "please fix the centering when zoomed in." `align-items:center` centres a child only while it
+   FITS; once the page is wider than the scroller the flex item is pinned to the start and the left
+   half of the sheet runs off the edge. `margin-inline:auto` on the page itself keeps it centred while
+   it fits, and `min-width:max-content` on the column stops the overflowing case from being clipped on
+   the left — which together is what makes a 350% sheet scroll symmetrically instead of losing its
+   left edge.
+   ================================================================================================= */
+/* 6gb — AND NOT BY WIDENING THE WHOLE LAYOUT.
+   `min-width:max-content` sized the column to the document's WIDEST sheet, so one 11×17 drawing at 200%
+   made the page column 2,500px wide — and with it the body, which then scrolled sideways and took the
+   ribbon, the header and the status line with it. That is Ced's "zooming in is still broken": the
+   chrome was clipped on the left and the sheet sat off-centre with dead space beside it, on a page that
+   fitted the window perfectly well.
+   The column stays inside the window now. Each page centres itself with auto margins while it fits;
+   a page too wide for the column starts at its left edge and overflows to the RIGHT, which is
+   reachable by scrolling and never cut off. `--col-w` is widened from the zoom (see `fitColumn`) so a
+   big sheet centres in the WINDOW rather than inside a 1,360px column. */
+#pages{align-items:flex-start}
+#pages .page{margin-left:auto;margin-right:auto}
+
+/* =================================================================================================
+   6g1 — A GROUP STILL SHOWS ITS HANDLES
+   Ced: "when adjusting grouped items, the drag, rotate, and other changing functions should still
+   show." A multi-selection drew a halo and nothing else — no frame to grab, no rotate handle, no sense
+   of what the selection's extent even was. `#groupframe` is that frame: a box round everything
+   selected, with the same four corner handles and the same rotate grip a single mark has.
+   ================================================================================================= */
+.gframe{position:absolute;z-index:9;pointer-events:none;
+  outline:var(--selw) dashed var(--selink);outline-offset:0}
+.gframe .gh{position:absolute;width:11px;height:11px;border-radius:50%;background:#fff;
+  border:var(--selbw) solid var(--selink);box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:auto}
+.gframe .gh.nw{left:-6px;top:-6px;cursor:nwse-resize}
+.gframe .gh.ne{right:-6px;top:-6px;cursor:nesw-resize}
+.gframe .gh.se{right:-6px;bottom:-6px;cursor:nwse-resize}
+.gframe .gh.sw{left:-6px;bottom:-6px;cursor:nesw-resize}
+.gframe .gmove{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:auto;cursor:move}
+/* 6hb — the selection's three controls, in a row under the frame: the same trio, in the same order
+   and at the same size, that a mark and a stroke carry. Each one has a fingertip's worth of padding
+   round the visible circle (`touch-action:none`, like every other handle). */
+/* 6i2 — and the grips go ABOVE the frame when the selection sits low on the page, where the multi bar
+   would otherwise cover them. `.up` is set by the painter that places the frame. */
+.gframe.up .ggrips{bottom:auto;top:-34px}
+.gframe .ggrips{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);
+  display:flex;gap:6px;pointer-events:none}
+.gframe .ggrip{width:22px;height:22px;border-radius:50%;background:#fff;border:var(--selbw) solid var(--selink);
+  color:var(--selink);font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
+  padding:0;pointer-events:auto;cursor:pointer;touch-action:none;
+  box-shadow:0 1px 3px rgba(0,0,0,.28)}
+.gframe .ggrip.grot{cursor:grab}
+.gframe .ggrip.gdrag{cursor:move}
+.gframe .ggrip.danger{border-color:#ff5e62;color:#ff5e62}
+.gframe .ggrip:hover{filter:brightness(1.05);box-shadow:0 2px 6px rgba(0,0,0,.35)}
+
+
+/* =================================================================================================
+   6gc — THE SELECT TOOL'S KIT
+   The menu behind Select's ▾, and the four gestures that draw something of their own: the lasso, the
+   text-select highlight, the snapshot box and the laser.
+   ================================================================================================= */
+.sk-menu{min-width:250px;padding:6px}
+.sk-mi{display:flex;align-items:center;gap:10px;padding:8px 9px}
+.sk-mi.on{background:#2f3541;color:#fff}
+.sk-g{width:18px;text-align:center;opacity:.85;font-size:13px;line-height:1}
+.sk-l{flex:1;white-space:nowrap}
+.sk-k{color:#7f8a9c;font-size:11px;letter-spacing:.02em}
+
+/* the printed runs a text-select drag is over */
+.tspan.sk-on{background:rgba(18,104,209,.26);border-radius:2px}
+
+/* the two dragged boxes read differently: text select is the blue of a selection, a snapshot is a
+   camera frame */
+.marquee.sk-textsel{border:var(--selw) solid var(--selink);background:var(--selink-a)}
+.marquee.sk-snapshot{border:1.5px dashed #ffb02e;background:rgba(255,176,46,.10)}
+
+/* 6hx — the laser is one canvas over the whole window: a hot head and a streak that fades behind it.
+   It draws nothing until the pointer moves and takes itself away when the tool is put down. */
+.sk-lasercv{position:fixed;left:0;top:0;z-index:5200;pointer-events:none}
+body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{cursor:none!important}
+
+/* what each of the kit's modes does to the pointer */
+#pages[data-mode="lasso"] .page,#pages[data-mode="lasso"] .tspan{cursor:crosshair}
+#pages[data-mode="textsel"] .page,#pages[data-mode="textsel"] .tspan{cursor:text}
+#pages[data-mode="snapshot"] .page,#pages[data-mode="snapshot"] .tspan{cursor:crosshair}
+#pages[data-mode="eraser"] .page,#pages[data-mode="eraser"] .tspan,#pages[data-mode="eraser"] .anno{cursor:cell}
+#pages[data-mode="painter"] .page,#pages[data-mode="painter"] .anno{cursor:copy}
+
+
+/* =================================================================================================
+   6gf — THE PICTURE EDITOR
+   A prompt of its own over the sheet: the capture on a chequerboard so the transparency is plain, the
+   two tools across the top, Save and Cancel at the foot.
+   ================================================================================================= */
+.sk-edit{position:fixed;inset:0;z-index:4700;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,10,14,.6);backdrop-filter:blur(2px)}
+/* 6gr — THE DIALOG IS A FIXED SHAPE. Ced: "make the ui extend on the available space of the tool, with
+   just few spaces. so zooming in and out in the ui does not change the shape of the tab."
+   The card used to be sized by the picture inside it, so every zoom step resized the whole dialog —
+   the buttons moved under the hand and the tab breathed in and out. It takes the room it is given,
+   once, with a small margin; the picture scrolls inside the stage. */
+.sk-edcard{background:#1f232b;color:#e6e9ef;border:1px solid #3a414f;border-radius:12px;
+  box-shadow:0 22px 60px rgba(0,0,0,.6);padding:14px;
+  width:calc(100vw - 48px);height:calc(100vh - 48px);
+  max-width:1480px;max-height:1000px;
+  display:flex;flex-direction:column;box-sizing:border-box}
+/* 6j9 — headings in caps */
+.sk-edtitle{font:800 12px/1.2 Helvetica,Arial,sans-serif;letter-spacing:.11em;text-transform:uppercase}
+.sk-edhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:4px 0 10px;max-width:640px}
+.sk-edbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+/* 6gk — the tools, the selection, the fill: three groups on one row, so the wand and Invert are side
+   by side and the row reads as what it is rather than as nine loose buttons */
+.sk-edgrp{display:flex;align-items:center;gap:4px;background:#1a1e25;border:1px solid #333a47;
+  border-radius:9px;padding:4px}
+.sk-edbar2{margin-bottom:10px}
+.sk-edzoom{min-width:48px;text-align:center}
+/* 6gk — what the next wand click does to the selection: new, add, subtract */
+.sk-edmodes{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
+  border-radius:8px;padding:2px}
+.sk-edm{background:transparent;border:0;color:#9aa4b4;border-radius:6px;padding:5px 9px;
+  font:600 11.5px/1 Helvetica,Arial,sans-serif;cursor:pointer;white-space:nowrap}
+.sk-edm:hover{background:#262b34;color:#e6e9ef}
+.sk-edm.on{background:#2f7be0;color:#fff}
+.sk-edb{display:inline-flex;align-items:center;gap:7px;background:#262b34;border:1px solid #3a414f;
+  color:#cfd6e2;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer}
+.sk-edb:hover{background:#2f3541}
+.sk-edb.on{background:#2f7be0;border-color:#2f7be0;color:#fff}
+.sk-edg{font-size:13px;line-height:1}
+.sk-edsize{display:inline-flex;align-items:center;gap:8px;color:#8d96a6;font-size:11.5px;
+  background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:5px 10px}
+.sk-edsize input[type=range]{width:110px}
+.sk-ednum{color:#e6e9ef;font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+/* 6ha — THE STAGE IS THE ROOM, THE PICTURE SITS IN THE MIDDLE OF IT.
+   Ced: "the photo should always be in the middle of edit photo ui." It was pinned to the top and to
+   the centre only horizontally, so a picture smaller than the stage — which is most of them, since the
+   fit never goes above 1:1 — sat against the ceiling with all the empty room underneath it. `margin:
+   auto` on the picture is the one way that centres BOTH ways and still scrolls correctly when the
+   picture is larger than the stage; `justify-content:center` alone clips the top-left in that case. */
+.sk-edstage{position:relative;background:#1a1e25;
+  border:1px solid #3a414f;border-radius:9px;padding:8px;display:flex;
+  justify-content:safe center;align-items:safe center;
+  /* it fills whatever the card has left, whatever the picture inside it is doing */
+  flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+/* 6ha — AND THE PICTURE'S EDGE IS DRAWN. Ced: "make the boundaries in edit photo clearer." The
+   chequer used to be the STAGE's background, which made the room look like the picture: you could not
+   tell where the transparent part of a capture ended and the empty stage began, and a capture with a
+   white ground looked like a white card floating in a chequered void. Now the chequer is the PICTURE's
+   own ground — so transparent pixels read as transparent, exactly as they will on the sheet — and the
+   picture carries a hairline edge and a drop shadow, which is what says "this is the picture". */
+.sk-edwrap{position:relative;display:block;flex:0 0 auto;margin:auto;
+  /* 6im — a DARKER chequer. Ced: "change the transparent background of the edit photo to a darker
+     gray." The light one it had was almost the colour of the page behind a capture, so a white ground
+     and an empty one looked the same; these two greys read as "nothing here" against red ink. */
+  background:
+    linear-gradient(45deg,#33394400 25%,transparent 25%,transparent 75%,#33394400 75%),
+    linear-gradient(45deg,#3b414c 25%,#4b5260 25%,#4b5260 75%,#3b414c 75%);
+  background-size:14px 14px;background-position:0 0,7px 7px;
+  /* 6im — the edge is drawn with crisp rings only. The 34px blurred drop shadow under it had to be
+     re-blurred every time the brush changed a pixel of the canvas above it, which is most of what made
+     a sweep feel like treacle on a three-times-resolution capture. */
+  box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 0 0 2px rgba(10,14,20,.9), 0 4px 10px rgba(0,0,0,.4);
+  outline:1px dashed rgba(120,170,255,.55);outline-offset:3px;
+  /* and the picture is its own compositing layer, so a stroke repaints it and nothing else */
+  /* `contain:layout` (not `paint`) — the turn grip hangs below the edge and must not be clipped */
+  contain:layout;will-change:transform;transform:translateZ(0)}
+.sk-edcanvas{display:block;touch-action:none;image-rendering:auto}
+/* 6j4 — the frame the Border slider sets, shown on the stage the way it will sit on the sheet */
+.sk-edwrap.bordered{box-shadow:0 0 0 var(--sk-bord,0px) var(--sk-bordcol,#fa3237),
+  0 0 0 calc(var(--sk-bord,0px) + 1px) rgba(255,255,255,.5),
+  0 0 0 calc(var(--sk-bord,0px) + 2px) rgba(10,14,20,.9),
+  0 4px 10px rgba(0,0,0,.4)}
+/* 6iq — the picture's turn grip: the SAME control a selected mark carries on the sheet (see
+   `.anno .rot` in app.css) — a round white button on a blue rule, below the middle of the edge. */
+/* it straddles the bottom edge rather than hanging clear of it, so the stage still centres the
+   picture both ways and nothing has to make room below. */
+.sk-edrot{position:absolute;bottom:-11px;left:calc(50% - 10px);width:20px;height:20px;
+  border-radius:50%;background:#fff;border:var(--selbw) solid var(--selink);color:var(--selink);
+  font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
+  padding:0;cursor:grab;z-index:6;touch-action:none;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.sk-edrot:hover{background:var(--selink);color:#fff}
+.sk-edrot:active{cursor:grabbing}
+/* 6gj — the selection is shown on its own canvas over the picture, so nothing it draws can end up
+   saved into the picture itself */
+.sk-edov{position:absolute;left:0;top:0;display:block;pointer-events:none;image-rendering:auto}
+/* 6gq — the brush, drawn where the pointer is and at the size it will actually rub out. Two rings, one
+   light and one dark, so it reads on a white drawing and on a dark one alike. */
+.sk-edring{position:absolute;left:0;top:0;border-radius:50%;pointer-events:none;opacity:0;
+  /* 6im — moved with a transform, written once a frame, so the ring never costs a layout */
+  transform:translate(-50%,-50%);will-change:transform;border:1px solid rgba(255,255,255,.95);
+  box-shadow:0 0 0 1px rgba(0,0,0,.65) inset,0 0 0 1px rgba(0,0,0,.45);
+  transition:opacity .12s ease}
+.sk-edring.on{opacity:1}
+.sk-edring.restore{border-color:#7ee0a0;box-shadow:0 0 0 1px rgba(0,0,0,.55) inset,0 0 0 1px rgba(0,0,0,.35)}
+.sk-edcol{width:30px;height:26px;padding:0;border:1px solid #3a414f;border-radius:7px;
+  background:#262b34;cursor:pointer}
+.sk-edcount{color:#8d96a6;font-size:11.5px;margin-left:2px;font-variant-numeric:tabular-nums}
+.sk-edb[disabled]{opacity:.45;cursor:default}
+.sk-edfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.sk-edfb{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:8px;
+  padding:7px 16px;font-size:12px;cursor:pointer}
+.sk-edfb:hover{background:#2f3541}
+.sk-edfb.primary{background:#2f7be0;border-color:#2f7be0;color:#fff}
+.sk-edfb.primary:hover{background:#3d88ec}

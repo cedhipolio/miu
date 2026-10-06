@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Mark It Up — redline mount analyses in the browser</title>
+<meta name="description" content="A single-file PDF redlining tool for mount analyses and construction drawings. Opens in the browser, marks up the sheet, exports a PDF whose pages stay vector and whose marks stay editable. Nothing is uploaded.">
+<!-- The tool is for internal use; the landing page should not be indexed either. Drop this line if
+     the site ever becomes public. -->
+<meta name="robots" content="noindex">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<meta property="og:title" content="Mark It Up">
+<meta property="og:description" content="Redline mount analyses in the browser. Nothing leaves the machine.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#0b0c0e;
+    --panel:#121419;
+    --line:#23272f;
+    --ink:#f2f3f5;
+    --muted:#9aa3b0;
+    --faint:#6b7480;
+    --red:#fa3237;        /* the redline red — the one colour the tool is about */
+    --sel:#1268d1;        /* the selection blue, same token the app uses */
+    --radius:14px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    /* a very faint red wash behind the fold, so the page is not a flat black rectangle */
+    background-image:radial-gradient(900px 420px at 50% -120px, rgba(250,50,55,.10), transparent 70%);
+    background-repeat:no-repeat;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  a{color:inherit}
+
+  /* ---- hero ---- */
+  header{padding:72px 0 8px;text-align:center}
+  .mark{width:min(340px,72vw);margin:0 auto 26px;line-height:0}
+  /* the mark is an <img>, and an <img> carries its intrinsic width attribute unless told otherwise —
+     without this rule it lays out at the artwork's own 1171px and runs off the side of the page */
+  .mark img{display:block;width:100%;height:auto}
+  h1{
+    font-size:clamp(28px,4.6vw,44px);line-height:1.15;margin:0 0 14px;
+    letter-spacing:-.02em;font-weight:700;
+  }
+  h1 .hl{
+    /* The headline wears the product — but UNDERLINED, not struck. A strike through "without leaving
+       the browser" reads as the sentence being cancelled, which is the opposite of the point. A red
+       rule under the words is the other half of what this tool draws, and it emphasises. */
+    position:relative;
+    white-space:nowrap;
+  }
+  h1 .hl::after{
+    content:"";position:absolute;left:-1px;right:-1px;bottom:-2px;height:3px;
+    background:var(--red);border-radius:2px;
+  }
+  .lede{
+    max-width:620px;margin:0 auto;color:var(--muted);
+    font-size:clamp(16px,2.1vw,19px);
+  }
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:34px 0 10px}
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:13px 24px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);text-decoration:none;
+    font-weight:600;font-size:15px;
+    transition:border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .btn:hover{border-color:#39404b;background:#171a20;transform:translateY(-1px)}
+  .btn.primary{
+    background:var(--red);border-color:var(--red);color:#fff;
+    box-shadow:0 10px 30px -12px var(--red);
+  }
+  .btn.primary:hover{background:#ff474c;border-color:#ff474c}
+  .note{color:var(--faint);font-size:13px;margin:0}
+
+  /* ---- the strip of facts ---- */
+  .facts{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;margin:56px 0 0;
+  }
+  .facts div{background:var(--panel);padding:20px 18px;text-align:center}
+  .facts b{display:block;font-size:22px;letter-spacing:-.01em}
+  .facts span{color:var(--faint);font-size:12.5px;text-transform:uppercase;letter-spacing:.07em}
+
+  /* ---- sections ---- */
+  section{padding:64px 0 0}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);
+     margin:0 0 20px;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 20px 18px;
+  }
+  .card h3{margin:0 0 7px;font-size:16.5px;letter-spacing:-.01em}
+  .card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.6}
+  .card .k{
+    display:inline-block;font:12px/1 var(--mono);color:var(--faint);
+    border:1px solid var(--line);border-radius:5px;padding:4px 6px;margin:10px 4px 0 0;
+  }
+
+  /* ---- the privacy note, which is the point for client documents ---- */
+  .local{
+    margin-top:14px;border:1px solid var(--line);border-left:3px solid var(--sel);
+    background:var(--panel);border-radius:var(--radius);padding:20px 22px;
+  }
+  .local h3{margin:0 0 7px;font-size:16.5px}
+  .local p{margin:0;color:var(--muted);font-size:14.5px}
+
+  footer{
+    margin-top:72px;padding:26px 0 40px;border-top:1px solid var(--line);
+    color:var(--faint);font-size:13px;
+    display:flex;gap:14px;justify-content:space-between;flex-wrap:wrap;
+  }
+  footer a{color:var(--muted);text-decoration:none}
+  footer a:hover{color:var(--ink)}
+
+  @media (max-width:700px){
+    header{padding-top:48px}
+    .facts{grid-template-columns:1fr}
+    .grid{grid-template-columns:1fr}
+    h1 .hl{white-space:normal}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="mark"><img src="logo.svg" alt="Mark It Up" width="1171" height="504"></div>
+    <h1>Redline a mount analysis <span class="hl">without leaving the browser</span></h1>
+    <p class="lede">
+      Open the PDF, mark it up, export it. The original pages stay vector, every correction comes out
+      as a real PDF annotation someone else can click and move, and the file never leaves the machine
+      it was opened on.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="/app">Open the tool</a>
+      <a class="btn" href="#what">What it does</a>
+    </div>
+    <p class="note">Runs in Chrome, Edge, Firefox and Safari. No install, no account, no upload.</p>
+  </header>
+
+  <div class="facts">
+    <div><b>1 file</b><span>Self-contained</span></div>
+    <div><b>0 uploads</b><span>Everything local</span></div>
+    <div><b>Vector out</b><span>Pages never flattened</span></div>
+  </div>
+
+  <section id="what">
+    <h2>What it does</h2>
+    <div class="grid">
+
+      <div class="card">
+        <h3>Redline tools that know the form</h3>
+        <p>
+          Click a cell to drop editable red text on it. Strike a row that was removed, strike a value
+          and write the as-built one above it, cross out a figure. The marks line up with the printed
+          table because they are measured against it.
+        </p>
+        <span class="k">R redline</span><span class="k">F strike &amp; write</span><span class="k">W strike row</span>
+      </div>
+
+      <div class="card">
+        <h3>Drawing tools that behave</h3>
+        <p>
+          Lines, arrows, dimensions, polylines, boxes, circles, clouds and callouts — each with its own
+          colour, weight, ending, corner style and pattern, set on the tool rather than hunted for in a
+          panel. Draw by dragging, or click once to start and once to finish.
+        </p>
+        <span class="k">L line</span><span class="k">A arrow</span><span class="k">D length</span><span class="k">K callout</span>
+      </div>
+
+      <div class="card">
+        <h3>An export that stays editable</h3>
+        <p>
+          The pages come out exactly as they went in — vector, selectable, searchable. Each mark is
+          written as a PDF annotation, so whoever opens it next can move a note or correct a value
+          without the page turning into a picture of itself.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Assist</h3>
+        <p>
+          Read a loading or equipment table off the sheet and edit it as a form, writing back only what
+          changed. Import an as-built and get a proposed redline wherever the document disagrees. Keep
+          a library of the markups and stamps you place on every job.
+        </p>
+      </div>
+
+    </div>
+
+    <div class="local">
+      <h3>Nothing is uploaded</h3>
+      <p>
+        There is no server. The tool is one HTML file: the PDF engine, the writer and the fonts are all
+        inside it, and the document you open is read in the tab and never sent anywhere. Saved
+        redlines live in that browser's own storage, on that machine. It works with the network
+        unplugged — which is also what makes it safe to point at a client's drawings.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Getting started</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>1 · Open a PDF</h3>
+        <p>Drop a file anywhere on the page, or use Open PDF. The site name is read off the first page
+           and becomes the export's file name.</p>
+      </div>
+      <div class="card">
+        <h3>2 · Mark it up</h3>
+        <p>Pick a tool with its letter key. Escape drops the selection; Escape again puts the tool
+           down. Ctrl+S saves to the browser so a refresh costs nothing.</p>
+      </div>
+      <div class="card">
+        <h3>3 · Export</h3>
+        <p>Ctrl+E writes the marked-up PDF. Copy list gives you the corrections as text for an email
+           or a tracker.</p>
+      </div>
+      <div class="card">
+        <h3>Press ? at any time</h3>
+        <p>The full key map, every tool and every shortcut, without leaving the sheet.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Mark It Up — Ontel LLC. Internal tool.</span>
+    <span><a href="/app">Open the tool</a></span>
+  </footer>
+
+</div>
+
+</body>
+</html>

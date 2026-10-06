@@ -1,0 +1,12 @@
+Copyright (c) 2026 Ontel LLC. All rights reserved.
+
+This software and its source code are proprietary and confidential. They are provided for internal
+use within Ontel LLC and are not licensed for redistribution, publication, sublicensing or use
+outside the organisation without prior written permission.
+
+Third-party components are vendored under src/ and remain under their own licences:
+
+  pdf.js   (src/pdfjs.js, src/pdfworker.js)  — Mozilla Foundation, Apache License 2.0
+  pdf-lib  (src/pdflib.js)                   — Andrew Dillon, MIT License
+
+Nothing in this notice limits the rights granted by those licences to those components.

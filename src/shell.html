@@ -1,0 +1,855 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mark It Up</title>
+<!-- 6ea — the tab wears the R, the mark the page itself shows once you scroll. On its own dark
+     ground so it reads on a light tab strip as well as a dark one. -->
+<link id="favIcon" rel="icon" type="image/png" href="data:image/png;base64,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">
+<link id="favTouch" rel="apple-touch-icon" href="data:image/png;base64,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">
+<style id="boot-css">body{margin:0}html.booting .wrap,html.booting aside#rail,html.booting #marksPanel{visibility:hidden}html.booting *{transition:none!important;animation:none!important}#boot{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:inherit;transition:opacity .28s ease}html:not(.booting) #boot{opacity:0;pointer-events:none}#boot.gone{display:none}.boot-in{display:flex;flex-direction:column;align-items:center}.boot-mark{width:300px;max-width:62vw;line-height:0}.boot-mark svg{display:block;width:100%;height:auto}.boot-mark .bm-ink{fill:currentColor}.boot-mark .bm-acc{fill:currentColor;opacity:.42}.boot-mark .bm-sub{fill:currentColor;opacity:.55}.boot-track{width:190px;height:2px;border-radius:2px;margin:26px 0 0;overflow:hidden;background:rgba(128,128,128,.32)}.boot-track i{display:block;height:100%;width:0;background:currentColor;opacity:.75;transition:width .22s ease}.boot-stage{font-family:Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;margin-top:11px;opacity:.5;text-transform:uppercase;min-height:12px}</style>
+
+<!-- 6er — BOOT. Measured on the previous build, a cold load looked like this:
+       t=830ms   the page paints with NO palette class at all: --bg #0B0306, a dark ground
+       t=1068ms  the saved palette and `light` land, so the ground jumps to #ECE3E5
+       t=1324ms  iconifyRibbon() runs and 39 text-labelled buttons turn into icons at once
+       t=1642ms  the body's background transition finally finishes fading
+     Which is exactly "it shows all the changes made from the very first version to the latest build" —
+     you watch the older design go past on the way to the current one. Two things fix it, and the first
+     one matters most: SETTLE THE APPEARANCE BEFORE THE FIRST PAINT. This script is inline and above the
+     body, so the class it puts on <html> is there for the very first frame; nothing jumps afterwards. -->
+<script>
+(function(){
+  var h=document.documentElement;
+  /* 6fc — `nodoc` is the OPENING SCREEN's layout, and it is set here rather than on <body> because this
+     document has no <body> tag to carry an attribute: there is no element to write to until the parser
+     makes one, and by then the first frame has been laid out. It comes off in loadPdf, next to the line
+     that hides the drop zone, and goHome reloads the page so it comes back on its own. */
+  h.className=(h.className?h.className+" ":"")+"booting nodoc";
+  try{
+    var mode=localStorage.getItem("ma.themeMode");
+    var t=localStorage.getItem("ma_theme");
+    var light=(mode==="light")||(mode==="system"&&window.matchMedia&&
+               window.matchMedia("(prefers-color-scheme: light)").matches)||(!mode&&t==="light");
+    if(light)h.classList.add("light");
+    var pid=localStorage.getItem("ma.paletteId");
+    /* 6es — A FIRST RUN HAS NO SAVED PALETTE, and leaving the class off does not mean "no theme": it
+       means the stylesheet's pre-palette default, #0B0306, until the app script picks PALETTES[0] and
+       the ground jumps (measured: #0B0306 -> #101112 at t=512). So default to the app's own default
+       here. If this list is ever reordered, PALETTES[0].id is the value that belongs on this line. */
+    if(!(pid&&/^pal-[a-z]+$/.test(pid)))pid="pal-ontel";
+    h.classList.add(pid);
+    /* The packed artifact has no stylesheet yet at this point — its CSS is inflated by script — so the
+       very first frame there would be the browser's default white whatever the theme is. Painting the
+       ground here covers that gap in both builds. For the default palette we know its exact ground and
+       use it; for a saved one we cannot read the sheet, so a near-neutral of the right weight stands in
+       for the two or three frames before the CSS lands. */
+    h.style.background=(pid==="pal-ontel")?(light?"#ffffff":"#101112"):(light?"#eceef2":"#0f1012");
+    h.style.color=light?"#14161a":"#e8e9ec";   /* the boot mark and bar inherit this */
+  }catch(e){}
+})();
+</script>
+<!-- The boot screen itself. First element in the body, so it is what the first frame shows; the app is
+     hidden behind it until the ribbon has been iconified and the first layout has settled. -->
+<div id="boot" aria-live="polite">
+  <div class="boot-in">
+    <div class="boot-mark"><svg viewBox="0 0 1171 504" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path class="bm-acc" d="M-0.0 -0.0L-0.0 119.9L119.1 180.2L119.1 60.3Z M45.0 182.1L44.4 396.8L76.6 414.0L77.2 198.7Z M-0.0 473.1L-0.0 503.8L31.0 490.3L31.0 487.8L2.4 472.4Z"/><path class="bm-ink" d="M1.2 161.8L1.2 370.3L28.6 385.7L28.6 175.3Z M93.0 209.1L93.0 423.2L117.3 436.2L117.3 221.4Z M1.2 390.6L1.2 457.7L46.8 481.1L109.4 452.1Z M1.2 136.6L1.8 145.8L117.3 204.2L116.1 194.4Z"/><g transform="translate(181.1,73.8)"><path class="bm-ink" d="M386.3 249.8C381.8 247.6 381.8 247.4 382.2 165.6C382.3 122.9 382.3 88.0 382.1 88.0C381.7 88.0 369.8 97.5 332.0 128.1C261.3 185.1 229.6 210.2 227.0 211.1C223.0 212.5 221.2 211.4 202.0 195.4C185.3 181.4 111.4 120.2 85.3 98.7L71.0 87.0L70.8 128.4L70.5 169.8L35.2 152.6L0.0 135.5L0.0 70.4C0.0 7.7 0.1 5.1 1.9 2.9L3.8 0.5L38.3 0.6C77.8 0.8 75.1 0.2 87.0 10.6C116.8 36.8 137.3 54.1 210.4 114.7C220.3 123.0 226.8 127.6 227.4 127.1C228.0 126.7 238.4 118.2 250.5 108.4C316.8 54.4 379.8 3.7 382.7 2.1C384.2 1.3 395.2 1.0 418.8 1.0L452.7 1.0L455.1 3.6L457.5 6.2L457.2 28.3C457.0 40.5 456.5 60.2 456.0 72.0C455.4 83.8 455.0 127.8 455.0 169.8L455.0 246.1L452.5 248.5L450.1 251.0L419.3 250.9C399.9 250.9 387.7 250.5 386.3 249.8ZM500.5 248.5L498.0 246.1L498.0 174.1L498.0 102.1L531.8 118.7C550.3 127.8 568.1 136.4 571.2 137.8L577.0 140.3L577.0 192.1C577.0 227.9 576.7 244.7 575.9 246.3C573.9 250.8 571.8 251.0 536.4 251.0L502.9 251.0L500.5 248.5ZM691.8 250.0C663.6 245.2 637.9 223.8 626.0 195.3C620.0 180.9 620.0 181.2 620.0 89.2C620.0 8.0 620.1 5.1 621.9 2.9L623.8 0.5L653.9 0.2L684.0 -0.1L686.5 2.4L689.0 4.9L689.0 85.5C689.0 143.4 689.3 167.4 690.2 170.7C691.7 176.7 698.9 184.4 704.5 185.9C710.3 187.5 899.8 187.4 905.1 185.9C910.3 184.3 915.9 179.5 918.1 174.6C919.8 170.8 920.0 167.2 920.0 129.2C920.0 106.6 920.3 88.0 920.7 88.0C921.0 88.0 936.8 95.5 955.7 104.7L990.0 121.4L990.0 146.7C990.0 166.0 989.6 173.9 988.4 179.8C981.7 212.4 958.6 237.8 926.0 248.4C919.6 250.4 918.5 250.5 808.0 250.6C746.7 250.7 694.4 250.4 691.8 250.0Z"/><path class="bm-acc" d="M35.2 221.8L0.0 204.6L0.0 177.3C0.0 162.2 0.3 150.0 0.8 150.2C1.2 150.4 17.1 158.2 36.2 167.5L71.0 184.4L71.0 211.7C71.0 226.7 70.9 239.0 70.8 238.9C70.6 238.9 54.6 231.2 35.2 221.8ZM537.0 106.9L498.5 88.0L498.2 55.1L498.0 22.1L534.2 39.9C554.2 49.6 572.0 58.2 573.8 58.9L577.0 60.2L577.0 93.1C577.0 111.2 576.7 126.0 576.2 125.9C575.8 125.9 558.2 117.3 537.0 106.9ZM955.0 90.1L920.5 73.3L920.2 43.5C920.0 17.7 920.2 13.8 921.4 14.3C922.3 14.7 938.0 22.2 956.5 31.2L990.0 47.4L990.0 77.2C990.0 93.6 989.9 107.0 989.8 107.0C989.6 106.9 974.0 99.4 955.0 90.1Z"/></g><text class="bm-sub" x="177.5" y="430" font-family="Helvetica,Arial,sans-serif" font-size="83" font-weight="600" textLength="989.3" lengthAdjust="spacing" xml:space="preserve">MARK IT UP</text></svg></div>
+    
+    <div class="boot-track"><i id="bootBar"></i></div>
+    <div class="boot-stage" id="bootStage">Starting…</div>
+  </div>
+</div>
+<div class="wrap">
+  <header class="app">
+    <div class="brand">
+      <h1 class="logo">
+        <span class="logo-wm" aria-hidden="true"><svg viewBox="0 0 1171 504" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path class="lg-acc" d="M-0.0 -0.0L-0.0 119.9L119.1 180.2L119.1 60.3Z M45.0 182.1L44.4 396.8L76.6 414.0L77.2 198.7Z M-0.0 473.1L-0.0 503.8L31.0 490.3L31.0 487.8L2.4 472.4Z"/><path class="lg-ink" d="M1.2 161.8L1.2 370.3L28.6 385.7L28.6 175.3Z M93.0 209.1L93.0 423.2L117.3 436.2L117.3 221.4Z M1.2 390.6L1.2 457.7L46.8 481.1L109.4 452.1Z M1.2 136.6L1.8 145.8L117.3 204.2L116.1 194.4Z"/><g transform="translate(181.1,73.8)"><path class="lg-ink" d="M386.3 249.8C381.8 247.6 381.8 247.4 382.2 165.6C382.3 122.9 382.3 88.0 382.1 88.0C381.7 88.0 369.8 97.5 332.0 128.1C261.3 185.1 229.6 210.2 227.0 211.1C223.0 212.5 221.2 211.4 202.0 195.4C185.3 181.4 111.4 120.2 85.3 98.7L71.0 87.0L70.8 128.4L70.5 169.8L35.2 152.6L0.0 135.5L0.0 70.4C0.0 7.7 0.1 5.1 1.9 2.9L3.8 0.5L38.3 0.6C77.8 0.8 75.1 0.2 87.0 10.6C116.8 36.8 137.3 54.1 210.4 114.7C220.3 123.0 226.8 127.6 227.4 127.1C228.0 126.7 238.4 118.2 250.5 108.4C316.8 54.4 379.8 3.7 382.7 2.1C384.2 1.3 395.2 1.0 418.8 1.0L452.7 1.0L455.1 3.6L457.5 6.2L457.2 28.3C457.0 40.5 456.5 60.2 456.0 72.0C455.4 83.8 455.0 127.8 455.0 169.8L455.0 246.1L452.5 248.5L450.1 251.0L419.3 250.9C399.9 250.9 387.7 250.5 386.3 249.8ZM500.5 248.5L498.0 246.1L498.0 174.1L498.0 102.1L531.8 118.7C550.3 127.8 568.1 136.4 571.2 137.8L577.0 140.3L577.0 192.1C577.0 227.9 576.7 244.7 575.9 246.3C573.9 250.8 571.8 251.0 536.4 251.0L502.9 251.0L500.5 248.5ZM691.8 250.0C663.6 245.2 637.9 223.8 626.0 195.3C620.0 180.9 620.0 181.2 620.0 89.2C620.0 8.0 620.1 5.1 621.9 2.9L623.8 0.5L653.9 0.2L684.0 -0.1L686.5 2.4L689.0 4.9L689.0 85.5C689.0 143.4 689.3 167.4 690.2 170.7C691.7 176.7 698.9 184.4 704.5 185.9C710.3 187.5 899.8 187.4 905.1 185.9C910.3 184.3 915.9 179.5 918.1 174.6C919.8 170.8 920.0 167.2 920.0 129.2C920.0 106.6 920.3 88.0 920.7 88.0C921.0 88.0 936.8 95.5 955.7 104.7L990.0 121.4L990.0 146.7C990.0 166.0 989.6 173.9 988.4 179.8C981.7 212.4 958.6 237.8 926.0 248.4C919.6 250.4 918.5 250.5 808.0 250.6C746.7 250.7 694.4 250.4 691.8 250.0Z"/><path class="lg-acc" d="M35.2 221.8L0.0 204.6L0.0 177.3C0.0 162.2 0.3 150.0 0.8 150.2C1.2 150.4 17.1 158.2 36.2 167.5L71.0 184.4L71.0 211.7C71.0 226.7 70.9 239.0 70.8 238.9C70.6 238.9 54.6 231.2 35.2 221.8ZM537.0 106.9L498.5 88.0L498.2 55.1L498.0 22.1L534.2 39.9C554.2 49.6 572.0 58.2 573.8 58.9L577.0 60.2L577.0 93.1C577.0 111.2 576.7 126.0 576.2 125.9C575.8 125.9 558.2 117.3 537.0 106.9ZM955.0 90.1L920.5 73.3L920.2 43.5C920.0 17.7 920.2 13.8 921.4 14.3C922.3 14.7 938.0 22.2 956.5 31.2L990.0 47.4L990.0 77.2C990.0 93.6 989.9 107.0 989.8 107.0C989.6 106.9 974.0 99.4 955.0 90.1Z"/></g><text class="lg-sub" x="177.5" y="430" font-family="Helvetica,Arial,sans-serif" font-size="83" font-weight="600" textLength="989.3" lengthAdjust="spacing" xml:space="preserve">MARK IT UP</text></svg></span>
+        <!-- 6jj — the name itself is drawn inside the mark, at the artwork's own coordinates: it runs
+             from the M's left edge to the U's right edge, level with the lower half of the pen. This
+             span is what a screen reader reads, since the drawing is aria-hidden. -->
+        <span class="logo-sub sr-only">Mark It Up</span>
+      </h1>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- 6gc — the reveal strip. It is the TOP-MOST few pixels of the UI and nothing else, sitting above
+         the compact bar in the stack so the pointer reaches it first. Ced: "make sure that the ribbon
+         will expand only when hovered on the top most part of the ui or in three dots, not when picking
+         functions on the status bar" — so this strip is deliberately thinner than the bar under it. -->
+    <div id="ribbonPeek" title="Show the ribbon"></div>
+
+    <!-- 6gc — THE COMPACT BAR. One line, shown whenever the full ribbon is not on screen: scrolled down
+         an ordinary document, or in page view. Every control here CLICKS THE RIBBON'S OWN BUTTON rather
+         than calling a handler, so the ribbon stays the single definition of what each thing does and
+         this bar can never drift away from it. -->
+    <!-- 6ge — the side ribbon's resize grip. Ced: "add the capacity to resize the right ribbon so the
+         user has the control." It only exists in side mode; double-click puts the default back. -->
+    <div id="ribGrip" role="separator" aria-orientation="vertical" tabindex="0"
+         aria-label="Resize the ribbon — drag, or use the arrow keys"
+         title="Drag to resize the ribbon · double-click to reset"></div>
+
+    <div id="miniBar" data-role="minibar" role="toolbar" aria-label="Quick controls">
+      <button type="button" class="btn sm mb-btn mb-export" id="miniExport" data-click="#dlPdf"
+              title="Export the marked-up PDF (Ctrl+E)" aria-label="Export the redlined PDF">⭳</button>
+      <button type="button" class="btn sm mb-btn" id="miniOpen" data-click="#openBtn"
+              title="Open a PDF" aria-label="Open a PDF">📄</button>
+      <button type="button" class="btn sm mb-btn" id="miniHome" data-click="#homeBtn"
+              title="Close this report and go back to the opening screen" aria-label="Home">⌂</button>
+      <button type="button" class="btn sm mb-btn" id="miniSave" data-click="#saveBtn"
+              title="Save redlines to this browser (Ctrl+S)" aria-label="Save">💾</button>
+      <button type="button" class="btn sm mb-btn" id="miniPhoto" data-click="#photoBtn"
+              title="Insert a photo — or paste one with Ctrl+V" aria-label="Insert a photo">🖼</button>
+      <button type="button" class="btn sm mb-btn" id="miniUndo" data-click="#undoBtn"
+              title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+      <button type="button" class="btn sm mb-btn" id="miniRedo" data-click="#redoBtn"
+              title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+      <span class="mb-sep"></span>
+      <!-- the tool in use, shown as the tool's OWN glyph so the bar says it the same way the ribbon
+           does. Its name is on hover and in the label a screen reader reads. -->
+      <span class="mb-tool" id="miniTool" title="The redline tool in use" role="img" aria-label="Tool">✋</span>
+      <button type="button" class="btn sm mb-btn" id="miniReport" data-click="#reportBtn"
+              title="Redline report — what was corrected on this document" aria-label="Redline report">▤</button>
+      <button type="button" class="btn sm mb-btn" id="miniAnalyze" data-click="#maBtn"
+              title="Assist — notes, parts, markups and the as-built import (Ctrl+Shift+A)" aria-label="Assist">✦</button>
+      <button type="button" class="btn sm mb-btn" id="miniPageView" data-click="#pageViewBtn"
+              title="Page view — one page at a time" aria-label="Page view">▤</button>
+      <button type="button" class="btn sm mb-btn" id="miniRail" data-click="#railToggle"
+              title="Show or hide the page list" aria-label="Page list">☰</button>
+      <!-- 6gh — the day/night switch itself, not a button that stands for it: the same markup the
+           ribbon carries, so the knob shows which mode is on here too. -->
+      <button type="button" class="btn sm thm-tog mb-thm" id="miniTheme"
+              title="Day / night — the knob shows which is on (Shift+D)" aria-label="Day or night mode"><span class="thm-tr"><span class="thm-s">☀</span><span class="thm-m">☾</span><span class="thm-k"></span></span></button>
+      <button type="button" class="btn sm mb-btn" id="miniPal" data-click="#palBtn"
+              title="Appearance — night, day or system, and the colour theme" aria-label="Appearance">◐</button>
+      <button type="button" class="btn sm mb-btn" id="miniSide" data-click="#ribSideBtn"
+              title="Move the ribbon — top, or down the right" aria-label="Move the ribbon">⇅</button>
+      <span class="mb-sep"></span>
+      <!-- the document's name and the time are DATA, not labels: Ced asked for the file name and for
+           Last saved by name. What went are the words that merely repeated a button's icon. -->
+      <!-- 6gg — the detection banner, folded in. Ced: "this bar should be integrated to the mini bar
+           now especially for right ribbon mode." What the banner says is three things — which kind of
+           report this is, what it will be called on the way out, and the site that names it — and all
+           three belong next to the export button rather than on a strip of their own. -->
+      <span class="mb-kind" id="miniKind" hidden></span>
+      <!-- 6ge — editable. The site name drives the export file name, and the bar is where you are
+           looking when you notice it is wrong. It writes through to #s_site, the one field that owns
+           it, rather than keeping a second copy. -->
+      <input class="mb-name" id="miniName" spellcheck="false" autocomplete="off"
+             placeholder="site" aria-label="Site"
+             title="The site this report is for — this names the export">
+      <span class="mb-fname" id="miniFname" hidden></span>
+      <span class="mb-status" id="miniStatus" hidden></span>
+      <span class="mb-spacer"></span>
+      <!-- 6gl — the mark count is the LAST thing on the bar. Ced: "the redline mark count should be the
+           one on the right most of mini bar." It is the number you glance at while working, and the end
+           of the bar is the one position that never moves as the save tick comes and goes. -->
+      <span class="cnt savePill">✓</span>
+      <span class="cnt lastSaved" hidden></span>
+      <span class="mb-cnt" id="miniCount" title="Redlines on this document">✎ 0</span>
+    </div>
+    <!-- 6fv — the rail is furniture, not a consequence of opening a document. Its header is in the
+         markup so the opening screen has something in the 74px it already reserves; `buildRail()`
+         replaces the contents once there are pages. Ced: "just show the pages list even without the
+         pages on the left part to not make the home page look assymetrical or not in the middle." -->
+    <aside id="rail">
+      <div class="railhdr">PAGES</div>
+      <div class="railempty">no<br>document<br>open</div>
+    </aside>
+    <div class="main">
+      <div id="detectBanner">
+        <div class="db-row">
+          <span class="tag" id="detectTag">—</span>
+          <span class="why" id="detectWhy"></span>
+          <span class="fname" id="detectFname"></span>
+        </div>
+        <div class="db-site">
+          <label for="s_site">SITE</label>
+          <input id="s_site" placeholder="read off the first page — this names the export">
+        </div>
+      </div>
+
+      <!-- 6gb — the save readout sits ABOVE the ribbon. Below it, in the status bar, is where the eye
+           goes last; Ced asked for it above, and a slim strip is the whole of it. It hides with the rest
+           of the chrome in page view, at which point #ribbonSaved inside the ribbon takes over. -->
+      <div class="saveStrip" id="saveStrip">
+        <span class="cnt savePill" id="savePill">✓</span>
+        <span class="cnt lastSaved" id="lastSaved" hidden></span>
+      </div>
+
+      <div class="toolbar" id="toolbar">
+        <!-- 6gm — one grip on each edge, and either one resizes the ribbon ABOUT ITS CENTRE. Ced: "make
+             it adustable on both left and right but the top ribbon must adjust from the center." So a
+             drag of 40px on either handle moves BOTH edges 40px and the ribbon stays where it is; the
+             side ribbon's single grip is anchored to the window edge because that ribbon is, and this
+             one is not. -->
+        <i class="colgrip l" id="colGripL" role="separator" aria-orientation="vertical" tabindex="0"
+           aria-label="Resize the ribbon — drag either edge, or use the arrow keys"
+           title="Drag either edge to resize the ribbon · double-click to fill the window"></i>
+        <i class="colgrip r" id="colGripR" role="separator" aria-orientation="vertical" tabindex="0"
+           aria-label="Resize the ribbon — drag either edge, or use the arrow keys"
+           title="Drag either edge to resize the ribbon · double-click to fill the window"></i>
+        <div class="grp grp-export" data-lbl="Export">
+          <button class="btn-redline" id="dlPdf" disabled title="Export the marked-up PDF — original pages stay vector, every mark becomes a movable PDF annotation (Ctrl+E)">EXPORT MARKED-UP PDF</button>
+        </div>
+        <div class="grp" data-lbl="File">
+          <div class="grow">
+            <button class="btn primary" id="openBtn" title="Open a PDF — or drop a file anywhere on the page">Open PDF</button>
+            <button class="btn sm" id="homeBtn" disabled title="Close this report and go back to the opening screen">⌂ Home</button>
+            <button class="btn sm" id="saveBtn" disabled title="Save redlines to this browser so they survive a refresh or crash (Ctrl+S)">💾 Save</button>
+            <button class="btn sm" id="copyBtn" disabled title="Copy every redline as a list you can paste into Word or Excel">⧉ Copy list</button>
+            <button class="btn sm" id="reportBtn" title="A short description of the corrections made — the summary you paste into an email or a task note">▤ Redline report</button>
+            <button class="btn sm" id="photoBtn" disabled title="Insert a photo — or just paste one with Ctrl+V. It stays movable and resizable, and exports as a PDF annotation.">🖼 Photo</button>
+            <button class="btn sm danger-btn" id="cacheBtn" title="Clear saved markings — delete every redline this browser has kept for any report, so a document opens clean instead of offering an old session back">🗑 Clear saved markings</button>
+          </div>
+          <input id="file" type="file" accept="application/pdf" class="hidden">
+          <input id="photoFile" type="file" accept="image/*" class="hidden">
+        </div>
+
+        <div class="grp" data-lbl="Edit">
+          <div class="grow">
+            <button class="btn sm" id="undoBtn" disabled title="Undo (Ctrl+Z)">↶</button>
+            <button class="btn sm" id="redoBtn" disabled title="Redo (Ctrl+Y)">↷</button>
+            <button class="btn sm danger-btn" id="clearBtn" disabled title="Remove redlines from this page or the whole document">🗑 Clear…</button>
+          </div>
+        </div>
+
+        <div class="grp" data-lbl="Redline tools" id="tools">
+          <div class="grow">
+            <button class="tool" data-mode="select" title="Select and edit marks · drag blank space to marquee-select a run of them · hold Ctrl or Shift to pan instead · Space pans from any tool (S)">⬚ Select</button>
+            <button class="tool" data-mode="pan" title="Pan the sheet — drag anywhere to move the page under the window. Hold Ctrl or Shift while panning to marquee-select instead, and Space pans from whichever tool is in your hand (H)">✋ Pan</button>
+            <button class="tool active" data-mode="redline" title="Click a cell to drop editable red text on it · right-click for a free redline (R)">✎ Redline</button>
+            <!-- 6fd — Ced's order, and it is an order with a shape: the two whole-row tools, then the two
+                 that act on one value, then the two that draw, then Copy row last because it is the only
+                 one that ADDS text rather than marking what is printed. The hotkeys are read from
+                 data-mode, and the icons from MODE_ICONS/MODE_SHAPES by mode, so nothing depends on the
+                 position of a button in this list — moving them is safe, and `tools.py` asserts it. -->
+            <button class="tool" data-mode="text" title="Drag out a text box anywhere — its colour, ground, font and decorations come from its own ▾ properties (E)">T Text</button>
+            <button class="tool" data-mode="fix" title="Strike the printed value and write the as-built one above it — the correction pattern the mount analyses are redlined with (F)">⇱ Strike &amp; write</button>
+            <button class="tool" data-mode="callout" title="Drop a callout on a drawing: a leader line to what it points at and an editable block of text — MFR, part number, how many per sector (K)">◸ Callout</button>
+            <button class="tool" data-mode="strikerow" title="Click a row to strike the whole row — removed or not installed (W)">▭ Strike row</button>
+            <button class="tool" data-mode="cross" title="Click a cell to strike just that value, or drag for a horizontal strike (T)">⌫ Strike text</button>
+            <button class="tool" data-mode="line" title="Drag to draw a line in any direction — Snap straightens a nearly-level or nearly-plumb one, Shift forces level, Ctrl suspends the snap. Its style, endings and pattern are under its ▾ (L)">╱ Line</button>
+            <button class="tool" data-mode="arrow" title="Drag to draw an arrow — it points where you let go. Its head, style and pattern are under its ▾ (A)">↗ Arrow</button>
+            <button class="tool" data-mode="dim" title="Drag along what you want measured — it comes out as a dimension: a red run with an arrow at each end and the length written on it. Set the drawing's scale, or measure it off a known dimension, under its ▾ (D)">↔ Length</button>
+            <button class="tool" data-mode="poly" title="Click a corner at a time to draw a leader with bends; double-click, or press Enter, to finish. Each segment snaps straight the same way a line does (P)">⤳ Polyline</button>
+            <button class="tool" data-mode="box" title="Drag a box — stroke, fill, hatch and opacity come from its own ▾ properties. Hold Ctrl for a perfect square. You can type inside it (B)">▢ Box</button>
+            <button class="tool" data-mode="circle" title="Drag an ellipse — same properties as the box, under its own ▾. Hold Ctrl for a true circle (O)">◯ Circle</button>
+            <button class="tool" data-mode="snapshot" title="Snapshot — drag a region of the sheet and it comes back as a redline of itself, pasted at the same size and at the resolution of what you selected. Its colour, frame and opacity are under its ▾, and Edit picture rubs it out, selects and fills it (Shift+S)">▣ Snapshot</button>
+            <button class="tool" data-mode="crossout" title="Cross out — drag a box over anything and it is struck through with an X. The two strikes are grouped and behave like any other line (X)">⤫ Cross out</button>
+          </div>
+        </div>
+
+        <!-- 6f6 — THE STYLE GROUP IS GONE FROM THE RIBBON. A tool's look now lives on the tool: every
+             button in Redline tools carries a ▾ in its lower-right corner, and that opens a properties
+             panel for that tool alone — the shape of panel Ced showed from Bluebeam, different per tool.
+             These seven fields stay, hidden, because they are the one place the rest of the app reads a
+             style from: `maStyleNow()` reads them, the panel writes them, and nothing else had to change.
+             Keeping them as real inputs also keeps every existing test and the keyboard paths working. -->
+        <div class="grp grp-style hidden" data-lbl="Style" aria-hidden="true">
+          <div class="grow stylegrid">
+            <label class="mini"><span>Stroke</span><input id="c_text" type="color" value="#fa3237" class="swatch" title="Colour of text, strokes, arrows and shape outlines"></label>
+            <label class="mini"><span>Text bg</span><input id="c_bg" type="color" value="#ffffff" class="swatch" title="Ground behind text — white hides the printed value underneath"></label>
+            <label class="mini"><span>Fill</span><input id="c_fill" type="color" value="#ffff00" class="swatch" title="Interior colour of boxes, circles and callouts"></label>
+            <label class="mini"><span>Width</span><input id="c_sw" type="number" value="1.5" min="0.1" max="50" step="0.05" title="Stroke thickness in points — lines, arrows, polylines and shape outlines"></label>
+            <label class="mini"><span>Fill %</span><input id="c_fop" type="number" value="100" min="0" max="100" step="5" title="Interior opacity — 0 leaves the shape hollow so the drawing reads through"></label>
+            <label class="mini"><span>Size</span><input id="c_pt" type="number" value="8" min="2" max="64" step="0.5" title="Font size in points for new text"></label>
+            <label class="mini wide"><span>Font</span><select id="c_font" title="Typeface for new text — and for the selection, while something is selected">
+              <option value="arial" selected>Arial</option>
+              <option value="arialbold">Arial Bold</option>
+              <option value="arialital">Arial Italic</option>
+              <option value="times">Times</option>
+              <option value="timesbold">Times Bold</option>
+              <option value="courier">Courier</option>
+              <option value="courierbold">Courier Bold</option>
+              <option value="jost">Jost (Century Gothic)</option>
+              <option value="jostbold">Jost Bold</option>
+            </select></label>
+          </div>
+        </div>
+
+        <div class="grp" data-lbl="Arrange">
+          <div class="grow">
+            <button class="tool" id="snapBtn" title="SNAP — angle. A stroke you draw and a mark you rotate settle on the nearest 15°, so a line comes out exactly level or plumb. Shift forces level; Ctrl suspends it for one gesture.">📐 Snap</button>
+            <button class="tool" id="magnetBtn" title="MAGNET — position. A mark you move, resize or whose stroke-point you drag is pulled onto the nearest edge, centre or baseline, of the other marks AND of the printed page. Ctrl suspends it for one gesture.">🧲 Magnet</button>
+            <button class="btn sm" id="groupBtn" disabled title="Group the selected marks so they move as one (Ctrl+G · Ctrl+Shift+G to ungroup)">⛓ Group</button>
+            <button class="btn sm" id="selAllBtn" disabled title="Select every mark on the page you are viewing (Ctrl+A)">⬚ All on page</button>
+          </div>
+        </div>
+
+        <!-- 6hs — ASSIST. Ced: "remove all Mount Analysis texts on the tool again. Replace them with a
+             more general term like ASSIST. also … just make separate buttons for notes, parts, mark up,
+             and as-builts." The panel is unchanged underneath — these four open it on their own tab, so
+             what used to be one button and four tabs is four buttons and the same four tabs. -->
+        <div class="grp" data-lbl="Assist">
+          <div class="grow">
+            <button class="btn sm" id="analyzeMaBtn" disabled title="Read the loading or equipment table off the document, edit it as a form, and write back only what you change (Ctrl+Shift+L)">▦ Read table</button>
+            <button class="btn sm" id="maBtn" disabled title="Notes — write one note across a range of pages (Ctrl+Shift+A)">≡ Notes</button>
+            <button class="btn sm" id="partsBtn" disabled title="Parts — the library the callouts are built from">⛓ Parts</button>
+            <button class="btn sm" id="markupsBtn" disabled title="Markups — the graphics you use again and again, and the stamps you have saved">◩ Markups</button>
+            <button class="btn sm" id="importBtn" disabled title="As-built — read the values out of an RFDS or mount mapping and offer a redline wherever this document disagrees">⇄ As-built</button>
+          </div>
+        </div>
+
+        <div class="grp" data-lbl="Find" data-maxrows="2">
+          <div class="grow">
+            <input id="findInput" placeholder="Find in document… (/)" disabled>
+            <button class="btn sm" id="findPrev" disabled title="Previous match (Shift+Enter)">‹</button>
+            <button class="btn sm" id="findNext" disabled title="Next match (Enter)">›</button>
+            <span class="cnt" id="findCount"></span>
+          </div>
+        </div>
+
+        <div class="grp" data-lbl="View" data-maxrows="2">
+          <div class="grow">
+            <button class="btn sm" id="railToggle" title="Show or hide the page list">☰ Pages</button>
+            <button class="btn sm" id="marksBtn" disabled title="List every redline in the document (M)">▤ Marks</button>
+            <!-- 6gi — the zoom controls are ONE control in three pieces. Left to wrap on their own they
+                 split across rows (− on one, 136% and ＋ on the next), which reads as three unrelated
+                 buttons. `.keep` holds them together and lets the row break around them instead. -->
+            <span class="keep"><button class="btn sm" id="zoomOut" title="Zoom out">−</button><span class="cnt" id="zoomLbl">120%</span><button class="btn sm" id="zoomIn" title="Zoom in">＋</button></span>
+            <button class="btn sm" id="fitBtn" disabled title="Fit the page width to the window">⤢ Width</button>
+            <button class="btn sm" id="fitPageBtn" disabled title="Fit a whole page in the window">⛶ Page</button>
+            <button class="btn sm" id="actualBtn" disabled title="Actual size (100%)">1:1</button>
+            <button class="btn sm" id="facingBtn" disabled title="Show two pages side by side (per-page buttons move to Organize pages)">▥ Two-up</button>
+            <button class="btn sm" id="pageViewBtn" disabled title="Page view — scrolling settles on one page at a time, with no animation">▤ Page view</button>
+            <!-- and the same for appearance: the day/night switch and the theme picker are one idea -->
+            <span class="keep"><button class="btn sm thm-tog" id="themeBtn" title="Day / night — the knob shows which is on (Shift+D)" aria-label="Day or night mode"><span class="thm-tr"><span class="thm-s">☀</span><span class="thm-m">☾</span><span class="thm-k"></span></span></button><button class="btn sm" id="palBtn" title="Appearance — night, day or system, and the colour theme">◐ Theme</button></span>
+            <button class="btn sm" id="orgBtn" disabled title="Choose which pages go into the exported PDF">⧉ Organize pages</button>
+            <!-- 6gc — flip the ribbon between the top and the right without going through Appearance.
+                 The standing preference lives there; this is the one you reach for mid-job. -->
+            <button class="btn sm" id="ribSideBtn" aria-label="Move the ribbon — top or right" title="Move the ribbon — along the top, or down the right as a narrow icon column">⇅</button>
+            <button class="btn sm" id="helpBtn" title="How to use this tool (?)">?</button>
+          </div>
+        </div>
+        <!-- 6gb — the same readout, for when the strip above is not there. In page view the chrome
+             compacts and the strip goes with it, so the ribbon carries it instead, in the space that is
+             already spare at the end of the wrapped row. No caption: a caption would make it a group and
+             groups set the ribbon's row height. -->
+        <div class="grp grp-saved" id="ribbonSaved">
+          <span class="cnt savePill">✓</span>
+          <span class="cnt lastSaved" hidden></span>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span class="cnt" id="modePill">Redline</span>
+        <span class="cnt" id="cntPill">0 marks</span>
+        <div id="status"></div>
+      </div>
+
+      <div class="bar" id="bar"><i></i></div>
+
+      <div id="dropWrap">
+        <div id="drop" class="drop">
+          <!-- 6fc — the content sits in its own box so the dashed panel can be a flex container that
+               centres it. Without this, `<b>…</b> or click to browse` becomes two anonymous flex items
+               and the sentence breaks in half. -->
+          <div class="dropin">
+            <div class="dropmark" aria-hidden="true"></div>
+            <b>DROP A PDF HERE</b><br>
+            <!-- 6gl — a second line, and one that EARNS the space. 6gh removed "or click to browse"
+                 because clicking a drop zone is what a drop zone does; putting a decorative sentence
+                 back in its place would just be the same mistake dressed differently. So this says the
+                 two things you cannot tell by looking: that either issue is accepted, and that nothing
+                 leaves the machine. -->
+            <span class="dropsub">ANY PDF &middot; NOTHING LEAVES THIS COMPUTER</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="pages" data-mode="redline"></div>
+    </div>
+  </div>
+
+
+</div>
+
+<div id="annobar">
+  <button data-al="left" title="Align left">⯇</button>
+  <button data-al="center" title="Align center">≡</button>
+  <button data-al="right" title="Align right">⯈</button>
+  <span class="sep"></span>
+  <button data-fs="-1" title="Smaller">A−</button>
+  <button data-fs="1" title="Larger">A+</button>
+  <span class="sep"></span>
+  <button data-lay="front" title="Bring to front (above other redlines)">⤒</button>
+  <button data-lay="back" title="Send to back (below other redlines)">⤓</button>
+  <button data-lay="under" title="Toggle below/above strike lines">⇅</button>
+  <span class="sep"></span>
+  <!-- 6jf — Ced: "add flip on the mini tool bar that pops on the redlines." It is on the selection bar
+       and here both, because either one is the bar that pops on a redline depending on what you have
+       hold of. -->
+  <button data-flip="h" title="Flip left to right">⇋</button>
+  <button data-flip="v" title="Flip top to bottom">⇅</button>
+  <span class="sep"></span>
+  <button data-bgoff="1" title="Ground on / off — a mark with no ground lets the drawing under it read through, which is what a note on a sheet wants; a mark with one hides the printed value, which is what a correction wants">▩</button>
+  <button data-style="1" title="Give this mark the current tool's properties — colours, thickness, font and the rest">◐</button>
+  <span class="sep"></span>
+  <!-- 6jg — the delete control Ced asked for: a red ✕ badge in a rounded box, the same on every bar -->
+  <button class="delbtn" data-del="1" title="Delete" aria-label="Delete"><span class="delx">✕</span></button>
+</div>
+
+<div id="overlay"><div class="box"><div class="msg" id="ovMsg">Working…</div><div class="pbar"><i id="ovBar"></i></div><div class="pct" id="ovPct"></div></div></div>
+
+<div id="linebar">
+  <!-- 6ib — a stroke has a place in the stack too, and the same three controls a mark has -->
+  <button data-llay="up" title="Up one layer">⤒</button>
+  <button data-llay="down" title="Down one layer">⤓</button>
+  <button data-llay="under" title="Toggle below / above the redlines">⇅</button>
+  <span class="sep"></span>
+  <button data-larrow="1" title="Arrowhead on / off — click again for a head at both ends">↗</button>
+  <button data-lstyle="1" title="Give this stroke the current tool's properties — colour, thickness, style and endings">◐</button>
+  <button class="delbtn" data-ldel="1" title="Delete this stroke (Del)" aria-label="Delete"><span class="delx">✕</span></button>
+</div>
+
+<div id="multibar">
+  <span class="mb-lbl" id="mbCount"></span>
+  <span class="sep"></span>
+  <button data-al2="left" title="Align left edges">⇤</button>
+  <button data-al2="hcenter" title="Align horizontal centers">⇔</button>
+  <button data-al2="right" title="Align right edges">⇥</button>
+  <span class="sep"></span>
+  <button data-al2="top" title="Align top edges">⇞</button>
+  <button data-al2="vmiddle" title="Align vertical centers">⇕</button>
+  <button data-al2="bottom" title="Align bottom edges">⇟</button>
+  <span class="sep"></span>
+  <button data-dist="h" title="Space evenly left to right">⋯</button>
+  <button data-dist="v" title="Space evenly top to bottom">⋮</button>
+  <span class="sep"></span>
+  <button data-mbsize="1" title="Match every selected redline to the largest font size">A↕</button>
+  <span class="sep" data-lay2grp="1"></span>
+  <!-- 6gu — front and back for a whole selection, which is also the only bar a GROUP ever shows: the
+       block moves as one layer and keeps its own internal order. -->
+  <button data-lay3="front" title="Bring the selection to the front — a group moves as one layer">⤒</button>
+  <button data-lay3="back" title="Send the selection to the back — a group moves as one layer">⤓</button>
+  <!-- 6dx — the same below/above toggle the single-selection bar has, for a whole selection at once.
+       It is the one you reach for after a strike: the text belongs under the line, not over it. -->
+  <button data-lay2="under" title="Toggle below/above strike lines — every selected redline">⇅</button>
+  <span class="sep"></span>
+  <button data-tal="left" title="Text align left (inside each redline)">⯇</button>
+  <button data-tal="center" title="Text align center (inside each redline)">≡</button>
+  <button data-tal="right" title="Text align right (inside each redline)">⯈</button>
+  <span class="sep"></span>
+  <!-- 6i2 — ROTATE, ON THE BAR. Ced: "cross is still not rotatable." The selection frame has carried a
+       rotate grip since 6hb, and on a cross-out drawn near the foot of a page the bar itself sits over
+       it — so the control was there and could not be reached. This one is always where the rest of the
+       selection's actions are; a click asks for the angle, which is what the grip's own click does. -->
+  <button data-mbrot="1" title="Rotate the selection — type the angle">↻</button>
+  <button data-mbgroup="1" title="Group or ungroup the selection (Ctrl+G)">⛓</button>
+  <button class="delbtn" data-mbdel="1" title="Delete the selection (Del)" aria-label="Delete"><span class="delx">✕</span></button>
+</div>
+
+<div id="marksPanel">
+  <div class="mk-head">
+    <b id="marksTitle">Redlines (0)</b>
+    <button class="btn sm" id="marksClose">✕</button>
+  </div>
+  <div id="marksList"></div>
+</div>
+
+<!-- 6f6 — the per-tool properties panel. One element, re-filled for whichever tool's ▾ was pressed:
+     the tools do not each carry their own markup, they carry their own SPEC (see toolpop.js) and this
+     is where it is drawn. Hidden until a ▾ is pressed, positioned under the button that opened it. -->
+<div id="toolpop" class="toolpop" hidden aria-hidden="true"></div>
+
+<!-- The ASSIST panel. Everything the tool knows about a particular kind of document lives here — the
+     stamp, the notes that repeat across a range of pages, the parts library the callouts are built from,
+     and the as-built import. It is a panel and not a modal on purpose: you work on the pages while it is
+     open, and every button in it acts on the document behind it. -->
+<div id="maPanel" aria-hidden="true">
+  <div class="mk-head">
+    <!-- 6il — the head names the SECTION this dropdown is showing, not the group it came from -->
+    <b id="maTitle">Notes</b>
+    <span class="ma-site" id="maSite"></span>
+    <button class="btn sm" id="maClose" title="Close (Esc)">✕</button>
+  </div>
+  <!-- 6ic — NO TAB STRIP. Ced: "the assist buttons should again be separate from one another, the
+       prompts should not be on one tab." Each ribbon button opens its OWN card in this column and
+       closes it again; several can be open at once, stacked, each with its own heading and its own ✕.
+       Nothing is hidden behind a tab you have to remember to press. -->
+  <div class="ma-body" id="maBody"></div>
+  <input id="maFile" type="file" accept="application/pdf" class="hidden">
+  <input id="maImgFile" type="file" accept="image/*" class="hidden">
+</div>
+
+
+
+
+<div id="dlg"><div class="dlg-box"><div class="dlg-title" id="dlgTitle"></div><div class="dlg-msg" id="dlgMsg"></div><div class="dlg-btns" id="dlgBtns"></div></div></div>
+
+<div id="helpModal">
+  <div class="az-box" style="width:min(880px,96vw);height:auto;max-height:88vh">
+    <div class="az-head">
+      <div>
+        <div class="az-title">How to use</div>
+        <div class="az-sub">Marking up a PDF, end to end</div>
+      </div>
+      <button class="btn sm" id="helpClose">✕ Close</button>
+    </div>
+    <div class="az-body"><ul class="help-list">
+      <li>Open a PDF — the <b>Open PDF</b> button, or drop one anywhere on this page. Any PDF: a mount
+          analysis, a drawing set, a scope, a submittal, a scan. Nothing is uploaded; the file is read in
+          this browser and never leaves the machine. Where the tool recognises a report it names the export
+          after it — a site code off the first page gives <b>SOH3361 - Redlined Mount Analysis.pdf</b> — and
+          where it does not, the file keeps its own name. Either way, type over the name in the SITE box and
+          the export follows.</li>
+
+      
+
+      <li><b>Redline</b> (R) covers a printed value with editable red text pre-filled with what is printed —
+          for a model number or a part number that was simply installed differently.
+          <b>Strike &amp; write</b> (F) is the other pattern the reports use: it rules through the printed
+          value and puts the as-built one on the line above, which is what centrelines and elevations get.
+          Both leave you in the text, ready to type.</li>
+
+      <li><b>Callout</b> (K) is for the drawing sheets. Pick a part in the panel's <b>Parts</b> tab and click
+          what it points at: you get a styled box with the description, MFR, part number and how many per
+          sector, and an arrow to the member. The library is seeded with the Site Pro 1, Sabre, CommScope
+          and Ericsson parts these reports keep using, and anything you add stays for next time.
+          <b>The arrow is the anchor.</b> Drag the box, or nudge it with the arrow keys, and the tip
+          stays on the member it points at while the leader re-routes — including round to whichever
+          side of the box now faces it. To move the whole callout, arrow and all, take it with a
+          marquee (or Shift-click both halves) and drag that.</li>
+
+      <li><b>Markups</b> keeps the graphics you use again and again — a north arrow, a detail, a
+          photograph of what was actually installed. Upload once; from then on a click <b>picks it
+          up</b> — a preview of it follows the pointer at the size it will land at, hanging from its
+          top-left corner — and the next click on the sheet puts it down there. Escape puts it back,
+          and Shift-click drops one in the middle of the page without the second click. It exports as
+          a stamp annotation. The <b>✎</b> on a markup opens
+          it in the picture editor: rub out the margin it came with, crop it, turn it or put white
+          behind it, and every drop after that uses the tidied version. A markup already on a sheet is
+          edited the same way, from its own <b>Edit picture</b>.</li>
+
+      <li><b>Notes</b> writes one note across a run of pages — the same words in the same spot on each.
+          Type it, choose the pages, then click where it goes. "ACTUAL INSTALL: …" and
+          "STRESS RATIO IS &lt; 1 …" are already in the list.</li>
+
+      <li><b>As-built</b> takes the RFDS or the mount mapping for the same site, reads every model and
+          centreline out of it, and lists the values in this report that it cannot account for. Each one is
+          a button: <b>Show me</b> jumps to it, <b>Redline it</b> marks it. It finds them; you decide.</li>
+
+      <li><b>What you are drawing is what you get.</b> Every tool shows the mark itself as you drag it
+          — a line with its head, its weight and its pattern; a box or an ellipse in its own stroke,
+          fill and hatch — rather than a rubber band you have to imagine. A selected mark keeps its
+          handles even while you are typing in it, and every mark, stroke and shape carries the same
+          three controls: <b>✥</b> to drag, <b>↻</b> to rotate and <b>✕</b> to delete.</li>
+
+      <li><b>Drawing on a sheet.</b> <b>Box</b> (B) and <b>Circle</b> (O) drag out a shape you can also
+          type inside — hold <b>Ctrl</b> while you drag for a perfect square or a true circle;
+          <b>Arrow</b> (A) and <b>Line</b> (L) drag from one point to another; <b>Polyline</b> (P) takes
+          a corner per click and finishes on a double-click or Enter; <b>Text</b> (E) drags out a text
+          box. Everything they draw selects, moves, resizes, groups and undoes like any other mark, and
+          a shape comes up selected rather than in text-editing, so Delete removes it and a double-click
+          opens it for typing.</li>
+
+      <li><b>A text box holds what you type in it.</b> It wraps to the width you drew and grows
+          downwards to fit the lines, rather than hiding the ones past the bottom edge; delete a line
+          and it gives the height back, down to the box you drew and no further. The width stays
+          yours — drag the side handle to re-wrap it. <b>Enter</b> starts a new line. Narrowed, it
+          <b>fills each line to the edge</b>, breaking inside a word where it runs out, the way a
+          printed column does; the panel's <b>Wrap</b> chips put it back to breaking between words, and
+          <b>Vertical</b> puts the block at the top, the middle or the foot of the box.</li>
+
+      <li><b>Nothing is outlined until it is picked.</b> A mark that belongs to a group used to wear a
+          ring all the time; now the ring means selected, and only that.</li>
+
+      <li><b>A tool in your hand draws, even over something.</b> Drawing a box over a box you have
+          already drawn draws the second box; it does not drag the first one out of the way. Select and
+          Pan still pick a mark up, which is what those two are for. And a <b>double-click reaches the
+          text</b> inside a grouped mark — a callout in a stamp opens for typing without ungrouping it.</li>
+
+      <li><b>Front and back cross the strokes.</b> A mark sent to the front comes above every line on the
+          page and one sent to the back goes under them, rather than only sorting against its
+          neighbours in the same band. <b>⇅</b> is still the button that flips the band on its own.</li>
+
+      <li><b>A cloud round a member.</b> Rectangle and Ellipse carry the stroke patterns under
+          <b>Rule pattern</b> — cloud, wave, zigzag, sawtooth — so a revision cloud is the Box tool with
+          one chip pressed, and it exports as the cloud it is rather than as a rectangle.</li>
+
+      <li><b>Copy properties paints what you point at.</b> With the brush loaded, a plain click on a mark
+          gives it the look; adding to a selection with Ctrl, or taking the whole page, is a selection and
+          leaves the marks alone. <b>Escape</b> puts the brush down, and so does picking up any tool.</li>
+
+      <li><b>Snapshot comes back as a plain picture</b> of the region, exactly as it is on the sheet. Its
+          panel's <b>Capture</b> chips offer the other kind — the region converted to a redline of itself,
+          page dropped out and ink recoloured — which is what lifting a detail off a drawing wants.</li>
+
+      <li><b>The laser</b> is a continuous flare: a hot head with a streak behind it that fades from the
+          tail, rather than a line of dots. Escape puts it away.</li>
+
+      <li><b>Every tool has its own properties.</b> The <b>▾</b> in the lower-right corner of a tool's
+          button opens them — a different panel for each tool, because a rectangle and a line have
+          nothing in common to set. A right-click on the button opens the same panel. Rectangle and
+          Ellipse have a border and a fill, an opacity for each, and a hatch with its own colour, scale
+          and rotation. Line, Arrow and Polyline have a weight, a line style, an ending you can choose
+          for each end at a <b>tiny, small, medium or large</b> tip size, and a pattern that ripples the
+          run itself. <b>Dashes are a fixed length</b> — a dash is the same length at a hairline as it is
+          at 6pt, so two rules of different weights on one sheet keep the same rhythm; you pick the
+          rhythm instead, from <b>fine, dashed, long and extra long</b>, with dotted, dash-dot and
+          dash-dot-dot beside them. Weights go down to <b>a tenth of a point</b>, and a hairline draws and exports as
+          the hairline it is set to rather than being rounded up to something you did not ask for. Text and Callout have a size, a face,
+          bold / italic / underline / strikethrough, alignment, and the two spacings — <b>letter
+          spacing</b> in points and <b>line spacing</b> as a multiple of the normal pitch, both drawn
+          the same way on screen and in the exported file. Everything has a highlight mode,
+          under Advanced settings, that lets the drawing read through the mark.
+          <b>Each tool remembers its own</b>, for good, in this browser: Box can stay blue at 2pt while
+          Arrow stays red at 1.5pt. With something selected, a change in the panel restyles the
+          selection too, so a box you have already drawn can change without being redrawn. A fill at 0%
+          leaves a shape hollow, which is what you want over a drawing.</li>
+
+      <li><b>A tool you DRAW with stays in your hand</b> — Box, Circle, Line, Arrow, Polyline, Text,
+          Length and Callout — so you can place twenty without reaching for the button again. The tools
+          that act on what is <i>printed</i> — Redline, Strike &amp; write, Strike row, Strike text,
+          Cross out, Copy row and Snapshot — put themselves down as soon as they have done it, and
+          Select takes over, because the next click after one of those is nearly always "now select
+          something". <b>Escape</b> puts any tool down and goes to Select, and so do <b>S</b> and the
+          <b>Select</b> button. A single click on a mark selects it whatever tool is up; a double-click
+          opens it for typing.</li>
+
+      <li><b>Snap</b> and <b>Magnet</b> (in Arrange) are two different things and switch separately.
+          <b>Snap</b> is about ANGLE: a stroke you draw and a mark you rotate settle on the nearest 15°,
+          which is how a line comes out exactly level or plumb without being forced there.
+          <b>Magnet</b> is about POSITION: a mark you move, resize, or whose stroke-point you drag is
+          pulled onto the nearest edge, centre or baseline — of the other marks <i>and of the printed
+          page</i>, so a correction lands on the column rule or the row it belongs to. <b>Shift</b> still
+          forces a stroke level; holding <b>Ctrl</b> suspends either for one gesture.</li>
+
+      <li><b>Rotating says the angle.</b> Drag the ↻ handle and the reading follows it, turning green
+          the moment Snap catches a 15°. Shift forces 15° steps; Ctrl turns freely.</li>
+
+      <li><b>The bar along the bottom</b> appears whenever anything is selected, and acts on all of it:
+          edit properties, duplicate, layer (front, back, or behind the printed page), <b>flatten</b>
+          (drawn into the page on export rather than added as an annotation), group, <b>lock</b>, save
+          the selection to your markup library as a reusable stamp, apply it across a range of pages,
+          copy, set a subject, align, and delete.</li>
+
+      <li>Each mark carries its own look, so one document can hold a red correction, a blue note and a
+          green ring. The bar that appears on a selected mark adds two things the ribbon cannot:
+          <b>▩</b> takes the ground off it, so the drawing reads through instead of being hidden, and
+          <b>◐</b> gives that one mark everything the current tool's ▾ properties are set to. A selected
+          stroke gets its own pair: <b>↗</b> cycles the arrowhead (end, both ends, none) and <b>◐</b>
+          restyles it.</li>
+
+      <li><b>Read table</b> (Ctrl+Shift+L) reads a table off the document and shows it as a form — every
+          line as it is printed, blanks and all. Change a cell and press <b>Redline the changes</b>: only
+          what you edited is written, each correction landing on the printed value it replaces. The chips
+          above the table hide the columns you are not working on.
+          On a mount analysis it finds the Antenna / Equipment Loading table wherever it is. On anything
+          else — a construction drawing's schedule, a submittal's parts list — it reads <b>the table on
+          the page you are looking at</b>, found by its shape rather than by its wording: the longest run
+          of printed lines that hold the same values at the same places, under the line that names them.
+          It is arithmetic on the text the PDF already carries; nothing is uploaded and no model is
+          consulted, here or anywhere else in this tool.</li>
+
+      <li><b>Strike &amp; write</b> (F) rules through a printed value and writes the as-built one
+          <b>directly over it</b>, on the same line and reading <i>on top of</i> the rule, which runs out
+          either side of it. The writing carries its own white ground, so it covers the value it replaces
+          and there is never a question which one that was — on a dense table a correction written on the
+          line above reads as a correction to the row above. It stays on one line and on the middle of
+          the rule as you type, and the rule grows with it.</li>
+
+      <li><b>Length</b> (D) drags along whatever you want measured and leaves a dimension: a run with an
+          arrow at each end and a reading written on it. <b>The reading is yours to type</b> — it comes
+          up empty with the caret in it, and the length the run measures is shown as you drag it and in
+          the status line, so you can type what it should say. <b>Write in the measured length</b> in its
+          <b>▾</b> puts the measurement in for you, and from then on that reading follows the run
+          until you type over it; the same panel sets the sheet's scale (the architect's and engineer's
+          scales are listed), what the reading is written in, and — on a cropped or photocopied sheet —
+          <b>Calibrate</b> from something whose length you know. The run and its reading are
+          <b>one mark</b>, like a callout: click either to select the measurement, drag either to move
+          the whole of it, and set the reading's own font, size and style under <b>Reading</b>. The
+          reading sits <b>above the middle of the run</b>, clear of the rule, turned with it and always
+          the right way up; it stays centred as you type it, and dragging it by its <b>✥</b> grip leaves
+          it wherever you put it, keeping that offset as the run is moved.
+
+      <li><b>Snapshot</b> (Shift+S) has its own button in the ribbon. Drag a region and it comes back as
+          a <b>redline of itself</b>, pasted at the same size, with no frame, and at the resolution of
+          what you selected — the region is re-rendered from the PDF rather than cropped off the
+          screen, so it stays sharp when you zoom in or export.</li>
+
+      <li><b>A snapshot can be edited.</b> With one selected, <b>Edit picture</b> opens it on its own,
+          zoomable (Fit, 1:1, ctrl-wheel) and with undo and redo. <b>Erase</b> is a continuous brush and
+          <b>Restore</b> is its opposite — it brushes the original picture back where you rubbed too
+          much out. The <b>magic wand</b> selects a space bounded by the picture’s own lines and can
+          <b>New / Add / Subtract</b> (or hold Shift to add, Alt to subtract); the <b>lasso</b> takes
+          whatever you draw round, through the same three chips, for everything the wand cannot reach;
+          <b>Select inverse</b> swaps the selection for everything else, and <b>Fill</b> paints it —
+          always <em>underneath</em> the redlines, so the drawing still reads on top of its new ground.
+          White behind a captured drawing and nothing else is: wand the outside, invert, fill.
+          <b>Erase line</b> takes a whole run of ink, end to end, from one click.
+          <b>Rotate left / right</b> turns the picture itself a quarter at a time — losslessly, undoable,
+          and the mark on the sheet takes the new proportions when you save; <b>Free</b> beside them
+          turns it to any angle, previewing as you sweep and resampling once when you let go.
+          <b>Crop</b> drags a box round what you want to keep and cuts everything outside it away; the
+          mark shrinks with it, keeping the scale the picture already had, and Undo puts the margin
+          back. The picture sits in the middle of the editor with its own edge and chequer drawn, so you
+          can always see where it ends and which parts of it are transparent.</li>
+
+      <li><b>Strike row</b> (W) rules through a whole row. <b>Strike text</b> (T) rules through one value.
+          <b>Cross out</b> (X) drags a box over anything and leaves an X.
+          <b>Copy row</b> (C) copies printed text as editable redlines on the line below.
+          Click a stroke to select it, then drag any of its points.</li>
+
+      <li><b>Select</b> (S): drag to move, drag a box over blank space to select several, Shift-click to add
+          to the selection. Arrow keys nudge, Ctrl+D duplicates, Ctrl+G groups (Ctrl+Shift+G ungroups),
+          Delete removes. Every tool has a letter — <b>S</b> select, <b>H</b> pan, <b>R</b> redline,
+          <b>E</b> text, <b>F</b> strike &amp; write, <b>K</b> callout, <b>W</b> strike row,
+          <b>T</b> strike text, <b>L</b> line, <b>A</b> arrow, <b>D</b> length, <b>P</b> polyline,
+          <b>B</b> box, <b>O</b> circle, <b>X</b> cross out — and the reference kit sits on Shift:
+          <b>Shift+O</b> lasso, <b>Shift+T</b> text select, <b>Shift+E</b> eraser, <b>Shift+S</b>
+          snapshot, <b>Shift+L</b> laser, <b>Shift+F</b> the property brush. <b>Shift+D</b> is day and
+          night, <b>M</b> the marks list, <b>/</b> find, <b>?</b> this page, and <b>Escape</b> puts down
+          whatever is in your hand.
+          Ctrl+Z / Ctrl+Y undo and redo everything, including a whole stamp run as one step.
+          <b>Ctrl+C, Ctrl+X and Ctrl+V</b> work on marks the same way — including with the caret sitting
+          in a mark, as long as no text is selected — and a paste <b>lands where the pointer is</b>,
+          selected and ready to drag, rather than following the mouse until you click.
+          <b>Layering:</b> ⤒ and ⤓ on either bar send marks to the front or the back, and a group moves
+          as one layer, keeping its own internal order.</li>
+
+      <li>Marks are saved to this browser as you work, with version backups, so a refresh or a crash does not
+          lose them. <b>💾 Save</b> forces one; the tick above the ribbon says when it last happened.</li>
+
+      <li><b>REDLINE MOUNT ANALYSIS</b> (Ctrl+E) exports. The original pages stay exactly as they were —
+          vector, searchable, untouched — and every mark becomes a real PDF annotation: movable in Acrobat
+          or Bluebeam, and re-editable here if you open the exported file again.</li>
+
+      <li>Other keys: <b>/</b> find, <b>M</b> the redlines drawer, <b>D</b> day / night.
+          <b>⧉ Organize pages</b> leaves a page out of the export. <b>▤ Redline report</b> lists what was
+          marked, page by page, to paste into an email.</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- appearance / colour-theme picker (6bz) -->
+<div id="palMenu" role="dialog" aria-label="Appearance">
+  <div class="pm-h">Appearance</div>
+  <div class="pm-seg" id="palSeg">
+    <button type="button" data-mode="dark">Night</button><button type="button" data-mode="light">Day</button><button type="button" data-mode="system">System</button>
+  </div>
+  <!-- 6gc — where the ribbon lives. It belongs here rather than on the ribbon itself: it is a standing
+       preference about the shape of the workspace, like night/day, not a thing you flip while working. -->
+  <div class="pm-h">Ribbon</div>
+  <div class="pm-seg" id="palRibSeg">
+    <button type="button" data-side="top" data-ribbon-side="top" id="ribbonSideTop">Top</button><button type="button" data-side="right" data-ribbon-side="right" id="ribbonSideRight">Right</button>
+  </div>
+  <div class="pm-h">Colour theme</div>
+  <div class="pm-grid" id="palGrid"></div>
+  <div class="pm-h">Tune this theme</div>
+  <div class="pm-tune">
+    <!-- 6fs — 0..200, so 100 is the MIDDLE of the track, as it already was for Brightness (60..140).
+         Ced: "the saturation and brightness are both at 100 but the buttons are not both in halfway."
+         At 0..160 the knob stood at 62.5% while Brightness's stood at 50%, and two dials reading the
+         same number looked different. The top moved rather than the bottom: 0 is what makes a palette
+         grey and the dial exists for it. Above 100 the saturation is clamped at fully saturated by
+         `_hsl2css`, so the extra travel is soft, not a cliff. -->
+    <label><span>Saturation</span><input type="range" id="tuneSat" min="0" max="200" step="5" value="100"><i id="tuneSatV">100%</i></label>
+    <label><span>Brightness</span><input type="range" id="tuneBri" min="60" max="140" step="2" value="100"><i id="tuneBriV">100%</i></label>
+    <button type="button" class="pm-btn ghost" id="tuneReset">Reset tuning</button>
+  </div>
+  <div class="pm-h">Your own pair</div>
+  <div class="pm-custom">
+    <label class="pm-c"><input type="color" id="palC1" value="#3A8BD5"><span>Accent</span></label>
+    <label class="pm-c"><input type="color" id="palC2" value="#2DD4BF"><span>Highlight</span></label>
+    <button type="button" class="pm-btn" id="palCUse">Use these</button>
+    <button type="button" class="pm-btn ghost" id="palCOff">Reset</button>
+  </div>
+  <div class="pm-save">
+    <input id="palCName" placeholder="name this pair…" maxlength="24" spellcheck="false">
+    <button type="button" class="pm-btn" id="palCSave">Save</button>
+  </div>
+  <div class="pm-grid" id="palSaved" style="display:none"></div>
+  <div class="pm-now" id="palNow"></div>
+  <!-- 6ig — the shortcut, without the sentence after it -->
+  <div class="pm-f"><kbd>Shift</kbd>+<kbd>D</kbd> flips night / day</div>
+</div>
+
+<!-- Read table: a table on the sheet as a form. A window rather than a panel because a table wants the
+     width, and because you read it, change a few cells and close it again. -->
+<div id="maAnalyze">
+  <div class="az-box" style="width:min(1180px,97vw);height:auto;max-height:90vh">
+    <div class="az-head">
+      <div>
+        <div class="az-title">Read table</div>
+        <div class="az-sub">Change a cell and it is redlined on the page</div>
+      </div>
+      <button class="btn sm" id="maAzReread" title="Read the table off the page again, throwing away the edits in this window">↻ Re-read</button>
+      <button class="btn sm" id="maAzClose">✕ Close</button>
+    </div>
+    <div class="az-body" id="maAzBody"></div>
+    <div class="az-foot">
+      <span id="maAzCount" class="az-count"></span>
+      <button class="btn sm" id="maAzApply" disabled title="Write every changed cell onto the page as a redline">✓ Redline the changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="reportModal">
+  <div class="az-box" style="width:min(680px,96vw);height:auto;max-height:86vh">
+    <div class="az-head">
+      <div>
+        <div class="az-title">Redline report</div>
+        <div class="az-sub">What was corrected on this document</div>
+      </div>
+      <button class="btn sm" id="reportCopy">⇩ Copy</button>
+      <button class="btn sm" id="reportClose">✕ Close</button>
+    </div>
+    <div class="az-body" id="reportBody"></div>
+  </div>
+</div>
+
+<div id="pageOrg">
+  <div class="az-box" style="width:min(680px,96vw);height:auto;max-height:86vh">
+    <div class="az-head">
+      <div>
+        <div class="az-title">Organize pages</div>
+        <div class="az-sub">Leave a page out of the exported PDF</div>
+      </div>
+      <button class="btn sm" id="pageOrgClose">✕ Close</button>
+    </div>
+    <div class="az-body"><div id="pageOrgList"></div></div>
+    <div class="az-foot">
+      <span class="az-note" id="pageOrgNote"></span>
+      <span class="grow"></span>
+      <button class="btn sm" id="pageOrgAll">Keep all</button>
+    </div>
+  </div>
+</div>
+
+
+
+<div id="chromeHint" title="Move the pointer here to show the toolbar"></div>
+<div id="pagerBar">
+  <button class="btn sm" id="pagerPrev" title="Previous page (PageUp)">‹</button>
+  <span id="pagerLbl">1 / 1</span>
+  <button class="btn sm" id="pagerNext" title="Next page (PageDown)">›</button>
+  <button class="btn sm" id="pagerExit" title="Leave page view (Esc)">✕ Exit</button>
+</div>
+
+<button id="logBtn" title="Show the message log">▤ Log <span id="logCount">0</span></button>
+<div id="logPanel">
+  <div class="log-head">
+    <b>Message log</b>
+    <span class="log-sp"></span>
+    <button class="btn sm" id="logCopy">Copy</button>
+    <button class="btn sm" id="logEcho" title="Also print these messages to the browser console">Echo to console</button>
+    <button class="btn sm" id="logClear">Clear</button>
+    <button class="btn sm" id="logClose">✕</button>
+  </div>
+  <pre id="logBody"></pre>
+</div>
+
+<!-- 6ea — the R, lower right, once the page has scrolled. It is the same mark the browser tab wears,
+     and it takes you back to the top: on a 49-page report that is the one navigation everybody wants and
+     nothing else offers. Hidden until there is something to scroll back from, so it never sits over the
+     drop zone of an empty document. -->
+<!-- 6jj — Ced: "replace the html logo and the lower right (back to top) logo with just the pen logo from the left side." The corner signature is the pen on its own: at 48px the whole wordmark was three illegible letters, and the pen is the part of the mark that still reads that small. -->
+<button id="markR" type="button" title="Back to the top" aria-label="Back to the top"><svg viewBox="0 0 119.1 503.8" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path class="lg-acc" d="M-0.0 -0.0L-0.0 119.9L119.1 180.2L119.1 60.3Z M45.0 182.1L44.4 396.8L76.6 414.0L77.2 198.7Z M-0.0 473.1L-0.0 503.8L31.0 490.3L31.0 487.8L2.4 472.4Z"/><path class="lg-ink" d="M1.2 161.8L1.2 370.3L28.6 385.7L28.6 175.3Z M93.0 209.1L93.0 423.2L117.3 436.2L117.3 221.4Z M1.2 390.6L1.2 457.7L46.8 481.1L109.4 452.1Z M1.2 136.6L1.8 145.8L117.3 204.2L116.1 194.4Z"/></svg></button>
+
+<div class="toast" id="toast">Copied</div>
+<!-- 6gb — the save flash. Ced: "every time the pdf marks is saved, it should fade in the ui on the upper
+     left of the screen." It is deliberately NOT the same thing as the ribbon readout: the readout is a
+     permanent answer to "when", this is a momentary answer to "did that land". It sits over the page,
+     top left, and fades itself out. aria-live so a screen reader hears the save it cannot see. -->
+<div id="saveFlash" aria-live="polite"><span id="saveFlashMark">✓</span><span id="saveFlashTxt"></span></div>
+

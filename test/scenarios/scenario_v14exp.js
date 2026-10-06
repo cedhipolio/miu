@@ -1,0 +1,18 @@
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  maPanelOpen(false); gotoPageInstant(0); await sleep(400);
+  S.annos=[];S.lines=[];layoutAnnos();drawAllLines();
+  maAddShape(0,"rect",0.22,0.30,0.18,0.05,{});
+  addLine(0,0.22,0.40,0.46,0.44,{col:"#fa3237",sw:2,le1:"arrow"});
+  layoutAnnos(); drawAllLines(); await sleep(250);
+  skPick("snapshot"); await sleep(80);
+  const pg=document.querySelector('.page[data-idx="0"]');
+  const R=pg.getBoundingClientRect();
+  const P=(fx,fy)=>({clientX:R.left+R.width*fx,clientY:R.top+R.height*fy,bubbles:true,button:0});
+  pg.dispatchEvent(new PointerEvent("pointerdown",P(0.18,0.26)));
+  pg.dispatchEvent(new PointerEvent("pointermove",P(0.52,0.48)));
+  pg.dispatchEvent(new PointerEvent("pointerup",P(0.52,0.48)));
+  await sleep(2200);
+  const a=S.annos.find(x=>x.maKind==="snapshot");
+  a.col="#12b886"; a.sw=3; a.fillOp=0.75; layoutAnnos(); await sleep(200);
+  await exportPdf(); await sleep(3000);
+  return {annos:S.annos.length,snap:{nw:+a.nw.toFixed(4),nh:+a.nh.toFixed(4),col:a.col,sw:a.sw,op:a.fillOp}};

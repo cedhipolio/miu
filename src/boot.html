@@ -1,0 +1,27 @@
+<script>
+/* The stylesheet, the libraries and the app are gzipped and base64'd above so this file stays a
+   single shareable document. They are inflated here and injected as real <script> elements, in
+   order, so everything runs in global scope exactly as it did when they were separate tags. */
+(async()=>{
+  const inflate=async id=>{
+    const b=atob(document.getElementById(id).textContent.trim());
+    const u=new Uint8Array(b.length); for(let n=0;n<b.length;n++)u[n]=b.charCodeAt(n);
+    const ds=new DecompressionStream("gzip");
+    const buf=await new Response(new Blob([u]).stream().pipeThrough(ds)).arrayBuffer();
+    return new TextDecoder().decode(buf);
+  };
+  const run=async id=>{ const code=await inflate(id);
+    const el=document.createElement("script"); el.textContent=code; document.head.appendChild(el); };
+  try{
+    if(typeof DecompressionStream==="undefined")throw new Error("this browser cannot inflate the bundle");
+    /* styles first, so the page is never shown unstyled */
+    const st=document.createElement("style"); st.textContent=await inflate("pk-css");
+    document.head.appendChild(st);
+    for(const id of ["pk-pdf","pk-wrk","pk-lib","pk-app"]) await run(id);
+  }catch(e){
+    document.body.insertAdjacentHTML("afterbegin",
+      '<div style="padding:16px;font:14px system-ui;color:#fff;background:#a11">'+
+      'Could not unpack the tool: '+String(e&&e.message||e)+'</div>');
+  }
+})();
+</script>

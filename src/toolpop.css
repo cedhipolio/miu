@@ -1,0 +1,251 @@
+/* =================================================================================================
+   TOOL PROPERTIES PANEL
+   The panel Ced showed from Bluebeam: a dark card floating under the tool button whose ▾ opened it,
+   with a preview at the top, the colours under it, and the rest in collapsible sections. It keeps its
+   own dark palette in both themes on purpose — it is a properties panel over the page, and the page
+   is white.
+   ================================================================================================= */
+/* 6iz — ONE GUTTER, AND ROUNDED THROUGHOUT. Ced: "fix the ui of the prompts. make them consistent and
+   please make use of rounded shapes across the ui. also, the wordings should have indentation."
+   Every block in this panel used to set its own left margin — 12px here, 12px there, and the section
+   bodies flush with their own headings — so nothing lined up down the left edge and a section read as
+   a sibling of its heading rather than as its contents. There is one gutter now, `--tp-gut`, and the
+   contents of a section are indented past it so the nesting is visible. */
+.toolpop{
+  --tp-gut:14px; --tp-in:10px;
+  position:fixed; z-index:4200; width:330px; max-height:86vh; overflow:hidden;
+  display:flex; flex-direction:column;
+  background:#1f232b; color:#e6e9ef; border:1px solid #363c48; border-radius:16px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5); font-size:12px;
+  padding:0;
+}
+.toolpop[hidden]{display:none}
+/* 6g8 — the header is fixed, the rest scrolls under it, and the scroll position survives a rebuild */
+.tp-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:8px;
+  overscroll-behavior:contain}
+.tp-scroll::-webkit-scrollbar{width:9px}
+.tp-scroll::-webkit-scrollbar-thumb{background:#3a414f;border-radius:6px}
+.tp-scroll::-webkit-scrollbar-track{background:transparent}
+
+.tp-head{display:flex;align-items:flex-start;gap:8px;padding:13px var(--tp-gut) 9px;flex:0 0 auto;
+  cursor:grab;touch-action:none;border-bottom:1px solid #2a303a;background:#1f232b;
+  border-radius:16px 16px 0 0}
+.tp-head.dragging{cursor:grabbing}
+.tp-head .tp-act{cursor:pointer}
+.tp-headl{flex:1;min-width:0}
+/* 6j9 — Ced: "make the headers of the ui in this too all caps." Every heading in the tool reads the
+   same way now: the panel's name, its sections, the docked panels' names and the dialogs'. */
+.tp-title{font-size:14px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.tp-sub{font-size:10.5px;color:#8d96a6;margin-top:1px}
+.tp-acts{display:flex;gap:5px}
+.tp-act{width:26px;height:26px;border-radius:999px;border:1px solid #3a414f;background:#262b34;
+  color:#cfd6e2;font-size:13px;line-height:1;cursor:pointer}
+.tp-act:hover{background:#2f3541;border-color:#4a5364}
+
+/* ---- the preview ---- */
+.tp-prev{margin:4px var(--tp-gut) 12px;padding:14px 10px;border-radius:12px;background:#fff;
+  display:flex;align-items:center;justify-content:center;min-height:62px;position:relative}
+.tp-prevtext{font-size:17px;padding:4px 10px;max-width:100%;border-radius:2px}
+.tp-prevshape{width:86px;height:62px;box-sizing:border-box}
+.tp-prevline{width:100%;height:44px;display:block}
+.tp-prevlead{position:absolute;right:16px;bottom:12px;width:22px;height:12px;
+  border-right:2px solid;border-bottom:2px solid;border-color:inherit}
+
+/* ---- Border | Fill ---- */
+.tp-targets{display:flex;gap:8px;justify-content:center;margin:0 var(--tp-gut) 10px}
+.tp-target{display:flex;align-items:center;gap:7px;padding:6px 15px;border-radius:999px;cursor:pointer;
+  background:#262b34;border:1px solid #3a414f;color:#cfd6e2;font-size:12px}
+.tp-target.on{background:#323a47;border-color:#6d7a8f;color:#fff}
+.tp-chip{width:14px;height:14px;border-radius:50%;border:1px solid #6b7486;display:inline-block}
+
+/* ---- the swatch row ---- */
+.tp-swatches{display:flex;gap:5px;flex-wrap:wrap;margin:0 var(--tp-gut) 12px;align-items:center}
+.tp-sw{width:21px;height:21px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+  flex:0 0 auto;padding:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.tp-sw.on{border-color:#fff;box-shadow:0 0 0 1px #1f232b,0 0 0 2px #fff}
+.tp-more{background:#262b34;color:#aab3c2;font-size:13px;line-height:1}
+/* white needs an edge of its own or it disappears into the row */
+.tp-white{box-shadow:inset 0 0 0 1px rgba(0,0,0,.45)}
+.tp-none{background:
+  linear-gradient(135deg,transparent 44%,#e5484d 44%,#e5484d 56%,transparent 56%),#262b34}
+.tp-pick{position:absolute;width:0;height:0;opacity:0;pointer-events:none;border:0;padding:0}
+
+/* ---- sliders -------------------------------------------------------------------------------------
+   6fe — seamless: the track fills as it goes, the thumb sits in it rather than on it, the ticks are
+   marks under the bar at their real positions, and the number beside it is typed, not picked from a
+   list of presets. */
+.tp-sliderrow{display:flex;align-items:flex-start;gap:10px;margin:0 12px 14px}
+.tp-slidercol{flex:1;min-width:0}
+.tp-range{
+  --fill:50%;
+  width:100%;-webkit-appearance:none;appearance:none;height:18px;background:transparent;
+  outline:none;cursor:pointer;margin:0;display:block;
+}
+.tp-range::-webkit-slider-runnable-track{
+  height:6px;border-radius:99px;
+  background:linear-gradient(90deg,#6ea8ff 0 var(--fill),#333a46 var(--fill) 100%);
+}
+.tp-range.ramp::-webkit-slider-runnable-track{
+  background:linear-gradient(90deg,#3a414f,#fa3237) , #333a46;
+  background-size:var(--fill) 100%,100% 100%;background-repeat:no-repeat;
+}
+.tp-range::-moz-range-track{height:6px;border-radius:99px;background:#333a46}
+.tp-range::-moz-range-progress{height:6px;border-radius:99px;background:#6ea8ff}
+.tp-range::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;margin-top:-5px;
+  background:#fff;border:0;box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:grab;
+}
+.tp-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.08)}
+.tp-range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:0;
+  box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:grab}
+.tp-ticks{position:relative;height:13px;margin-top:1px}
+.tp-ticks span{
+  position:absolute;transform:translateX(-50%);color:#7a8393;font-size:9.5px;cursor:pointer;
+  padding:1px 3px;border-radius:3px;white-space:nowrap;
+}
+.tp-ticks span:hover{color:#fff;background:#2b313b}
+.tp-pill{background:#262b34;border:1px solid #3a414f;color:#e6e9ef;border-radius:999px;
+  padding:4px 6px;font-size:11.5px;min-width:64px}
+.tp-pillnum{display:flex;align-items:center;gap:1px;padding:3px 4px 3px 7px;height:26px;
+  box-sizing:border-box;flex:0 0 auto;width:92px;min-width:0}
+.tp-pillnum:focus-within{border-color:#6ea8ff}
+.tp-num{flex:1;min-width:0;width:100%;background:transparent;border:0;outline:none;color:#e6e9ef;
+  font:600 12px/1 Helvetica,Arial,sans-serif;text-align:right;padding:0}
+.tp-suf{color:#8d96a6;font-size:11px}
+/* 6gd — the list of values, back beside the number the way the old ribbon <select>s were */
+.tp-pilldrop{flex:0 0 auto;width:16px;height:20px;margin-left:2px;padding:0;
+  background:transparent;border:0;border-left:1px solid #3a414f;color:#8d96a6;
+  font-size:10px;line-height:1;cursor:pointer;border-radius:0}
+.tp-pilldrop:hover{color:#fff}
+.tp-vmenu{min-width:96px;max-height:260px;overflow:auto;padding:4px}
+.tp-vmi{text-align:right;padding:6px 9px;font-variant-numeric:tabular-nums}
+.tp-vmi.on{background:#2f3541;color:#fff}
+
+/* ---- the colour picker you can drag ------------------------------------------------------------ */
+.tp-picker{
+  position:fixed;z-index:4500;width:212px;padding:9px;
+  background:#1f232b;border:1px solid #3a414f;border-radius:10px;
+  box-shadow:0 16px 40px rgba(0,0,0,.55);
+}
+.tp-sv{position:relative;height:126px;border-radius:7px;cursor:crosshair;
+  touch-action:none;overflow:hidden}
+.tp-svdot{position:absolute;width:13px;height:13px;margin:-7px 0 0 -7px;border-radius:50%;
+  border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5);pointer-events:none}
+.tp-hue{position:relative;height:13px;margin-top:9px;border-radius:99px;cursor:ew-resize;
+  touch-action:none;
+  background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.tp-huedot{position:absolute;top:50%;width:13px;height:13px;margin:-7px 0 0 -7px;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.45);pointer-events:none}
+.tp-pkfoot{display:flex;align-items:center;gap:8px;margin-top:9px}
+.tp-pkprev{width:26px;height:26px;border-radius:6px;border:1px solid #4a5364;flex:0 0 auto}
+.tp-pkhex{flex:1;min-width:0;background:#262b34;border:1px solid #3a414f;border-radius:6px;
+  color:#e6e9ef;font:600 12px/1 ui-monospace,Menlo,Consolas,monospace;padding:6px 7px;outline:none}
+.tp-pkhex:focus{border-color:#6ea8ff}
+
+/* ---- sections ---- */
+.tp-sec{border-top:1px solid #2c323c;margin-top:2px}
+.tp-sech{width:100%;display:flex;align-items:center;justify-content:space-between;
+  background:transparent;border:0;color:#aeb7c6;font-size:10px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;padding:9px var(--tp-gut);cursor:pointer;border-radius:10px}
+.tp-sech:hover{background:#262b34;color:#e6e9ef}
+.tp-caret{transform:rotate(-90deg);transition:transform .12s;color:#7a8393}
+.tp-sec.open .tp-caret{transform:none}
+/* 6iz — a section's contents sit one step in from its heading, so the panel reads as an outline */
+.tp-secb{display:none;padding:0 var(--tp-gut) 10px calc(var(--tp-gut) + var(--tp-in))}
+.tp-sec.open .tp-secb{display:block}
+.tp-note{color:#7a8393;font-size:10.5px;line-height:1.45;margin:8px 0 0}
+
+/* 6iz — a row at the top level of the panel takes the panel's own gutter; inside a section it takes
+   the section's, which is already one step further in. Before this the labels sat hard against the
+   panel's edge while everything above them was inset, which is the ragged left Ced asked about. */
+.tp-row{display:flex;align-items:flex-start;gap:10px;margin:0 0 9px;padding:0 var(--tp-gut)}
+.tp-secb .tp-row{padding-left:0;padding-right:0}
+.tp-rowl{color:#8d96a6;font-size:11px;width:62px;flex:0 0 auto;padding-top:5px;line-height:1.25}
+.tp-rowc{flex:1;min-width:0}
+
+/* ---- choice rows ---- */
+.tp-choice{display:flex;flex-wrap:wrap;gap:6px}
+/* a chip is a pill; the ones that hold a picture rather than a word keep a soft square */
+.tp-cb{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:999px;
+  padding:5px 12px;font-size:11.5px;cursor:pointer;line-height:1.1;display:flex;align-items:center;
+  justify-content:center}
+.tp-cb:hover{border-color:#5a6478}
+.tp-cb.on{background:#fff;color:#1f232b;border-color:#fff}
+.tp-cb svg{width:40px;height:20px;display:block}
+.tp-lines .tp-cb,.tp-ends .tp-cb,.tp-patgrid .tp-cb,.tp-deco .tp-cb,.tp-align .tp-cb{border-radius:9px}
+.tp-lines .tp-cb,.tp-ends .tp-cb{padding:3px 5px}
+.tp-fonts .tp-cb{font-size:11.5px}
+.tp-deco .tp-cb{width:30px;height:26px;font-size:12px}
+.tp-deco .tp-b{font-weight:800}
+.tp-deco .tp-i{font-style:italic}
+.tp-deco .tp-u{text-decoration:underline}
+.tp-deco .tp-s{text-decoration:line-through}
+.tp-align .tp-cb{width:34px;height:26px;padding:2px}
+.tp-align .tp-cb svg{width:24px;height:18px}
+
+/* ---- the hatch grid ---- */
+.tp-patrow{display:flex;align-items:flex-start;gap:9px}
+.tp-patgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;flex:1}
+.tp-patgrid .tp-cb{padding:0;height:26px;overflow:hidden}
+.tp-pat{display:block;width:100%;height:100%;background-color:#fff;border-radius:4px;
+  background-size:7px 7px}   /* 6g1 — the tile the dot lattice repeats on */
+.tp-patnone{background-image:
+  linear-gradient(135deg,transparent 44%,#e5484d 44%,#e5484d 56%,transparent 56%)!important}
+.tp-patcol{width:26px;height:26px;border-radius:50%;border:1px solid #4a5364;cursor:pointer;
+  flex:0 0 auto;padding:0}
+.tp-two{display:flex;gap:10px;margin:10px 0 4px}
+.tp-twocell{flex:1;display:flex;align-items:center;gap:7px}
+.tp-twocell .tp-pill{flex:1;min-width:0}
+.tp-twocell .tp-rowl{width:auto;padding-top:0}
+
+/* ---- Start | End ---- */
+.tp-tabs{display:flex;gap:6px;justify-content:flex-end;margin-bottom:7px}
+.tp-tab{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:7px;
+  padding:4px 14px;font-size:11.5px;cursor:pointer}
+.tp-tab.on{background:#fff;color:#1f232b;border-color:#fff}
+.tp-ends{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+
+/* ---- the switch ---- */
+.tp-switchrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 0}
+.tp-swl{font-size:12px;color:#cfd6e2}
+.tp-switch{width:42px;height:23px;border-radius:14px;background:#3a414f;border:1px solid #4a5364;
+  position:relative;cursor:pointer;padding:0}
+.tp-switch::after{content:"";position:absolute;left:2px;top:2px;width:17px;height:17px;border-radius:50%;
+  background:#cfd6e2;transition:left .13s}
+.tp-switch.on{background:#2f7be0;border-color:#2f7be0}
+.tp-switch.on::after{left:21px;background:#fff}
+
+/* =================================================================================================
+   THE ▾ ON EVERY TOOL BUTTON
+   Ced: "put an arrow on the lower right of the icon." It is its own hit target, so a press on the
+   button picks the tool and a press on the corner opens its properties.
+   ================================================================================================= */
+#tools .tool.hascaret{position:relative}
+#tools .tool .tcaret{
+  position:absolute; right:1px; bottom:0; width:13px; height:13px; line-height:11px;
+  font-size:9px; text-align:center; border-radius:3px; cursor:pointer;
+  color:var(--muted,#7a8393); opacity:.85;
+}
+#tools .tool .tcaret:hover{background:rgba(127,127,127,.28);color:var(--fg,#111);opacity:1}
+#tools .tool.popped{outline:1.5px solid var(--acc,#2f7be0);outline-offset:-1px}
+#tools .tool.popped .tcaret{color:var(--acc,#2f7be0);opacity:1}
+
+/* the caret has to read on the picked tool too, which is a solid colour block */
+#tools .tool.active .tcaret{color:#fff;opacity:.95}
+#tools .tool.active .tcaret:hover{background:rgba(255,255,255,.3);color:#fff}
+
+/* 6gf — the picture editor's door, a full-width button in the Snapshot panel */
+.tp-imgtools{margin:0 12px 12px}
+.tp-cb.tp-wide{flex:1;width:100%;padding:8px 10px;font-size:12px}
+
+/* 6hb — the saved-properties row: a chip per set, each with a dot that shows what it draws with
+   (its fill, its border colour, roughly its weight and whether it is dashed) and a ✕ that forgets it.
+   The Save button spans the row underneath, because it is the thing you reach for once and the chips
+   are the thing you reach for every day. */
+.tp-sets{flex-wrap:wrap;gap:6px}
+.tp-set{display:inline-flex;align-items:center;gap:7px;padding:5px 8px;max-width:100%}
+.tp-setdot{width:13px;height:13px;border-radius:4px;border:1px solid #fa3237;flex:0 0 auto}
+.tp-setx{margin-left:2px;opacity:.5;font-size:10px;line-height:1;padding:2px;border-radius:4px}
+.tp-set:hover .tp-setx{opacity:.9}
+.tp-setx:hover{color:#ff5e62;background:rgba(255,94,98,.12)}
+.tp-wide{width:100%;justify-content:center;margin-top:8px}
