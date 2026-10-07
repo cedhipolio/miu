@@ -4,7 +4,131 @@ Per-version working notes — what was asked for, what was measured, why each fi
 is — live alongside this repo in the **MIU (Mark It Up)** Claude project as `claude/vNN-notes.md`,
 back to v11. This file is the summary.
 
-Versions are numbered by release, not semver: v42 is the forty-second published build.
+Versions are numbered by release, not semver: v44 is the forty-fourth published build.
+
+---
+
+## v44
+
+**Nine things, and the two that could lose work are first.**
+
+**Photo redlines survive a reopen** (`6le`). Ced: *"the photo redlines are not being kept when a pdf
+was reopened on the tool."* This is 6fg's fault arriving by a second door. A photo's pixels live in
+its annotation's own appearance stream; carrying a second copy in the re-edit payload or in the
+mark's tag pushes those strings past what pdf-lib's `decodeText()` can read back, and an unreadable
+payload loses every mark in it. 6fg wrote `delete o.src` in one caller and stopped there — and
+`srcOrig` (6gs) and `picRaw` (6jb) have each held a whole picture since. Measured on three photos
+that had been through the picture editor, which is all it takes to set `srcOrig`:
+
+| | before | after |
+|---|---|---|
+| each photo's `MAPhoto` tag | 1,035,409 chars | 353 |
+| the re-edit payload | 3,106,394 chars | 1,226 |
+| the exported file | 21.7 MB | 6.2 MB |
+| photos that came back | 0 of 3 | 3 of 3 |
+
+The rule is now a function — `_stripPicBytes`, over a `PIC_FIELDS` list — used by both writers, so a
+fourth field cannot be added without passing through it, and `_tagEnc` says so out loud if one ever
+is. `picRaw` is recovered by cropping the framed picture's inner rectangle, which is exact because
+the frame is stamped around the original and the original is drawn back on top of it.
+`test/reopen.py` is new and fails on the two string lengths alone, before a photo has to go missing.
+
+**The sheet sits in the middle** (`6lb`). Ced sent a capture of an 11x17 drawing jammed against the
+right edge with 476px of empty white to its left. `.wrap` is a reading column and the page column
+lived inside it; a sheet narrower than that column is centred by its auto margins, and a sheet wider
+than it is not — auto margins resolve to zero, so the sheet goes flush to the column's left edge and
+the overflow hangs off to the right. Reproduced within 2px of his capture. The page column now
+escapes the cap by exactly as much as it needs to span the free space `_chromeInset()` measures, and
+nothing else moves: off-centre went from 224px to 0, at every column width.
+
+**Only a corner handle changes the point size** (`6lc`). `pos.indexOf("n")>=0` is true of `nw` and
+`ne` as well as `n`, so six of the eight grips were scaling the type — which meant a top or bottom
+grip could not give a note more room to wrap into, because the words grew with the box.
+
+**Ctrl on a side grip widens a text box and nothing else** (`6lc`). A text box arrived in the shapes'
+branch when 6kn made every free box one gesture, and picked up their square-off with it: one
+Ctrl-drag took a 240x29 box to 331x331. Ctrl on a text box's side grip means what 6dr made it mean —
+grow about the middle — and leaves the height alone.
+
+**A text box shows the lines it cannot fit** (`6lc`). Screen and file agree on where the words break;
+what was wrong is what happened to the lines that did not fit. 6kf said in words that a text box
+overflows rather than hides, and `overflow:hidden` was set three hundred lines above it where every
+free box passes. Measured: five lines needing 56px in a 38px box, the last two clipped away. A shape
+keeps the clip — its fill is painted on that element.
+
+**A pasted mark arrives selected** (`6ld`). It was going into `S.selMulti`, which is right for a set
+and not for one mark: no grips, so it could not be resized without clicking it again, and the bar
+offered what you do to a SET. Pasting with a tool still in hand also left the mode on that tool, so
+the next drag drew instead of moving what had just arrived.
+
+**The picture editor**: the Fill icon is Ced's own bucket, traced in its own proportions and drawn in
+`currentColor` instead of an emoji (`6lf`); the shapes have sharp corners, since `lineJoin:"round"`
+was putting a 24px fillet on a box drawn at 12pt (`6lf`); and the pen has a ring the size of the
+stroke it will draw, in the ink it will draw with, sized by Shift-wheel like the eraser's (`6lf`).
+
+**Auto reaches the lines the no-end rule cannot** (`6lg`). A leader that crosses the subject has both
+ends on the contour, so it is part of a cycle — and worse, it makes the contour and the leader one
+closed thing, which is why the largest closed component on Ced's capture was 7,504 skeleton pixels of
+7,541 and the pass removed 3.0%. Four candidate rules were measured on his own capture before one was
+written: continuity with the removed stumps (195px, 0.5%), the picture's edge as a line end (no
+change), straightness (does not separate — every arc in a mount drawing is 0.98 straight), and where
+the line sits. The last one separates: leaders ran 0.075-0.149 ink density against 0.18-0.92 for the
+mount. Density alone then took `behave.py`'s floating bracket, because a bracket on its own IS alone,
+so the rule needs the second half: a leader is also the LIGHTEST line on the sheet — 2.0-2.2 against a
+median stroke of 4 on Ced's capture, 2.48 against 4.0 on the test picture. Long, alone and thin, all
+three. 3.0% to 4.0% removed, both subjects whole, 297ms.
+
+**Every shortcut, pressed** (`test/keys.py`). Ced, four versions running: *"make sure all shortcuts
+work again for the nth time."* It kept coming back because nothing was watching it — 15 tool letters
+and 14 other shortcuts now go through a real keyboard every release, and the suite fails if one of
+them does nothing. All 29 pass. `tools.py`'s Escape-ladder expectation was corrected in the same
+pass: it was reading a `_selFromDraw` flag left over from its own setup, and the ladder as a hand
+meets it is tested in `behave.py` and `keys.py`, which draw with the tool first.
+
+**Four new `behave.py` cases**, each confirmed to fail without its fix: the sheet's centring at four
+column widths, the corner-only point size, Ctrl on a side grip, and the paste. Nineteen behaviours,
+seven suites.
+
+---
+
+## v43
+
+**The picture editor learns to fill, to select by shape, and to do the obvious thing on its own.**
+
+**A bucket** (`6la`). `Fill selection` paints behind the ink, which is the job for putting a ground
+under a capture. A bucket is the other job: click a space and that space takes the colour, on top,
+with no selection step in between. Same flood as the wand, same tolerance, different composite.
+
+**Shape select.** The lasso is for a region with no shape to it; most of what wants selecting on a
+drawing is a rectangle, and drawing one by hand round it is both slower and worse. Rectangle or
+ellipse, through the same New / Add / Subtract chips the wand uses.
+
+**Auto.** Ced: *"have a automatic mode that will read the photo and will do what it should do ...
+this is not ai assisted tool, it should be aware without ai."* It is not. It is one idea of his and
+three set operations.
+
+The idea is his too: *"look for the shape by looking at lines that does not have an end."* That is
+the right test. A drawn object is made of closed contours — an outline comes back to where it
+started — while a line arriving from elsewhere in the drawing has two ends, or one end and a frame
+edge, which is the same thing because the outside of the picture is empty. So the capture is thinned
+to one-pixel lines (Zhang–Suen), every pixel with one neighbour or none is deleted, and the deleting
+repeats: an open line is eaten from its tip inward and vanishes, a loop has no such pixel and is
+untouched. Measured on Ced's own capture, 8,120 thinned pixels: 6,855 closed, 1,265 ends.
+
+Then his recipe, in his order — *"select the outside shape then inverse then fill"* — on the region
+the surviving contour encloses, grown by the mean stroke width so the strokes that drew it are
+covered. Ink beyond that is the outer lines and comes off; the region is filled **behind** the ink so
+the drawing still reads on top of its new ground. Nothing is redrawn: *"dont regenerate the selected
+shape"*. Measured, 36,073 of 37,867 ink pixels kept and 1,794 outer-line pixels taken, in 280ms.
+
+Two things it deliberately does not do, both recorded in the code and said in the status line rather
+than left for Ced to discover. A line that crosses right **through** the shape has both of its ends
+on the contour, which makes it part of a closed loop, which makes it indistinguishable from a real
+member by the only test there is — `Erase line` takes one in a click. And branches shorter than
+`minLen` are put back, because the tick on a bracket is a detail and not an intruder.
+
+An earlier version of this used density instead — a morphological closing as a crowd detector. Ced's
+test is better and it replaced it outright.
 
 ---
 

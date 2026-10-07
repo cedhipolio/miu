@@ -17,12 +17,14 @@ export MIU_FIXTURE="test/fixtures/<a real site package>.pdf"
 node build.mjs --target=both
 npm run verify:packers
 
-# 2. the five suites — all of them, every time
-npm test                 # tools.py       · 215 checks
+# 2. the seven suites — all of them, every time
+npm test                 # tools.py       · 214 checks
 npm run test:wysiwyg     # wysiwyg.py     · marks, screen against export
 npm run test:text        # textparity.py  · type, screen against export
 npm run test:stamp       # stampparity.py · the COP stamp as a block
-npm run test:behave      # behave.py      · twelve behaviours, real mouse and keyboard
+npm run test:behave      # behave.py      · nineteen behaviours, real mouse and keyboard
+npm run test:keys        # keys.py        · every shortcut, on a real keyboard
+npm run test:reopen      # reopen.py      · export with photos, reopen, are they still there
 
 for s in v19 v14 v12; do
   python3 test/harness.py dist/mark-it-up.artifact.html "$MIU_FIXTURE" \

@@ -109,11 +109,13 @@ pip install playwright && python -m playwright install chromium
 export MIU_FIXTURE="test/fixtures/SOH3361 - Redlined Mount Analysis.pdf"
 
 npm run build:artifact
-npm test                 # tools.py       — 215 checks, every tool and every rule
+npm test                 # tools.py       — 214 checks, every tool and every rule
 npm run test:wysiwyg     # wysiwyg.py     — what is drawn vs what is exported, within 1.5pt
 npm run test:text        # textparity.py  — the same for type
 npm run test:stamp       # stampparity.py — the COP stamp, as a block, at five times the size
-npm run test:behave      # behave.py      — twelve behaviours, by real mouse and keyboard
+npm run test:behave      # behave.py      — nineteen behaviours, by real mouse and keyboard
+npm run test:keys        # keys.py        — every shortcut, on a real keyboard
+npm run test:reopen      # reopen.py      — export with photos, reopen, are they still there
 ```
 
 ### The two kinds of test, and why both exist
