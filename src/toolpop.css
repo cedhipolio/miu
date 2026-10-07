@@ -110,7 +110,7 @@
   box-sizing:border-box;flex:0 0 auto;width:92px;min-width:0}
 .tp-pillnum:focus-within{border-color:#6ea8ff}
 .tp-num{flex:1;min-width:0;width:100%;background:transparent;border:0;outline:none;color:#e6e9ef;
-  font:600 12px/1 Helvetica,Arial,sans-serif;text-align:right;padding:0}
+  font:600 12px/1 var(--sans);text-align:right;padding:0}
 .tp-suf{color:#8d96a6;font-size:11px}
 /* 6gd — the list of values, back beside the number the way the old ribbon <select>s were */
 .tp-pilldrop{flex:0 0 auto;width:16px;height:20px;margin-left:2px;padding:0;

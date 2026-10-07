@@ -8,9 +8,12 @@
  *
  * Two outputs, because the file is served two ways and they need different envelopes:
  *
- *   --target=web       public/app.html
+ *   --target=web       public/index.html
  *                      A COMPLETE HTML DOCUMENT, with its own doctype, <html>, <head> and <body>.
- *                      This is what Vercel serves and what a browser opens directly.
+ *                      This is what Vercel serves at /, and what a browser opens directly. There is
+ *                      no landing page in front of it: the site IS the tool, so what a visitor sees
+ *                      is the loading screen and then the opening screen, with nothing to click
+ *                      through first.
  *
  *   --target=artifact  dist/mark-it-up.artifact.html
  *                      A FRAGMENT, with no skeleton. claude.ai's Artifact host wraps what it is given
@@ -49,11 +52,11 @@ const ASSETS = [
   ["pk-pdf", ["pdfjs.js"]],
   ["pk-wrk", ["pdfworker.js"]],
   ["pk-lib", ["pdflib.js"]],
-  ["pk-app", ["fonts.js", "app.js", "ma.js", "toolpop.js", "selbar.js", "selectkit.js"]],
+  ["pk-app", ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"]],
 ];
 
 /* the files we author, as opposed to the vendored libraries — these are the ones worth syntax-checking */
-const OURS = ["fonts.js", "app.js", "ma.js", "toolpop.js", "selbar.js", "selectkit.js"];
+const OURS = ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"];
 
 function checkSyntax() {
   for (const name of OURS) {
@@ -98,6 +101,8 @@ function standalone(inner) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
+<!-- no <link rel=icon> here on purpose: src/shell.html carries the app's own pen favicon as a data
+     URL and swaps it at runtime. A second icon link would race it. -->
 <title>Mark It Up</title>
 </head>
 <body>
@@ -122,10 +127,11 @@ function main() {
     const out = join(HERE, "public");
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
-    /* the landing page and anything beside it */
+    /* static files served beside the tool — the icon, and anything added later. There is deliberately
+       no index.html in here: the tool is the index. */
     if (existsSync(SITE)) cpSync(SITE, out, { recursive: true });
-    writeFileSync(join(out, "app.html"), standalone(inner));
-    written.push(join(out, "app.html"));
+    writeFileSync(join(out, "index.html"), standalone(inner));
+    written.push(join(out, "index.html"));
   }
 
   if (target === "artifact" || target === "both") {

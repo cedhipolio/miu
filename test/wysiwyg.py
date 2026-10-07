@@ -84,6 +84,39 @@ MARKS = """
   { const dl=maPlaceDim(0,0.55,0.90,0.86,0.90);
     out.push({name:"length",id:dl,nx:0.53,ny:0.874,nw:0.37,nh:0.052});
     selectLine(null); selectAnno(null); }
+  /* 6kk — THE COP STAMP, measured the same way as everything else.
+     Ced: "compare the actual and the output and see the spacing. you can see that the rendered one
+     is not the same as the one on MIU." He is right, and nothing in this suite was watching: the
+     stamp is five marks and the suite only ever saw marks it placed itself. The whole frame is
+     registered as one, and each row separately, so a drift shows up as the line it is on rather
+     than as a vague "the stamp is off". */
+  { const f=copFields();
+    f.gc="TSC CONSTRUCTION LLC"; f.poc="JOSHUA BEAVER"; f.date="10/06/2026";
+    f.status="AS-BUILT"; f.place="tl";
+    const rec=copRec(f,0);
+    maPlaceMarkup(rec,0,0.12,0.775,"tl");
+    layoutAnnos();
+    const parts={};
+    S.annos.forEach(a=>{ if(a.copRole)parts[a.copRole]=a; });
+    ["box","title","gc","poc","date"].forEach(r=>{
+      const a=parts[r]; if(!a)return;
+      /* =========================================================================================
+         6l3 — THE STAMP IS MEASURED AS A BLOCK, NOT AS FIVE WINDOWS.
+         6kk gave each row a window of its own so the five could not all report the same union box.
+         A window is the wrong instrument here whichever size it is: the rows are stacked line box
+         against line box with no gap, so one pixel of padding reaches into the neighbour (measured:
+         title b -2.2 and contractor t -2.2 — the same 2.2 twice, one row's ink seen from both
+         sides), and none at all lets a pixel of integer truncation swap two rows of very different
+         widths (poc r +19, date r -17, which is the width of "TSC CONSTRUCTION LLC" against "CODY
+         HUBBARD"). Only the FRAME is a mark here now.
+         The frame stays here, because a frame IS a mark and this suite measures marks well. The
+         lines inside it are a different question at a different resolution, and they have their own
+         instrument now: `test/stampparity.py`, which renders the sheet and the file onto one pixel
+         grid at five times the size and compares the bands of ink between the two rules.
+         ========================================================================================= */
+      if(r==="box")out.push({name:"stamp_"+r,id:a.id,nx:a.nx,ny:a.ny,nw:a.nw,nh:a.nh,pad:6});
+    });
+    selectAnno(null); clearMulti(); }
   layoutAnnos(); drawAllLines();
   return out;
 """
@@ -187,7 +220,11 @@ async def main():
     W, H = box["w"], box["h"]
     rows = []
     for m in marks:
-        pad = 26
+        # 6kk — the window round a mark, in screen pixels. 26 is right for a stroke with an arrow on
+        # it, whose ink runs past the geometry it was given; it is wrong for one line of a stamp,
+        # where a 26px window swallows the lines above and below and every row then reports the same
+        # union box — which is how a stamp could drift internally with every part reading "ok".
+        pad = m.get("pad", 26)
         b0 = (max(0, m["nx"] * W - pad), max(0, m["ny"] * H - pad),
               min(W, (m["nx"] + (m["nw"] or 0)) * W + pad),
               min(H, (m["ny"] + (m["nh"] or 0)) * H + pad))
@@ -211,7 +248,12 @@ async def main():
                      # it and only fails on a gross mismatch — a missing head, a dropped fill — because
                      # a browser and poppler antialias a thin stroke differently enough to move the
                      # measured coverage by half either way with the same geometry.
-                     "ok": worst <= 1.5 and (ink["pdf"] == 0 or
+                     # 6l3 — the COP stamp's FRAME answers to a tighter figure than the rest: it is
+                     # two rules and nothing else, so there is no antialiasing argument for letting
+                     # it drift. The lines inside it are measured by `test/stampparity.py`, at a
+                     # resolution this suite does not run at.
+                     "ok": worst <= (0.75 if str(m["name"]).startswith("stamp_") else 1.5)
+                           and (ink["pdf"] == 0 or
                            abs(ink["screen"] - ink["pdf"]) <= max(60, 0.6 * ink["pdf"])),
                      "ink_pt2": ink})
     print(json.dumps(rows, indent=1))

@@ -846,10 +846,16 @@ function selbarSync(){
      really about several marks at once: aligning, distributing, selecting by kind, the subject.
      They are icons with no words past the first five, which is what kept v32's bar narrow — the label
      is on hover and in what a screen reader reads. */
-  bar.appendChild(sbBtn("@flip","",b=>sbMenu(b,[
-    {label:"Flip left to right", run:()=>sbFlip("h")},
-    {label:"Flip top to bottom", run:()=>sbFlip("v")}
-  ]),"sb-ico","Flip"));
+  /* =================================================================================================
+     6kz — TWO FLIPS, TWO BUTTONS. Ced: "have a rotated version icon of this for flip vertical while
+     this one retain for flip horizontal so no need for dropdown."
+     Flip is two things, not a choice between two things: one menu meant two presses and a read for
+     an action that is over in one. The same drawing does for both — turned a quarter, a mirror
+     across the upright reads as a mirror across the level — so the second button is the first with
+     `rotate(90deg)` on its glyph and nothing else to learn.
+     ================================================================================================= */
+  bar.appendChild(sbBtn("@flip","",()=>sbFlip("h"),"sb-ico","Flip left to right"));
+  bar.appendChild(sbBtn("@flip","",()=>sbFlip("v"),"sb-ico sb-flipv","Flip top to bottom"));
   bar.appendChild(sbBtn(locked?"@unlock":"@lock","",()=>sbSetLock(!locked),"sb-ico",
                         locked?"Unlock":"Lock"));
   bar.appendChild(sbBtn("@flatten","",()=>flat?sbUnflatten():sbFlatten(),"sb-ico"+(flat?" on":""),

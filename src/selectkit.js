@@ -745,7 +745,10 @@ function skEditor(a,opts){
   const hint=document.createElement("div"); hint.className="sk-edhint";
   /* 6ig/6ip — one line, and it says the two things the buttons do not: Shift-wheel sizes the brush,
      Ctrl-wheel zooms the picture. */
-  hint.textContent="Erase and Restore are brushes — hold and sweep. "+
+  /* 6kq — and the drawing tools get their one line too: that they go INTO the picture. */
+  hint.textContent="Erase and Restore are brushes — hold and sweep. Pen, Line, Arrow, Box and "+
+                   "Ellipse draw into the picture itself, in the ink and weight set below; Shift "+
+                   "holds a line to 45° and a box to a square. "+
                    "Shift-scroll resizes the brush; Ctrl-scroll zooms.";
   head.appendChild(ttl); head.appendChild(hint);
   /* 6gk — two rows: the tools and the selection on one, the settings and the view on the other, so
@@ -805,6 +808,28 @@ function skEditor(a,opts){
 function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   opts=opts||{};
   let tool="erase", brush=18, tol=40, fillCol="#ffffff", done=false;
+  /* =================================================================================================
+     6kq — DRAWING INSIDE THE PICTURE. Ced: "add lines and shapes tool in edit picture with
+     corresponding editing tools."
+
+     Everything the editor could do until now took ink AWAY — rub it out, follow a line and lift it,
+     wand a region and clear it — or put back what was already there. A capture of a drawing detail
+     very often needs something ADDED to it: an arrow at the member you are talking about, a box round
+     the bolt group, a line where the new steel goes. Doing that with a mark on the sheet puts it in
+     the wrong place the moment the picture is moved or resized, because it is a separate mark; drawn
+     in HERE it is part of the picture and travels with it.
+
+     Five tools — Pen, Line, Arrow, Box, Ellipse — with the three settings that matter: the colour,
+     the weight, and whether a box or an ellipse is filled. They are drawn in the picture's OWN pixels,
+     so a stroke is the same weight whatever the zoom and whatever resolution the capture was taken at;
+     the weight slider is in points of the mark as it sits on the sheet, which is the only unit that
+     means anything to someone looking at the drawing. One `push()` per gesture, so Undo takes back a
+     whole line rather than a frame of it, and the preview is on the overlay the crop box and the lasso
+     already use, so nothing is committed until the hand comes up.
+     ================================================================================================= */
+  let drawCol="#fa3237";                 /* the ribbon's redline red, which is what this is for */
+  let drawFill=false;                    /* a box or an ellipse: outline, or painted through */
+  let drawPt=1.5;                        /* the weight, in POINTS of the mark as it sits on the sheet */
   /* 6gs — Ced: "add should also be the default magic wand setting." Selecting one space and then
      another is the common gesture on a drawing — a detail has several enclosed regions — so the wand
      starts in ADD, and New is one chip away when a fresh selection is what is wanted. */
@@ -831,6 +856,15 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const _W0=_P0.w1||612, _H0=_P0.h1||792;
   const pw0=cv.width, ph0=cv.height;
   let pxW=(pw0?((a.nw||0)*_W0)/pw0:0), pxH=(ph0?((a.nh||0)*_H0)/ph0:0);
+  /* 6kq — AND HOW MANY PICTURE PIXELS ONE POINT IS WORTH. `pxW` is the other way round: how many
+     points one picture pixel measures on the sheet. A capture is taken at several times the screen's
+     resolution, so the same printed weight is several times as many pixels here — doing it in points
+     is what keeps a 1.5pt arrow a 1.5pt arrow whatever the capture's resolution, and what makes a
+     line drawn in the picture read like the redlines around it. A picture with no place on a page yet
+     — the markup library's own editor opens one — has no scale to convert through, so it falls back
+     to the capture's short edge, which puts the default at about three pixels on a small one. */
+  const ptPx=()=>(pxW>0.0001?(1/pxW):Math.max(1,Math.min(cv.width,cv.height)/420));
+  const drawPx=()=>Math.max(1,drawPt*ptPx());
   let picChanged=false;                 /* the shape was altered at all — the original is re-saved */
   /* 6j0 — HISTORY AS A PICTURE, NOT AS PIXELS. Ced: "the responsiveness of this is too slow." A
      snapshot is taken at the START OF EVERY BRUSH STROKE, and it was `getImageData` over the whole
@@ -902,8 +936,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
                        where.appendChild(d); return d; };
 
   /* ---- row one: the brushes, then the selection, then the fill ---- */
-  const gTools=group(bar), gSel=group(bar), gFill=group(bar);
+  const gTools=group(bar), gDraw=group(bar), gSel=group(bar), gFill=group(bar);
   let bErase,bRestore,bWipe,bWand,bLasso,bCrop,bInv,bClr,bFill,bErase2,bUndo,bRedo,countTag,zoomTag;
+  const drawBtns={};                     /* 6kq — pen · line · arrow · box · ellipse */
   const say=()=>{
     const n=mask?skMaskCount(mask):0;
     if(countTag)countTag.textContent=n?(n.toLocaleString()+" px selected"):"nothing selected";
@@ -912,6 +947,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(bClr)bClr.disabled=!mask;
   };
   const syncHist=()=>{ if(bUndo)bUndo.disabled=!undo.length; if(bRedo)bRedo.disabled=!redo.length; };
+  const DRAW_TOOLS=["pen","line","arrow","rect","ellipse"];   /* 6kq */
+  const isDrawTool=t=>DRAW_TOOLS.indexOf(t)>=0;
   const setTool=t=>{ tool=t;
     try{ dropBox(); }catch(e){}          /* 6ha — the rows below change height; the picture moves */
     const brushy=(t==="erase"||t==="restore");
@@ -921,6 +958,11 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     bWand.classList.toggle("on",t==="wand");
     bLasso.classList.toggle("on",t==="lasso");
     if(bCrop)bCrop.classList.toggle("on",t==="crop");
+    /* 6kq — the five drawing tools light the same way, and their settings come up with them */
+    DRAW_TOOLS.forEach(k=>{ if(drawBtns[k])drawBtns[k].classList.toggle("on",t===k); });
+    if(inkRow)inkRow.style.display=isDrawTool(t)?"":"none";
+    /* only a closed shape can be filled, so the chip that says so is only there for those two */
+    if(bInkFill)bInkFill.style.display=(t==="rect"||t==="ellipse")?"":"none";
     brushRow.style.display=brushy?"":"none";
     tolRow.style.display=(t==="wand"||t==="wipe")?"":"none";   /* the wand and the line eraser share it */
     /* 6gt — New / Add / Subtract belong to the SELECTION, not to the wand: the lasso builds the same
@@ -961,6 +1003,20 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     mask=null; skMaskShow(ov,null); say();
     setStatus("The picture is back as it came in.");
   },false,"Put the whole picture back as it came in — one step, and undoable");
+  /* 6kq — THE FIVE THINGS YOU CAN ADD. The glyphs match the ribbon's own tools so the hand already
+     knows them, and each one is the gesture it looks like: pen is freehand, the other four are drawn
+     from one corner to the other. Shift constrains — a line to the nearest 45°, a box to a square, an
+     ellipse to a circle. */
+  drawBtns.pen    =mkb(gDraw,"Pen","✎",()=>setTool("pen"),false,
+                       "Draw freehand into the picture");
+  drawBtns.line   =mkb(gDraw,"Line","╱",()=>setTool("line"),false,
+                       "Drag a straight line — Shift holds it to 45°");
+  drawBtns.arrow  =mkb(gDraw,"Arrow","↗",()=>setTool("arrow"),false,
+                       "Drag an arrow — the head lands where you let go");
+  drawBtns.rect   =mkb(gDraw,"Box","▭",()=>setTool("rect"),false,
+                       "Drag a box — Shift makes it square");
+  drawBtns.ellipse=mkb(gDraw,"Ellipse","◯",()=>setTool("ellipse"),false,
+                       "Drag an ellipse — Shift makes it a circle");
   bWand   =mkb(gSel,"Magic wand","✦",()=>setTool("wand"),false,
                "Click a space to select it — Shift adds another");
   /* 6gt — Ced: "add a lasso effect on edit photo." For everything the wand cannot reach: draw round
@@ -1012,6 +1068,35 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const tnum=document.createElement("span"); tnum.className="sk-ednum"; tnum.textContent=String(tol);
   trng.oninput=()=>{ tol=+trng.value; tnum.textContent=String(tol); };
   tolRow.appendChild(trng); tolRow.appendChild(tnum); gSet.appendChild(tolRow);
+  /* =================================================================================================
+     6kq — WHAT THE DRAWING TOOLS DRAW WITH. It sits beside the brush size and the tolerance because
+     it is the same kind of thing: a setting for the tool in the hand, shown only while that tool is
+     in it. The weight is in POINTS, not pixels — see `ptPx` — so the slider says the same thing the
+     ribbon's own weight chips say, and a line drawn in a 3x capture comes out matching a line drawn
+     on the sheet beside it.
+     ================================================================================================= */
+  let inkRow=null, bInkFill=null;
+  inkRow=document.createElement("label"); inkRow.className="sk-edsize";
+  inkRow.appendChild(document.createTextNode("Ink"));
+  const dcol=document.createElement("input");
+  dcol.type="color"; dcol.value=drawCol; dcol.className="sk-edcol";
+  dcol.title="What the pen, the line, the arrow and the shapes draw in";
+  dcol.oninput=()=>{ drawCol=dcol.value; };
+  inkRow.appendChild(dcol);
+  const drng=document.createElement("input");
+  drng.type="range"; drng.min="0.25"; drng.max="12"; drng.step="0.25"; drng.value=String(drawPt);
+  const dnum=document.createElement("span"); dnum.className="sk-ednum";
+  const dsay=()=>{ dnum.textContent=drawPt.toFixed(2).replace(/\.?0+$/,"")+" pt"; };
+  drng.oninput=()=>{ drawPt=+drng.value; dsay(); };
+  dsay();
+  inkRow.appendChild(drng); inkRow.appendChild(dnum);
+  bInkFill=document.createElement("button");
+  bInkFill.type="button"; bInkFill.className="sk-edm";
+  bInkFill.textContent="■ Filled";
+  bInkFill.title="Paint the inside of a box or an ellipse as well as its edge";
+  bInkFill.onclick=()=>{ drawFill=!drawFill; bInkFill.classList.toggle("on",drawFill); };
+  inkRow.appendChild(bInkFill);
+  gSet.appendChild(inkRow);
   /* 6gk — what the next wand click does to the selection. It sits with the tolerance, because both are
      settings for the tool in your hand rather than actions of their own. */
   const modeRow=document.createElement("div"); modeRow.className="sk-edmodes";
@@ -1472,6 +1557,18 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
          already there, so you can see what you are adding to */
       const pts=[[x,y]];
       const og=ov.getContext("2d");
+      /* =========================================================================================
+         6kw — AND THE OVERLAY HAS TO BE UP FOR ANY OF THAT TO BE SEEN. Ced: "the lasso tool preview
+         while making a shape does not show in realtime on the first lasso tool usage."
+         `skMaskShow` hides the overlay when there is no mask — 6im, because a transparent canvas the
+         size of a 3x capture is a layer the browser composites on every repaint — and `paintPath`
+         calls it before drawing the loop. On the FIRST lasso there is no mask yet, so the overlay
+         was hidden and the dashed path was drawn onto an invisible canvas; from the second lasso on
+         there was a mask, the overlay stayed up, and it worked. The crop box says `skOvShow` for
+         exactly this reason (6j2) and the lasso never did. It says it now, and puts it back down on
+         release so an empty overlay is still taken out of the picture.
+         ========================================================================================= */
+      skOvShow(ov,true);
       const paintPath=()=>{
         skMaskShow(ov,mask);
         og.save();
@@ -1495,6 +1592,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         cv.removeEventListener("pointermove",lmove);
         cv.removeEventListener("pointerup",lup);
         cv.removeEventListener("pointercancel",lup);
+        skOvShow(ov,false);                 /* 6kw — down again; skMaskShow decides from here */
         if(pts.length<3){ skMaskShow(ov,mask);
           setStatus("Draw round something — a lasso needs a loop, not a click.",true); return; }
         const m=(e&&e.shiftKey)?"add":((e&&e.altKey)?"sub":wandMode);
@@ -1525,6 +1623,110 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
                    (m==="add"?" (added)":(m==="sub"?" (subtracted)":""))+
                    " — Invert to take everything else, then Fill.")
                  :"Nothing selected — that region is empty, or you took all of it out.",!n);
+      return;
+    }
+    /* =============================================================================================
+       6kq — THE DRAWING TOOLS. One gesture is one history step, so Undo takes back a whole arrow
+       rather than the last frame of it, and nothing touches the picture until the hand comes up —
+       the preview is drawn on the same overlay the crop box and the lasso use. The pen is the
+       exception and has to be: a freehand line that only appeared on release would be drawing blind.
+       ============================================================================================= */
+    if(isDrawTool(tool)){
+      const w=drawPx(), og=ov.getContext("2d");
+      if(tool==="pen"){
+        push();
+        try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+        let p=[x,y];
+        const dab=(x0,y0,x1,y1)=>{ g.save();
+          g.strokeStyle=drawCol; g.fillStyle=drawCol;
+          strokePath(g,x0,y0,x1,y1,w); g.restore(); };
+        dab(x,y,x,y); _stroking=true;
+        const pmove=e=>{
+          const co=(e.getCoalescedEvents?e.getCoalescedEvents():null);
+          const list=(co&&co.length)?co:[e];
+          list.forEach(q=>{ const [mx,my]=at(q); dab(p[0],p[1],mx,my); p=[mx,my]; });
+        };
+        const pup=()=>{ _stroking=false; picChanged=true;
+          window.removeEventListener("pointermove",pmove);
+          window.removeEventListener("pointerup",pup);
+          window.removeEventListener("pointercancel",pup);
+          setStatus("Drawn into the picture — Undo takes the whole stroke back.");
+        };
+        window.addEventListener("pointermove",pmove);
+        window.addEventListener("pointerup",pup);
+        window.addEventListener("pointercancel",pup);
+        return;
+      }
+      let x1=x, y1=y, shifted=false;
+      /* where the gesture actually ends, once Shift has had its say */
+      const geom=()=>{
+        let ax=x1, ay=y1;
+        if(shifted){
+          if(tool==="line"||tool==="arrow"){
+            const dx=ax-x, dy=ay-y, r=Math.hypot(dx,dy);
+            const q=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
+            ax=x+Math.cos(q)*r; ay=y+Math.sin(q)*r;
+          }else{
+            const s=Math.max(Math.abs(ax-x),Math.abs(ay-y));
+            ax=x+((ax<x)?-s:s); ay=y+((ay<y)?-s:s);
+          }
+        }
+        return [x,y,ax,ay];
+      };
+      /* ONE painter, used for the preview and for the picture, so what you let go of is what lands */
+      const paintInk=ctx=>{
+        const [x0,y0,X1,Y1]=geom();
+        ctx.save();
+        ctx.strokeStyle=drawCol; ctx.fillStyle=drawCol;
+        ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
+        if(tool==="line"||tool==="arrow"){
+          const dx=X1-x0, dy=Y1-y0, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+          if(tool==="arrow"){
+            /* the shaft stops short of the head, so the point is a point and not a blob */
+            const hl=Math.max(w*3.4,w+2), hw=hl*0.52;
+            ctx.beginPath(); ctx.moveTo(x0,y0);
+            ctx.lineTo(X1-ux*hl*0.8,Y1-uy*hl*0.8); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(X1,Y1);
+            ctx.lineTo(X1-ux*hl-uy*hw, Y1-uy*hl+ux*hw);
+            ctx.lineTo(X1-ux*hl+uy*hw, Y1-uy*hl-ux*hw);
+            ctx.closePath(); ctx.fill();
+          }else{
+            ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(X1,Y1); ctx.stroke();
+          }
+        }else{
+          const X=Math.min(x0,X1), Y=Math.min(y0,Y1);
+          const W=Math.abs(X1-x0), H=Math.abs(Y1-y0);
+          ctx.beginPath();
+          if(tool==="ellipse")ctx.ellipse(X+W/2,Y+H/2,Math.max(0.5,W/2),Math.max(0.5,H/2),0,0,Math.PI*2);
+          else ctx.rect(X,Y,W,H);
+          if(drawFill)ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      };
+      skOvShow(ov,true);
+      const preview=()=>{ og.clearRect(0,0,ov.width,ov.height); paintInk(og); };
+      try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+      const dmove=e=>{ const q=at(e); x1=q[0]; y1=q[1]; shifted=!!e.shiftKey; preview(); };
+      const dup=e=>{
+        window.removeEventListener("pointermove",dmove);
+        window.removeEventListener("pointerup",dup);
+        window.removeEventListener("pointercancel",dup);
+        if(e&&e.shiftKey!=null)shifted=!!e.shiftKey;
+        og.clearRect(0,0,ov.width,ov.height);
+        skOvShow(ov,false); skMaskShow(ov,mask);
+        const [a0,b0,a1,b1]=geom();
+        if(Math.hypot(a1-a0,b1-b0)<Math.max(2,w*0.6)){
+          setStatus("Too small to draw — drag it out.",true); return; }
+        push(); paintInk(g); picChanged=true;
+        setStatus((tool==="arrow"?"Arrow":(tool==="line"?"Line":(tool==="rect"?"Box":"Ellipse")))+
+                  " drawn into the picture at "+drawPt+"pt — it is part of the capture now, so it "+
+                  "moves and resizes with it.");
+      };
+      window.addEventListener("pointermove",dmove);
+      window.addEventListener("pointerup",dup);
+      window.addEventListener("pointercancel",dup);
+      preview();
       return;
     }
     push();

@@ -416,7 +416,18 @@ function maAddTextBox(pi,x,y,text,wNorm,hNorm){
     id=addText(pi,Math.max(0,x),Math.max(0,y),text||"");
     const a=S.annos.find(z=>z.id===id);
     if(a){
-      a.maKind="text"; a.size=st.size; a.align=st.align||"left"; a.alignSet=true;
+      /* ==========================================================================================
+         6kc — A TEXT BOX STARTS CENTRED, BOTH WAYS.
+         Ced: "make sure texts are always in the middle vertically and horizontally first."
+         A new box filled from the top left, which is right for a paragraph and wrong for what this
+         tool makes: a short note dropped beside a member, a value over a cell, a word in a callout —
+         all of which read as labels and want to sit in the middle of the box they were drawn. FIRST
+         is the operative word: this is the state a box is born in, and the alignment controls still
+         move it anywhere the moment the user says so. A tool's own saved alignment still wins, so a
+         text tool set to left-align keeps left-aligning. */
+      a.maKind="text"; a.size=st.size;
+      a.align=st.align||"center"; a.alignSet=true;
+      a.valign=st.valign||"middle";
       a.under=false; a.onCell=false; a.fullcell=false; try{ topZ(a); }catch(e){}   /* 6i3 */
       maStampExtras(a,st);                     /* decorations, opacity, ground opacity, highlight */
       /* the box IS the mark: it has a width and a height from the moment it is drawn, it wraps
@@ -564,7 +575,25 @@ function maSelectedMarks(){
   lines.slice().forEach(l=>{ const lab=maDimLabelOf(l);
     if(lab&&!annos.some(z=>z.id===lab.id))annos.push(lab); });
   /* a group answers as a whole: restyling one half of a callout and not the other is never meant */
-  const groups=new Set(annos.concat(lines).map(o=>o.group).filter(g=>g!=null));
+  /* =================================================================================================
+     6ko — EXCEPT THE GROUP YOU ARE INSIDE. Ced: "make sure flattening a redline will not ruin the rest
+     of other redlines and will only change and flatten the specific redline selected."
+
+     6jz made a group ISOLATE on a double-click: the one member you picked gets its own handles, its
+     own bar and its own restyle while the grouping survives. That reached the pointer and stopped
+     here. Every action that asks this function what is selected — flatten, delete, restyle, copy,
+     lock, apply-to-pages — expanded the one isolated mark back out to the whole group, so going
+     inside a group bought you nothing but a different set of handles: flatten one arrow in a stamp
+     and the whole stamp went into the page.
+
+     An OPEN group is the user saying "this one, not the set". Closed groups still answer as a whole,
+     which is what a group is for; `groupOpenIs` is the same question 6jz's pointer paths ask, so the
+     two cannot drift. A member that was itself picked by hand is still in `ids`, so selecting two
+     marks inside an open group reaches exactly those two.
+     ================================================================================================= */
+  const _open=(typeof groupOpenNow==="function")?groupOpenNow():null;
+  const groups=new Set(annos.concat(lines).map(o=>o.group)
+                        .filter(g=>g!=null&&!(_open!=null&&g===_open)));
   if(groups.size){
     (S.annos||[]).forEach(a=>{ if(a.group!=null&&groups.has(a.group)&&!ids.has(a.id))annos.push(a); });
     (S.lines||[]).forEach(l=>{ if(l.group!=null&&groups.has(l.group)&&!lids.has(l.id))lines.push(l); });
@@ -585,6 +614,15 @@ function maOwnedReadings(sel){
 function maRestyleSelection(what){
   const sel=maSelectedMarks();
   if(!sel.annos.length&&!sel.lines.length)return 0;
+  /* 6ky — the fourth thing a lock promises: "cannot be moved, resized, RESTYLED or deleted". The
+     move, the resize and the turn each refuse at their own gesture; this did not, so a locked mark
+     quietly took whatever colour or weight the panel was showing. `lockedAmong` is the same
+     predicate the Delete key and the bar's own Delete ask. */
+  if(typeof lockedAmong==="function"&&lockedAmong(sel.annos,sel.lines)){
+    try{ toast("Unlock these first"); }catch(e){}
+    try{ setStatus("Locked \u2014 unlock these marks before restyling them.",true); }catch(e){}
+    return 0;
+  }
   /* a measurement restyles whole: the run and the reading written on it */
   try{ maOwnedReadings(sel).forEach(a=>sel.annos.push(a)); }catch(e){}
   const st=maStyleNow();
@@ -1483,9 +1521,12 @@ function maGhostOn(rec){
   g.className="maghost"+(rec.kind==="group"?" grp":"");
   g._rec=rec;
   if(rec.kind==="group"){
-    /* 6hl — the stamp itself, at the size it will land at */
-    try{ g.appendChild(maGroupSvg(rec)); }
-    catch(e){ g.textContent=(rec.name||"markup"); }
+    /* 6hl/6k8 — the stamp itself, at the size it will land at, laid out against the page it is
+       about to land ON so the drawing and the box it sits in cannot disagree */
+    try{
+      const pi=(typeof currentPageIdx==="function")?currentPageIdx():0;
+      g.appendChild(maGroupSvg(rec,null,null,{page:maPageDims(pi==null?0:pi),exact:true}));
+    }catch(e){ g.textContent=(rec.name||"markup"); }
   }else{
     const im=document.createElement("img"); im.src=rec.src; im.alt=""; im.draggable=false;
     g.appendChild(im);
@@ -1790,11 +1831,34 @@ function maGroupPage(rec){
   }catch(e){}
   return {w:612, h:792};
 }
-function maGroupSvg(rec,maxW,maxH){
+/* =================================================================================================
+   6k8 — WHAT YOU ARE HOLDING IS WHAT YOU WILL GET.
+   Ced: "make sure the preview when putting the markup in the pdf is the same size on the actual
+   output itself."
+
+   It was not, and the reason is that two different pages were being used to draw one picture. A
+   markup's marks are stored as FRACTIONS of the page they were taken from, and `maPlaceMarkup`
+   copies those fractions onto the destination page — so what lands is `b.w x b.h` of the sheet you
+   are looking at. `maGhostSize` sized the held preview that way, correctly. But the drawing inside
+   it was laid out against `maGroupPage(rec)`, the page it was SAVED from, so its viewBox had the
+   SOURCE sheet's aspect while its box had the DESTINATION sheet's. With `xMidYMid meet` between the
+   two, a markup saved on letter and placed on a 34x22 drawing came out letterboxed and small inside
+   a correctly-sized dashed box — Ced's screenshot, where the held splitter note is squashed onto one
+   line and the one that lands wraps onto two.
+
+   Two things follow. The ghost lays the artwork out against the page it is about to land on, so the
+   box and the drawing finally agree; and it is drawn EXACTLY, without the 3% breathing pad and
+   without the after-the-fact refit, both of which exist so a 90px library TILE never clips and both
+   of which shrink the drawing relative to its frame. A tile may shrink to fit. A thing in your hand
+   may not: it has one job, which is to be the size of the result.
+   ================================================================================================= */
+function maGroupSvg(rec,maxW,maxH,opts){
   const NS="http://www.w3.org/2000/svg";
-  const P=maGroupPage(rec), b=maGroupBounds(rec);
+  const exact=!!(opts&&opts.exact);
+  const P=(opts&&opts.page&&opts.page.w>0&&opts.page.h>0)?opts.page:maGroupPage(rec);
+  const b=maGroupBounds(rec);
   const W=b.w*P.w, H=b.h*P.h;                      /* the markup's own size, in points */
-  const pad=Math.max(1,Math.min(W,H)*0.03);        /* 6hy — room for a rule drawn on the boundary */
+  const pad=exact?0:Math.max(1,Math.min(W,H)*0.03);  /* 6hy — room for a rule on the boundary */
   const svg=document.createElementNS(NS,"svg");
   svg.setAttribute("viewBox",
     `${(-pad).toFixed(2)} ${(-pad).toFixed(2)} ${(W+pad*2).toFixed(2)} ${(H+pad*2).toFixed(2)}`);
@@ -1909,7 +1973,7 @@ function maGroupSvg(rec,maxW,maxH){
       svg.setAttribute("viewBox",
         `${x0.toFixed(2)} ${y0.toFixed(2)} ${Math.max(1,x1-x0).toFixed(2)} ${Math.max(1,y1-y0).toFixed(2)}`);
     }catch(e){} };
-  try{ requestAnimationFrame(()=>{ _fit(); requestAnimationFrame(_fit); }); }catch(e){ }
+  if(!exact){ try{ requestAnimationFrame(()=>{ _fit(); requestAnimationFrame(_fit); }); }catch(e){ } }
   return svg;
 }
 
@@ -1998,8 +2062,24 @@ let MA_TAB="notes";
 /* 6ic — WHICH CARDS ARE OPEN. The panel used to be one body with a tab strip over it; it is now a
    column of cards, and this is the set of them that is showing. `MA_TAB` is kept as the card that was
    opened last, because a few callers still say "show me the markups" and mean "put it in front". */
-const MA_CARDS=[["notes","Notes"],["parts","Parts"],["markups","Markups"],["import","As-built"]];
-let MA_OPEN=new Set(["notes"]);
+/* 6k4 — and the COP stamp, which is the same kind of thing as the four beside it: something you set
+   up once for a document and then apply to pages. Its renderer lives in stamp.js. */
+/* =================================================================================================
+   6kx — FOUR THINGS TAKEN OUT. Ced: "remove the following functions: Redline report, as-built,
+   notes, and parts."
+
+   Notes and Parts were seeded libraries from the tool's first week — canned sentences and a parts
+   list the callouts were meant to be built from — and the way the tool is actually used, a note is
+   typed where it goes and a callout is typed into. As-built read a second PDF and offered a redline
+   wherever the two disagreed, which never survived contact with real drawings. Redline report wrote
+   a summary of the marks; the export's own naming and the marks themselves say it better.
+
+   What Assist is now: Read table, Markups, COP stamp — the three that put something on the sheet or
+   take something off it. Their entry points, their cards and the report's modal are gone with them,
+   so nothing here opens onto a feature that is not there.
+   ================================================================================================= */
+const MA_CARDS=[["markups","Markups"],["stamp","COP stamp"]];
+let MA_OPEN=new Set(["markups"]);
 
 function maEsc(s){ return escapeHtml(String(s==null?"":s)); }
 /* 6il — THE ASSIST SECTIONS ARE DROPDOWNS. Ced: "separate the tabs of assist tools. they should pop
@@ -2008,11 +2088,33 @@ function maEsc(s){ return escapeHtml(String(s==null?"":s)); }
    that asked for it, dismissed on Escape or a click outside. The four renderers below are untouched:
    what changed is where their output appears. */
 let _maAnchor=null;
+/* =================================================================================================
+   6ks — THE ASSIST PANEL MOVES. Ced: "also make the prompts of assist draggable."
+
+   The redline tools' popover has been draggable since 6fe, for a reason that applies here word for
+   word: a fixed card hung under the button that opened it sits over the very part of the sheet you
+   are working on, and the Assist panel is the taller of the two. It is dragged by its head, it stays
+   where it was put — through a close and a reopen, and through a reload, because a panel that forgets
+   is a panel you move twice a session — and it is clamped back into view when the window changes
+   size rather than left half off the edge. The head is still a head: the ✕ in it is still a button,
+   and a press on a field inside the panel is not a drag.
+   ================================================================================================= */
+const MA_POS_KEY="ma.panelPos";
+let _maPos=null;
+try{ const raw=localStorage.getItem(MA_POS_KEY);
+     if(raw){ const q=JSON.parse(raw);
+       if(q&&isFinite(q.left)&&isFinite(q.top))_maPos={left:+q.left,top:+q.top}; } }catch(e){}
+function maPosSave(){
+  try{ if(_maPos)localStorage.setItem(MA_POS_KEY,JSON.stringify(_maPos));
+       else localStorage.removeItem(MA_POS_KEY); }catch(e){}
+}
 function maPlacePanel(){
   const p=$("#maPanel"); if(!p||!p.classList.contains("show"))return;
   const w=p.offsetWidth||360, h=p.offsetHeight||520;
   let left,top;
-  if(_maAnchor&&_maAnchor.getBoundingClientRect){
+  /* 6ks — where it was put wins over where it would have opened */
+  if(_maPos){ left=_maPos.left; top=_maPos.top; }
+  else if(_maAnchor&&_maAnchor.getBoundingClientRect){
     const r=_maAnchor.getBoundingClientRect();
     left=r.left; top=r.bottom+6;
     /* a button at the foot of the window opens its panel upwards, the way the tool panels do */
@@ -2021,7 +2123,45 @@ function maPlacePanel(){
   left=Math.max(8,Math.min(left,window.innerWidth-w-8));
   top =Math.max(8,Math.min(top ,Math.max(8,window.innerHeight-h-8)));
   p.style.left=left+"px"; p.style.top=top+"px";
+  /* a clamp is a move: remember where it actually ended up, not where it was asked to go */
+  if(_maPos)_maPos={left,top};
 }
+/* 6ks — and the gesture itself. Bound once, on the panel, so it survives every rebuild of the head
+   that `maRenderPanel` does — a listener put on the head would be thrown away with it. */
+function maDragWire(){
+  const p=$("#maPanel"); if(!p||p._dragWired)return; p._dragWired=true;
+  p.addEventListener("pointerdown",e=>{
+    if(e.button!==0)return;
+    const head=e.target.closest&&e.target.closest(".mk-head");
+    if(!head||!p.contains(head))return;
+    /* the head holds controls of its own — the ✕, the tab chips — and those are still controls */
+    if(e.target.closest("button,input,select,textarea,a,label"))return;
+    const r=p.getBoundingClientRect();
+    const dx=e.clientX-r.left, dy=e.clientY-r.top;
+    let moved=false;
+    try{ p.setPointerCapture&&p.setPointerCapture(e.pointerId); }catch(_){}
+    p.classList.add("dragging");
+    const move=ev=>{ moved=true; _maPos={left:ev.clientX-dx,top:ev.clientY-dy}; maPlacePanel(); };
+    const up=()=>{ p.classList.remove("dragging");
+      p.removeEventListener("pointermove",move);
+      p.removeEventListener("pointerup",up);
+      p.removeEventListener("pointercancel",up);
+      if(moved)maPosSave(); };
+    p.addEventListener("pointermove",move);
+    p.addEventListener("pointerup",up);
+    p.addEventListener("pointercancel",up);
+    e.preventDefault();
+  });
+  /* and the way back, for a panel dragged somewhere unhelpful: double-click its head */
+  p.addEventListener("dblclick",e=>{
+    const head=e.target.closest&&e.target.closest(".mk-head");
+    if(!head||!p.contains(head))return;
+    if(e.target.closest("button,input,select,textarea,a,label"))return;
+    maResetPos();
+    try{ setStatus("Panel back where it opens from — drag its head to move it again."); }catch(_){}
+  });
+}
+function maResetPos(){ _maPos=null; maPosSave(); maPlacePanel(); }
 window.addEventListener("resize",()=>{ try{ maPlacePanel(); }catch(e){} });
 window.addEventListener("scroll",()=>{ try{ maPlacePanel(); }catch(e){} },true);
 function maPanelOpen(on,anchor){
@@ -2031,7 +2171,7 @@ function maPanelOpen(on,anchor){
   p.classList.toggle("show",show);
   p.setAttribute("aria-hidden",show?"false":"true");
   document.body.classList.remove("maon");     /* 6il — a popover does not push the sheet over */
-  if(show){ maRenderPanel(); maPlacePanel();
+  if(show){ maRenderPanel(); try{ maDragWire(); }catch(e){} maPlacePanel();
             requestAnimationFrame(()=>{ try{ maPlacePanel(); }catch(e){} }); }
   try{ syncEmbossSoon(); }catch(e){}
   try{ updateMiniBar(); }catch(e){}     /* 6hb — the ribbon's own button shows the panel is open */
@@ -2046,7 +2186,7 @@ document.addEventListener("pointerdown",e=>{
   if(e.target.closest&&(e.target.closest("#maPanel")||e.target.closest("#dlg")||
                         e.target.closest(".sk-edit")||e.target.closest("#toolpop")))return;
   const b=e.target.closest&&e.target.closest("button");
-  if(b&&/^(maBtn|noteBtn|partsBtn|markupsBtn|importBtn|miniAnalyze)$/.test(b.id||""))return;
+  if(b&&/^(markupsBtn|stampBtn|miniAnalyze)$/.test(b.id||""))return;   /* 6kx */
   maPanelOpen(false);
 },true);
 function maSetTab(t){ MA_TAB=t; MA_OPEN=new Set([t]); maRenderPanel(); maPlacePanel(); }
@@ -2063,10 +2203,8 @@ function maRenderPanel(){
   if(ttl)ttl.textContent=row[1];
   const pan=$("#maPanel"); if(pan)pan.dataset.ma=row[0];
   body.innerHTML="";
-  if(row[0]==="notes")maRenderNotesTab(body);
-  else if(row[0]==="parts")maRenderPartsTab(body);
-  else if(row[0]==="markups")maRenderMarkupsTab(body);
-  else maRenderImportTab(body);
+  if(row[0]==="stamp")maRenderStampTab(body);          /* 6k4 — stamp.js */
+  else maRenderMarkupsTab(body);                       /* 6kx — and there are only the two */
   try{ maPlacePanel(); }catch(e){}
 }
 
@@ -2399,28 +2537,16 @@ function maOpenReport(){
       MA_TAB=tab; MA_OPEN=new Set([tab]);
       maPanelOpen(true,document.getElementById(id));
     });
-    tabBtn("maBtn","notes");
-    tabBtn("noteBtn","notes");
-    tabBtn("partsBtn","parts");
     tabBtn("markupsBtn","markups");
-    tabBtn("importBtn","import");
+    tabBtn("stampBtn","stamp");                        /* 6k4 */
+    /* 6kx — maBtn / noteBtn / partsBtn / importBtn / reportBtn are gone, buttons and all */
     on("maClose",()=>maPanelOpen(false));
-    on("reportBtn",maOpenReport);
     on("analyzeMaBtn",maAnalyzeOpen);
     on("maAzClose",maAnalyzeClose);
     on("maAzApply",()=>{ maApplyTable(); maAnalyzeRender(); });
     on("maAzReread",()=>{ MA_TABLE=null; maReadLoading(); maAnalyzeRender(); });
-    on("reportClose",()=>{ const m=$("#reportModal"); if(m)m.classList.remove("show"); });
-    on("reportCopy",()=>{ try{ navigator.clipboard.writeText(maReportText()); toast("Copied"); }catch(e){} });
 
 
-    const f=document.getElementById("maFile");
-    if(f)f.onchange=async e=>{
-      const file=e.target.files&&e.target.files[0]; if(!file)return;
-      e.target.value="";
-      const got=await maReadAsBuilt(file);
-      if(got){ MA_TAB="import"; maPanelOpen(true,document.getElementById("importBtn")); }
-    };
 
     /* The seven fields the properties panels write into: what the next mark looks like, and — while something is selected — what the
        selection looks like. Wired on `input` so a colour follows the picker as it is dragged. */

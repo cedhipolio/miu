@@ -7,7 +7,9 @@ thumb drive or from `file://`, needs no install and no account, and **never uplo
 Marks go out as real PDF annotations and the original pages stay vector — whoever opens the export
 next can move a note or correct a value without the sheet turning into a picture of itself.
 
-Deployed on Vercel: the landing page at `/`, the tool at `/app`.
+Deployed on Vercel: **the tool itself is at `/`** — it boots into the loading screen and then the
+opening screen. `/app`, `/tool` and `/miu` redirect there. (The separate landing page was removed in
+v38: Ced asked for the tool to be the site.)
 
 ---
 
@@ -31,7 +33,8 @@ src/            the sources — this is what you edit
   shell.html      the markup: ribbon, rail, panels, the opening screen
   boot.html       the loader that inflates the packed blobs at startup
   app.js          the engine: pages, marks, strokes, selection, export        (~11k lines)
-  ma.js           the mount-analysis layer: detection, Assist, as-built import
+  ma.js           the mount-analysis layer: detection, Assist, the markup library
+  stamp.js        the AT&T COP stamp: geometry, blank-space search, its Assist card
   toolpop.js      the per-tool properties panels
   selbar.js       the selection bar and context menu
   selectkit.js    lasso, text selection, picture editing
@@ -58,7 +61,7 @@ Two outputs, because the file is served two ways:
 
 | target | output | shape |
 |---|---|---|
-| `--target=web` | `public/app.html` | a **complete document**, with doctype, `<html>`, `<head>`, `<body>` — what Vercel serves |
+| `--target=web` | `public/index.html` | a **complete document**, with doctype, `<html>`, `<head>`, `<body>` — what Vercel serves at `/` |
 | `--target=artifact` | `dist/mark-it-up.artifact.html` | a **fragment**, no skeleton — claude.ai's Artifact host supplies its own |
 
 Publishing the web build as an Artifact gives you a nested document that renders in quirks mode;
@@ -106,10 +109,42 @@ pip install playwright && python -m playwright install chromium
 export MIU_FIXTURE="test/fixtures/SOH3361 - Redlined Mount Analysis.pdf"
 
 npm run build:artifact
-npm test                 # tools.py   — 203 checks, every tool and every rule
-npm run test:wysiwyg     # wysiwyg.py — what is drawn vs what is exported, within 1.5pt
-npm run test:text        # textparity.py — the same for type
+npm test                 # tools.py       — 215 checks, every tool and every rule
+npm run test:wysiwyg     # wysiwyg.py     — what is drawn vs what is exported, within 1.5pt
+npm run test:text        # textparity.py  — the same for type
+npm run test:stamp       # stampparity.py — the COP stamp, as a block, at five times the size
+npm run test:behave      # behave.py      — twelve behaviours, by real mouse and keyboard
 ```
+
+### The two kinds of test, and why both exist
+
+`tools.py` asks the page **questions**: it calls a function, reads state, and checks the answer.
+That is the right instrument for arithmetic and the wrong one for a tool, because a question
+answered correctly by a function **that no gesture ever reaches** is a test that passes while the
+tool is broken. That happened — a version shipped in which Escape, text resizing and the hotkeys all
+had passing cases and none of the three worked.
+
+`behave.py` is the correction. Every case is driven by `page.mouse` and `page.keyboard` and nothing
+else: no `evaluate` that calls a handler, no synthetic events, no reaching into closures. Setup and
+measurement may read state; **the action under test never may.** If a gesture cannot be performed
+with a mouse and a keyboard, it does not belong in that file, because a user cannot perform it
+either. Each case gets a fresh page — a tool that only works on the second document is a tool that
+does not work.
+
+Three things trip a script there that never trip a hand, and knowing them saves an hour:
+
+- the **ribbon auto-hides on scroll**, so clicking a tool button silently misses; put the pointer at
+  the top strip first (`Tool.show_ribbon`);
+- the **resize grips are not children of the mark** — `layoutAnnos` lays a second element over it
+  (`.anno.sel.selui`) that carries the selection furniture;
+- a **shape takes words through a double-click**, not by typing at it; typing with no caret goes to
+  the hotkeys.
+
+### A suite that has never failed has not been shown to measure anything
+
+`stampparity.py` was written against a real bug, and the first thing done with it was to put the bug
+back (`cssBaseline`'s probe to 1×) and confirm it reported 4 of 4 lines out and exited non-zero.
+Worth doing for any new suite before trusting a green run from it.
 
 Regression scenarios, run through the harness:
 
@@ -150,8 +185,9 @@ npx vercel          # preview
 npx vercel --prod   # production
 ```
 
-**Routing.** `cleanUrls` is on, so `public/app.html` is served at `/app` — link to `/app`, not
-`/app.html`. `/tool` and `/miu` redirect to `/app` for anyone who guesses.
+**Routing.** The tool IS the site: `build.mjs` writes it to `public/index.html`, so `/` boots
+straight into the loading screen and then the opening screen, with no landing page to click through.
+`/app`, `/tool` and `/miu` redirect to `/` for anyone who has an old link.
 
 **Access.** The tool is internal. Vercel's project-level password protection or Vercel Authentication
 (Settings → Deployment Protection) is the right control if the deployment should not be world-

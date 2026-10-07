@@ -24,11 +24,11 @@ body.maon .wrap{padding-right:0}
 #maPanel .mk-head .btn{margin-left:auto}
 #maPanel .ma-site{font-size:11px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
 
-#maPanel .ma-body{flex:1;min-height:0;overflow:auto;padding:14px;font:12px/1.45 Helvetica,Arial,sans-serif}
+#maPanel .ma-body{flex:1;min-height:0;overflow:auto;padding:14px;font:12px/1.45 var(--sans)}
 /* 6iz — a section's fields sit one step in from its heading, the way the tool panels read */
 #maPanel .ma-sec > *:not(h4){margin-left:10px}
 #maPanel .ma-sec > h4{margin-left:0}
-#maPanel h4{margin:0 0 8px;font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.08em;
+#maPanel h4{margin:0 0 8px;font:600 11px/1 var(--sans);letter-spacing:.08em;
   text-transform:uppercase;color:var(--faint)}
 #maPanel .ma-sec{margin:0 0 20px}
 #maPanel .ma-hint{color:var(--muted);font-size:11px;line-height:1.5;margin:6px 0 0}
@@ -38,7 +38,7 @@ body.maon .wrap{padding-right:0}
 #maPanel input[type=text],#maPanel input[type=date],#maPanel input[type=number],
 #maPanel select,#maPanel textarea{width:100%;box-sizing:border-box;background:var(--panel2);
   color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 11px;
-  font:12px/1.35 Helvetica,Arial,sans-serif}
+  font:12px/1.35 var(--sans)}
 #maPanel textarea{min-height:70px;resize:vertical}
 #maPanel input:focus,#maPanel select:focus,#maPanel textarea:focus{outline:2px solid var(--accent);
   outline-offset:-1px;border-color:transparent}
@@ -47,7 +47,7 @@ body.maon .wrap{padding-right:0}
 #maPanel .ma-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 /* 6iz — the same rounded language the tool panels use */
 #maPanel .ma-go{appearance:none;border:0;border-radius:999px;background:var(--accent);color:#fff;
-  font:600 12px/1 Helvetica,Arial,sans-serif;padding:10px 16px;cursor:pointer;letter-spacing:.02em}
+  font:600 12px/1 var(--sans);padding:10px 16px;cursor:pointer;letter-spacing:.02em}
 #maPanel .ma-go:hover{filter:brightness(1.08)}
 #maPanel .ma-go.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
 #maPanel .ma-go:disabled{opacity:.45;cursor:default;filter:none}
@@ -128,29 +128,29 @@ body.maplacing .page{cursor:crosshair}
   border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
 #maAnalyze .az-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
 #maAnalyze .az-head > div:first-child{flex:1;min-width:0}
-#maAnalyze .az-title{font:800 12px/1.2 Helvetica,Arial,sans-serif;color:var(--ink-strong);
+#maAnalyze .az-title{font:800 12px/1.2 var(--sans);color:var(--ink-strong);
   letter-spacing:.11em;text-transform:uppercase}
-#maAnalyze .az-sub{font:400 11.5px/1.4 Helvetica,Arial,sans-serif;color:var(--muted);margin-top:2px}
+#maAnalyze .az-sub{font:400 11.5px/1.4 var(--sans);color:var(--muted);margin-top:2px}
 #maAnalyze .az-body{flex:1;overflow:auto;padding:14px 16px}
 #maAnalyze .az-foot{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--line)}
-#maAnalyze .az-count{flex:1;font:400 11.5px/1 Helvetica,Arial,sans-serif;color:var(--muted);
+#maAnalyze .az-count{flex:1;font:400 11.5px/1 var(--sans);color:var(--muted);
   letter-spacing:.04em;text-transform:uppercase}
 #maAnalyze .az-chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
 #maAnalyze .az-chip{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--faint);
-  border-radius:20px;padding:4px 10px;font:600 10.5px/1 Helvetica,Arial,sans-serif;cursor:pointer;
+  border-radius:20px;padding:4px 10px;font:600 10.5px/1 var(--sans);cursor:pointer;
   letter-spacing:.04em;text-transform:uppercase}
 #maAnalyze .az-chip.on{background:var(--accent);border-color:transparent;color:#fff}
 #maAnalyze .az-tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-#maAnalyze table.az-table{border-collapse:collapse;width:100%;font:12px/1.3 Helvetica,Arial,sans-serif}
+#maAnalyze table.az-table{border-collapse:collapse;width:100%;font:12px/1.3 var(--sans)}
 #maAnalyze .az-table th{position:sticky;top:0;background:var(--panel2);color:var(--faint);
-  font:600 10px/1.25 Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;
+  font:600 10px/1.25 var(--sans);letter-spacing:.06em;text-transform:uppercase;
   text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:normal;min-width:88px}
 #maAnalyze .az-table th.pg,#maAnalyze .az-table td.pg{min-width:0;width:38px;text-align:center;
   color:var(--faint);font-variant-numeric:tabular-nums}
 #maAnalyze .az-table td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
 #maAnalyze .az-table tr:last-child td{border-bottom:0}
 #maAnalyze .az-table input{width:100%;box-sizing:border-box;background:transparent;color:var(--ink);
-  border:1px solid transparent;border-radius:6px;padding:5px 6px;font:12px/1.3 Helvetica,Arial,sans-serif}
+  border:1px solid transparent;border-radius:6px;padding:5px 6px;font:12px/1.3 var(--sans)}
 #maAnalyze .az-table input:hover{border-color:var(--line)}
 #maAnalyze .az-table input:focus{outline:none;border-color:var(--accent);background:var(--panel2)}
 #maAnalyze .az-table input.blank{color:var(--faint);font-style:italic}
@@ -195,7 +195,7 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
    ================================================================================================= */
 .deghud{position:fixed;z-index:4300;transform:translate(-50%,-50%);pointer-events:none;
   background:rgba(17,20,26,.92);color:#fff;border:1px solid rgba(255,255,255,.18);
-  border-radius:8px;padding:4px 9px;font:700 12px/1 Helvetica,Arial,sans-serif;
+  border-radius:8px;padding:4px 9px;font:700 12px/1 var(--sans);
   letter-spacing:.02em;opacity:0;transition:opacity .1s}
 .deghud.show{opacity:1}
 .deghud.caught{background:#0b7a4b;border-color:#13a866}
@@ -239,3 +239,119 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
    holding is the marks themselves */
 .maghost.grp{background:transparent;padding:0}
 .maghost.grp svg{width:100%;height:100%;display:block}
+
+/* =================================================================================================
+   6k4 — THE COP STAMP CARD'S PREVIEW.
+   It is the stamp, drawn at 2.4x on a grey ground so a 1.6pt pad is something you can actually see,
+   and at the LETTER baseline whatever sheet is open — the caption says what this page scales it by.
+   Everything is positioned by the same numbers `copSpec` gives the page, so the preview cannot say
+   one thing and the sheet another.
+   ================================================================================================= */
+.cop-stage{margin:12px 0 4px;padding:26px 14px 10px;border-radius:9px;
+  background:#4a5058;display:flex;flex-direction:column;align-items:center;gap:10px}
+.cop-pv{position:relative;background:#fff;border:1px solid #cc1c1c;border-radius:0;
+  transform-origin:top left;box-sizing:border-box}
+.cop-pv-l{position:absolute;white-space:nowrap;color:#cc1c1c;
+  font-family:Arial,Helvetica,"Liberation Sans",sans-serif;font-weight:400}
+.cop-pv-l.b{font-weight:700}
+.cop-pv-cap{font-size:10px;letter-spacing:.04em;color:#cfd4da;text-transform:none}
+.cop-other{margin-top:5px}
+
+/* =================================================================================================
+   6ka — THE ASSIST PANEL IN THE TOOL PANELS' LANGUAGE.
+   Ced: "fix the ui of the stamp tool. make it similar to the dropdowns of the redline tools and make
+   the neumorphism design language also be in place."
+
+   The redline tools' ▾ panels (`toolpop.css`) keep their own dark card in both themes, because they
+   float over a white sheet. Assist floated over the same sheet in the page's palette, so the two
+   read as parts of different programs. It takes the tool panels' surface, radius, gutter and type —
+   and the soft-relief treatment those panels have always implied but never had: a control is a
+   raised pad with light above and shadow below, and the one you are typing in presses IN.
+   Scoped to `#maPanel` so nothing else in the tool moves.
+   ================================================================================================= */
+#maPanel{
+  --mp-bg:#1f232b; --mp-sunk:#191d24; --mp-raise:#262b34; --mp-line:#363c48;
+  --mp-ink:#e6e9ef; --mp-dim:#8d96a6;
+  --mp-hi:rgba(255,255,255,.055); --mp-lo:rgba(0,0,0,.55);
+  background:var(--mp-bg); border-color:var(--mp-line); color:var(--mp-ink);
+  border-radius:16px; box-shadow:0 18px 50px rgba(0,0,0,.5);
+}
+#maPanel .mk-head{
+  border-bottom:1px solid #2a303a; padding:13px 14px 9px;
+  border-radius:16px 16px 0 0; background:var(--mp-bg);
+  /* 6ks — and it is the handle: the panel is dragged by its head, the way the tool popover is */
+  cursor:grab; touch-action:none;
+}
+#maPanel.dragging .mk-head{cursor:grabbing}
+#maPanel.dragging{user-select:none}
+#maPanel .mk-head button,#maPanel .mk-head input,
+#maPanel .mk-head select,#maPanel .mk-head label{cursor:pointer}
+#maPanel .mk-head b{font-size:14px;font-weight:800;letter-spacing:.09em}
+#maPanel .ma-site{font-size:10.5px;color:var(--mp-dim)}
+#maPanel .mk-head .btn{
+  width:26px;height:26px;padding:0;border-radius:999px;
+  border:1px solid #3a414f;background:var(--mp-raise);color:#cfd6e2;font-size:13px;line-height:1;
+  box-shadow:0 1px 0 var(--mp-hi) inset, 0 2px 5px var(--mp-lo);
+}
+#maPanel .mk-head .btn:hover{background:#2f3541;border-color:#4a5364}
+#maPanel .ma-body{padding:12px 14px 14px;color:var(--mp-ink)}
+#maPanel h4{color:var(--mp-dim)}
+#maPanel .ma-hint,#maPanel .ma-note{color:var(--mp-dim);font-size:11px;line-height:1.55;margin:8px 0 0}
+#maPanel label.ma-f > span{color:var(--mp-dim)}
+
+/* the sunken field: pressed into the card, with the light coming from above */
+#maPanel input[type=text],#maPanel input[type=date],#maPanel input[type=number],
+#maPanel select,#maPanel textarea{
+  background:var(--mp-sunk); color:var(--mp-ink);
+  border:1px solid #2b313b; border-radius:10px; padding:9px 11px;
+  box-shadow:inset 0 2px 5px var(--mp-lo), inset 0 -1px 0 var(--mp-hi);
+}
+#maPanel select{
+  appearance:none; padding-right:30px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--mp-dim) 50%),
+                   linear-gradient(135deg,var(--mp-dim) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 52%,calc(100% - 11px) 52%;
+  background-size:5px 5px,5px 5px; background-repeat:no-repeat;
+}
+#maPanel input:focus,#maPanel select:focus,#maPanel textarea:focus{
+  outline:none; border-color:#4a5364;
+  box-shadow:inset 0 2px 6px var(--mp-lo), 0 0 0 2px rgba(74,83,100,.55);
+}
+/* the raised pad: a button sits ON the card */
+#maPanel .ma-go{
+  display:block; width:100%; margin:9px 0 0; padding:10px 13px;
+  border-radius:11px; border:1px solid #3a414f; background:var(--mp-raise); color:var(--mp-ink);
+  font:600 12px/1.3 var(--sans); cursor:pointer; text-align:center;
+  box-shadow:0 1px 0 var(--mp-hi) inset, 0 3px 7px var(--mp-lo);
+  transition:transform .08s ease, box-shadow .08s ease, background .12s ease;
+}
+#maPanel .ma-go:hover:not(:disabled){background:#2f3541;border-color:#4a5364}
+#maPanel .ma-go:active:not(:disabled){
+  transform:translateY(1px);
+  box-shadow:inset 0 2px 6px var(--mp-lo);
+}
+#maPanel .ma-go:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+/* the one action that commits something wears the accent, the way EXPORT does on the ribbon */
+#maPanel .ma-go.go{
+  background:linear-gradient(180deg,#d33c3f,#b32226); border-color:#b32226; color:#fff;
+  box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 4px 10px rgba(179,34,38,.35);
+}
+#maPanel .ma-go.go:hover:not(:disabled){background:linear-gradient(180deg,#e04649,#c02a2e)}
+
+/* ---- the stamp card ---- */
+#maPanel .cop-stage{
+  margin:12px 0 2px; padding:16px 12px 12px; border-radius:12px;
+  background:#4a5058; box-shadow:inset 0 2px 8px rgba(0,0,0,.45);
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  overflow:hidden;                 /* 6ka — the preview is scaled; it may not escape its card */
+}
+#maPanel .cop-pvwrap{display:flex;align-items:center;justify-content:center;width:100%}
+#maPanel .cop-other{margin-top:6px}
+
+/* 6kh — the stamp card's own column. Ced: "the ui of stamp tool should be aligned left properly."
+   The panel indents a section's contents one step past its heading (6iz), which is right for a
+   section that HAS a heading. The stamp card is one unbroken form with no headings in it, so the
+   step had nothing to step in from and every control sat 10px adrift of the card's own gutter. */
+#maPanel[data-ma="stamp"] .ma-sec > *:not(h4){margin-left:0}
+#maPanel[data-ma="stamp"] .ma-sec{margin-bottom:0}
+#maPanel[data-ma="stamp"] label.ma-f > span{margin-left:1px}

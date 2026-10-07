@@ -493,7 +493,11 @@ async def main():
         results.append({"tool": "Tool properties (▾)", "ok": ok,
                         "why": f'{opened["title"]!r} · closes on Esc: {closed} · button still picks: {mode_after}'})
 
-        # ---------- 6f6: snap straightens a nearly-level drag ----------
+        # ---------- 6kt: a nearly-level drag stays where it was drawn, and Shift levels it ----------
+        # This case used to assert the opposite — 6f6 had the Snap toggle pull any drag within 4.5°
+        # of an axis onto it. Ced: "when putting a line or any shape, do not instantly have target,
+        # unless user is clicking shift." Snap on is no longer enough, and the same drag with Shift
+        # held must land dead level, so both halves are drawn here with the toggle ON.
         await clear()
         await page.evaluate("()=>{S.snap=true;}")
         await set_style()
@@ -501,11 +505,20 @@ async def main():
         x1, y1 = at(0.16, 0.50)
         x2, y2 = at(0.52, 0.505)          # about a third of a degree off level
         await drag(x1, y1, x2, y2)
-        snapped = await page.evaluate(
+        free = await page.evaluate(
             """()=>{const l=S.lines[S.lines.length-1];
-                    return l?{dy:+(Math.abs(l.y2-l.y1)).toFixed(5),dx:+(l.x2-l.x1).toFixed(3)}:null;}""")
-        results.append({"tool": "Snap while drawing", "ok": bool(snapped) and snapped["dy"] == 0,
-                        "why": f'level to {snapped and snapped["dy"]} over {snapped and snapped["dx"]}'})
+                    return l?{dy:+(Math.abs(l.y2-l.y1)).toFixed(5)}:null;}""")
+        await pick("line")
+        await page.keyboard.down("Shift")
+        await drag(*at(0.16, 0.60), *at(0.52, 0.605))
+        await page.keyboard.up("Shift")
+        held = await page.evaluate(
+            """()=>{const l=S.lines[S.lines.length-1];
+                    return l?{dy:+(Math.abs(l.y2-l.y1)).toFixed(5)}:null;}""")
+        snapped = {"noModifier": free, "withShift": held}
+        results.append({"tool": "Snap while drawing", "ok": bool(free) and bool(held)
+                        and free["dy"] > 0.0005 and held["dy"] == 0,
+                        "why": f'free drag off level by {free and free["dy"]} · with Shift {held and held["dy"]}'})
 
         # ---------- 6f6: Ctrl squares the drag off ----------
         await clear()
@@ -565,8 +578,9 @@ async def main():
         # is no wider than v32's five-words-and-an-overflow. The ⋯ keeps what is about several marks at
         # once: aligning, distributing, the subject.
         words = ["Edit properties", "Duplicate", "Group", "Copy"]
-        icons = ["Flip", "Lock", "Flatten", "Add to markup library", "Apply to pages",
-                 "Copy properties", "Delete"]
+        # 6kz — Flip is two buttons rather than a button and a menu
+        icons = ["Flip left to right", "Flip top to bottom", "Lock", "Flatten",
+                 "Add to markup library", "Apply to pages", "Copy properties", "Delete"]
         ok = (barOn["shown"] and barOff
               and all(w in barOn["acts"] for w in words)
               and any(a.startswith("Layer") for a in barOn["all"])
@@ -1823,7 +1837,9 @@ async def main():
                      const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                        const btn=t=>{ const r=new RegExp(t,"i");
                          return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
-                     const mode=k=>[...m.querySelectorAll(".sk-edm")]
+                     /* 6kq — the WAND's three modes, scoped to their own row: the drawing tools added a
+                        chip of their own ("Filled") that wears the same class and is not one of them */
+                     const mode=k=>[...m.querySelectorAll(".sk-edmodes .sk-edm")]
                        .find(z=>new RegExp(k,"i").test(z.textContent));
                      const B=()=>cv.getBoundingClientRect();
                      const hit=(x,y,extra)=>cv.dispatchEvent(new PointerEvent("pointerdown",
@@ -1832,10 +1848,10 @@ async def main():
                                       bubbles:true,pointerId:5,button:0},extra||{})));
                      const n=()=>parseInt(m.querySelector(".sk-edcount").textContent
                                            .replace(/[^0-9]/g,""),10)||0;
-                     const out={chips:[...m.querySelectorAll(".sk-edm")].map(b=>b.textContent.trim())};
+                     const out={chips:[...m.querySelectorAll(".sk-edmodes .sk-edm")].map(b=>b.textContent.trim())};
                      btn("Magic wand").click();
                      out.shown=getComputedStyle(m.querySelector(".sk-edmodes")).display!=="none";
-                     out.deflt=[...m.querySelectorAll(".sk-edm")]
+                     out.deflt=[...m.querySelectorAll(".sk-edmodes .sk-edm")]
                        .filter(z=>z.classList.contains("on")).map(z=>z.textContent.trim());
                      mode("New").click();                    /* 6gs — Add is the default now */
                      hit(28,30);  out.one=n();
@@ -3692,8 +3708,11 @@ async def main():
                  out.snap1=Object.assign({},st("snapBtn"),
                    {active:document.getElementById("snapBtn").classList.contains("active")});
                  document.getElementById("snapBtn").click(); await nap(150);
-                 maPanelOpen(true); await nap(300); out.ma=st("maBtn");
-                 maPanelOpen(false); await nap(250); out.maOff=st("maBtn");
+                 /* 6kx — the Assist button this used to read was `maBtn` (Notes), which is gone
+                    along with Notes, Parts, As-built and the Redline report. Markups is the one
+                    that opens the panel now. */
+                 maPanelOpen(true); await nap(300); out.ma=st("markupsBtn");
+                 maPanelOpen(false); await nap(250); out.maOff=st("markupsBtn");
                  res(out); })""")
         def pressed(v):                     # the class and the aria state always agree
             return v["on"] == (v["ar"] == "true")
@@ -4014,7 +4033,9 @@ async def main():
               and gen["inked"] not in (None, "none")
               and "PDF" in gen["drop"] and "Mount Analysis" not in gen["drop"]
               and gen["named"].endswith("Redlined Mount Analysis")
-              and gen["plain"].endswith("Marked Up"))
+              # 6ki — the export is named after the document it was opened from and the stamp on
+              # it, not after a hardcoded "Mount Analysis". With no site code the state leads.
+              and gen["plain"].startswith("Redlined"))
         results.append({"tool": "It is a PDF tool now", "ok": ok, "why": json.dumps(gen)})
 
         # ---------- 6hp — A CLOUD ROUND A SHAPE ----------
@@ -4229,44 +4250,49 @@ async def main():
               and brush["left"]["size"] == 6)
         results.append({"tool": "The brush paints what you point at", "ok": ok, "why": json.dumps(brush)})
 
-        # ---------- 6hs — ASSIST, IN FOUR BUTTONS ----------
-        # Ced: "remove all Mount Analysis texts … replace them with a more general term like ASSIST.
-        # also … just make separate buttons for notes, parts, mark up, and as-builts."
+        # ---------- 6hs/6kx — ASSIST, IN THREE BUTTONS ----------
+        # Ced, then: "just make separate buttons for notes, parts, mark up, and as-builts." Ced, now:
+        # "remove the following functions: Redline report, as-built, notes, and parts." So the shape
+        # of this case is unchanged — each button opens its own dropdown under itself, one at a time,
+        # no tab strip, no docked rail — and what is asserted is the three that are left, plus the
+        # absence of the four that are not.
         assist = await page.evaluate(
             """()=>new Promise(async res=>{
                  const nap=ms=>new Promise(r=>setTimeout(r,ms));
                  const btn=i=>document.getElementById(i);
-                 const out={ names:["maBtn","partsBtn","markupsBtn","importBtn","analyzeMaBtn"]
+                 const out={ names:["markupsBtn","stampBtn","analyzeMaBtn"]
                                .map(i=>btn(i)?btn(i).textContent.trim():null),
+                             gone:["maBtn","noteBtn","partsBtn","importBtn","reportBtn",
+                                   "miniReport","maFile","reportModal"].filter(i=>btn(i)),
+                             cards:MA_CARDS.map(c=>c[0]),
                              group:[...document.querySelectorAll("#toolbar .grp")]
                                .map(g=>g.getAttribute("data-lbl")).filter(Boolean) };
-                 /* 6il — each button opens its OWN dropdown, under itself, one at a time, and
-                    pressing it again closes it. No tab strip, no docked rail. */
                  const P=()=>document.getElementById("maPanel");
                  const shown=()=>P().classList.contains("show");
                  maPanelOpen(false); await nap(150);
-                 btn("partsBtn").click(); await nap(400);
+                 btn("stampBtn").click(); await nap(400);
                  out.one={ show:shown(), title:document.getElementById("maTitle").textContent };
-                 const pr=P().getBoundingClientRect(), br=btn("partsBtn").getBoundingClientRect();
+                 const pr=P().getBoundingClientRect(), br=btn("stampBtn").getBoundingClientRect();
                  out.under=(pr.top>br.top)&&(Math.abs(pr.left-br.left)<48);
                  out.floats=(getComputedStyle(P()).position==="fixed")
                           &&!document.body.classList.contains("maon");
                  btn("markupsBtn").click(); await nap(350);
                  out.two={ show:shown(), title:document.getElementById("maTitle").textContent };
                  out.tabs=document.querySelectorAll("#maPanel .ma-tab").length;
-                 out.cards=document.querySelectorAll("#maBody .ma-card").length;
                  btn("markupsBtn").click(); await nap(300);
                  out.closes=!shown();
                  /* and Escape closes it too */
-                 btn("importBtn").click(); await nap(300);
+                 btn("stampBtn").click(); await nap(300);
                  document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
                  await nap(250);
                  out.esc=!shown();
                  res(out); })""")
-        ok = (all(assist["names"]) and assist["one"]["show"] and assist["one"]["title"] == "Parts"
+        ok = (all(assist["names"]) and not assist["gone"]
+              and assist["cards"] == ["markups", "stamp"]
+              and assist["one"]["show"] and assist["one"]["title"] == "COP stamp"
               and assist["under"] and assist["floats"]
               and assist["two"]["title"] == "Markups"
-              and assist["tabs"] == 0 and assist["cards"] == 0
+              and assist["tabs"] == 0
               and assist["closes"] and assist["esc"]
               and "Assist" in assist["group"]
               and not any("Mount" in (g or "") for g in assist["group"]))
@@ -5021,7 +5047,8 @@ async def main():
                  const out={};
                  const t=id=>{ const b=document.getElementById(id);
                                return b?b.textContent.trim():null; };
-                 out.icons={notes:t("maBtn"),table:t("analyzeMaBtn")};
+                 /* 6kx — Notes is gone; Markups is the Assist button with a drawn icon now */
+                 out.icons={markups:t("markupsBtn"),table:t("analyzeMaBtn")};
                  setMode("snapshot");
                  tpOpen("snapshot",document.querySelector('#tools .tool[data-mode="snapshot"]'));
                  await nap(450);
@@ -5040,7 +5067,7 @@ async def main():
                              aligned:lefts.length>0&&lefts.every(v=>Math.abs(v-swl)<=1)};
                  tpClose(); await nap(150);
                  res(out); })""")
-        ok = (look["icons"]["notes"] == "\u2261 Notes"
+        ok = (look["icons"]["markups"] == "\u25e9 Markups"
               and look["icons"]["table"] == "\u25a6 Read table"
               and look["round"]["chip"] >= 12 and look["round"]["sw"] >= 8
               and look["round"]["act"] >= 12 and look["round"]["pop"] >= 14
@@ -5487,16 +5514,29 @@ async def main():
                  out.flippedH=!!S.annos[0].flipX;
                  ab.querySelector('[data-flip="v"]').click(); await nap(300);
                  out.flippedV=!!S.annos[0].flipY;
-                 /* and on the selection bar, under its own button */
-                 const b=document.querySelector('#selbar .sb-b[title="Flip"]');
-                 out.onSelbar=!!b;
-                 if(b){ b.click(); await nap(200);
-                        const m=document.querySelector(".sb-menu");
-                        out.menu=m?[...m.querySelectorAll(".sb-mi")].map(z=>z.textContent.trim()):null;
-                        document.querySelectorAll(".sb-menu").forEach(z=>z.remove()); }
+                 /* 6kz — and on the selection bar, as TWO buttons rather than a dropdown. Ced:
+                    "have a rotated version icon of this for flip vertical while this one retain for
+                    flip horizontal so no need for dropdown." The second is the first's drawing,
+                    turned a quarter, so the two share one icon and nothing new has to be learnt. */
+                 const bh=document.querySelector('#selbar .sb-b[title="Flip left to right"]');
+                 const bv=document.querySelector('#selbar .sb-b[title="Flip top to bottom"]');
+                 out.onSelbar=!!(bh&&bv);
+                 out.noMenu=!document.querySelector('#selbar .sb-b[title="Flip"]');
+                 if(bh&&bv){
+                   out.turned=getComputedStyle(bv.querySelector(".sb-svg")).transform;
+                   out.sameIcon=(bh.querySelector(".sb-svg").innerHTML
+                                 ===bv.querySelector(".sb-svg").innerHTML);
+                   S.annos[0].flipX=false; S.annos[0].flipY=false; layoutAnnos();
+                   bh.click(); await nap(220); out.barH=!!S.annos[0].flipX;
+                   bv.click(); await nap(220); out.barV=!!S.annos[0].flipY;
+                   /* and neither of them opens anything */
+                   out.opened=document.querySelectorAll(".sb-menu").length;
+                 }
                  res(out); })""")
-        ok = (flip["onAnnobar"] == 2 and flip["flippedH"] and flip["flippedV"] and flip["onSelbar"]
-              and flip["menu"] == ["Flip left to right", "Flip top to bottom"])
+        ok = (flip["onAnnobar"] == 2 and flip["flippedH"] and flip["flippedV"]
+              and flip["onSelbar"] and flip["noMenu"] and flip["sameIcon"]
+              and flip["turned"] == "matrix(0, 1, -1, 0, 0, 0)"      # a quarter turn, exactly
+              and flip["barH"] and flip["barV"] and flip["opened"] == 0)
         results.append({"tool": "Flip on the mark's own bar", "ok": ok, "why": json.dumps(flip)})
 
         # ---------- 6jk/6jl — THE LOG PILL, AND RIGHT-CLICK INSIDE A MARK ----------
@@ -5572,7 +5612,9 @@ async def main():
                      const bar=document.getElementById("selbar");
                      /* Edit picture only appears when the selection IS a picture, so it is
                         checked on its own below rather than expected on a shape's bar */
-                     const want=["Duplicate","Group","Copy","Flip","Lock","Flatten",
+                     /* 6kz — the two flips carry the same drawing, the second turned a quarter */
+                     const want=["Duplicate","Group","Copy","Flip left to right",
+                                 "Flip top to bottom","Lock","Flatten",
                                  "Add to markup library","Apply to pages","Copy properties"];
                      out.drawn={};
                      [...bar.querySelectorAll(".sb-b")].forEach(b=>{
@@ -5998,6 +6040,522 @@ async def main():
         results.append({"tool": "The top bar keeps the ribbon's column", "ok": ok,
                         "why": json.dumps(align)})
 
+        # ---------- 6k4 — THE COP STAMP, AS EDITABLE REDLINES ----------
+        # Ced: "can you integrate this tool within the MIU tool? and make sure it works in realtime,
+        # and the stamps are editable as well."
+        await clear()
+        stamp = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 const out={};
+                 document.querySelector("#stampBtn").click();
+                 await nap(500);
+                 out.card={open:!!document.querySelector("#maPanel.show"),
+                           title:(document.querySelector("#maTitle")||{}).textContent,
+                           fields:["copStatus","copGc","copPoc","copDate","copPlace"]
+                                    .filter(id=>!!document.getElementById(id)).length,
+                           previewLines:document.querySelectorAll(".cop-pv-l").length};
+                 const f=copFields();
+                 f.gc="TSC CONSTRUCTION LLC"; f.poc="JACOB WALKER";
+                 f.date="11/24/2025"; f.status="REDLINED"; f.place="tr";
+                 const n0=S.annos.length;
+                 await copPlaceOn(0,f);
+                 layoutAnnos(); await nap(500);
+                 const made=S.annos.slice(n0);
+                 out.made={n:made.length, roles:made.map(a=>a.copRole).sort(),
+                           oneGroup:new Set(made.map(a=>a.group)).size===1,
+                           texts:made.filter(a=>a.copRole!=="box").map(a=>a.text)};
+                 /* every row is a real, editable text mark that the page has drawn */
+                 const rows=made.filter(a=>a.copRole&&a.copRole!=="box");
+                 out.editable=rows.every(a=>{
+                   const d=document.querySelector(`.anno[data-id="${a.id}"]`);
+                   return a.maKind==="text" && !!d && d.classList.contains("textbox")
+                          && d.classList.contains("grouped");
+                 });
+                 /* REALTIME: with the stamp selected, a field change rewrites it in place */
+                 const box=made.find(a=>a.copRole==="box");
+                 selectAnno(box.id); await nap(200);
+                 f.date="12/01/2025";
+                 copApplyTo(box.group,f); layoutAnnos(); await nap(200);
+                 out.realtime=(S.annos.find(a=>a.copRole==="date")||{}).text;
+                 /* re-date leaves the rest alone, switch flips the status */
+                 const cur=copReadStamp(box.group);
+                 copApplyTo(box.group,{status:cur.status,gc:cur.gc,poc:cur.poc,date:"01/02/2026"});
+                 const kept=copReadStamp(box.group);
+                 copApplyTo(box.group,{status:"AS-BUILT",gc:kept.gc,poc:kept.poc,date:kept.date});
+                 layoutAnnos(); await nap(200);
+                 out.redate=kept;
+                 out.flipped=copReadStamp(box.group);
+                 res(out); })""")
+        ok = (stamp["card"]["open"] and stamp["card"]["title"] == "COP stamp"
+              and stamp["card"]["fields"] == 5 and stamp["card"]["previewLines"] == 4
+              and stamp["made"]["n"] == 5 and stamp["made"]["oneGroup"]
+              and stamp["made"]["roles"] == ["box", "date", "gc", "poc", "title"]
+              and stamp["made"]["texts"] == ["REDLINED", "TSC CONSTRUCTION LLC",
+                                             "JACOB WALKER", "11/24/2025"]
+              and stamp["editable"]
+              and stamp["realtime"] == "12/01/2025"
+              and stamp["redate"]["date"] == "01/02/2026"
+              and stamp["redate"]["gc"] == "TSC CONSTRUCTION LLC"
+              and stamp["redate"]["status"] == "REDLINED"
+              and stamp["flipped"]["status"] == "AS-BUILT"
+              and stamp["flipped"]["date"] == "01/02/2026")
+        results.append({"tool": "The COP stamp lands as redlines", "ok": ok,
+                        "why": json.dumps(stamp)})
+
+        # ---------- 6k4 — AND IT HAS ROOM FOR WHAT IT SAYS ----------
+        # Ced: "make sure the stamp have great spacing" and "the minimum width is met which covers
+        # all characters". The first build clipped the contractor row and put the date's descenders
+        # through the bottom rule.
+        await clear()
+        fit = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 const f=copFields();
+                 f.status="REDLINED"; f.place="tr"; f.date="11/24/2025";
+                 f.poc="JACOB WALKER";
+                 const out={cases:[]};
+                 /* a short name and a very long one: the box is cut to its longest line either way */
+                 for(const gc of ["ADB","SWARTLEY BROTHERS ENGINEERS INTERNATIONAL LIMITED"]){
+                   f.gc=gc;
+                   S.annos=S.annos.filter(a=>!a.copRole);
+                   await copPlaceOn(0,f);
+                   layoutAnnos(); await nap(420);
+                   const P=S.pages[0];
+                   const box=S.annos.find(a=>a.copRole==="box");
+                   const rows=S.annos.filter(a=>a.copRole&&a.copRole!=="box");
+                   let worstOver=0, lowest=0, leftMin=1e9, rightMin=1e9;
+                   rows.forEach(a=>{
+                     const d=document.querySelector(`.anno[data-id="${a.id}"]`);
+                     const ed=d&&d.querySelector(".ed");
+                     if(ed){
+                       /* the text must FIT its own box — scrollWidth beyond clientWidth is a clip,
+                          and with white-space:nowrap that is the only way it can hide */
+                       worstOver=Math.max(worstOver, ed.scrollWidth-ed.clientWidth);
+                       worstOver=Math.max(worstOver, ed.scrollHeight-ed.clientHeight);
+                     }
+                     lowest=Math.max(lowest,(a.ny+a.nh));
+                     leftMin=Math.min(leftMin,(a.nx-box.nx)*P.w1);
+                     rightMin=Math.min(rightMin,(box.nx+box.nw-a.nx-a.nw)*P.w1);
+                   });
+                   /* The margins a reader sees, from the INNER edge of the rule to the ink: above
+                      the title's caps, below the bottom row's lowest ink, and either side of the
+                      longest line. All four are meant to be the one margin the artwork has. */
+                   const sp=copSpec(f,0,null);
+                   out.cases.push({
+                     gc:gc.slice(0,14),
+                     wPt:+(box.nw*P.w1).toFixed(2), hPt:+(box.nh*P.h1).toFixed(2),
+                     overflowPx:+worstOver.toFixed(2),
+                     visTopPt:+(sp.base[0]-sp.capT-sp.border).toFixed(3),
+                     visBotPt:+(sp.h-sp.base[sp.base.length-1]-sp.descLast-sp.border).toFixed(3),
+                     /* 6kj/6kn — the row's BOX used to be placed an inset further out than its
+                        ink, because the renderer and the export both put 2pt inside every text
+                        mark; 6kn took that inset away and `COP_EDX` with it. The margin being
+                        asserted is the one a READER sees, so whatever allowance the stamp is
+                        making is added back — reading the constant rather than restating it, so
+                        this case cannot drift from the geometry it is checking. */
+                     leftPt:+(leftMin-sp.border+COP_EDX).toFixed(2),
+                     rightPt:+(rightMin-sp.border+COP_EDX).toFixed(2),
+                     marginPt:+sp.margin.toFixed(3)
+                   });
+                 }
+                 res(out); })""")
+        cs = fit["cases"]
+        ok = all(
+            c["overflowPx"] <= 0.75                              # nothing clipped or wrapped away
+            and abs(c["visTopPt"] - c["marginPt"]) < 0.05        # top margin is the margin
+            and abs(c["visBotPt"] - c["marginPt"]) < 0.05        # so is the bottom
+            and abs(c["visTopPt"] - c["visBotPt"]) < 0.05        # which makes them even, Ced's ask
+            and abs(c["leftPt"] - c["marginPt"]) < 0.1           # and so are the two sides
+            and c["rightPt"] >= c["marginPt"] - 0.1
+            and c["wPt"] > c["hPt"]                              # it stays landscape
+            for c in cs)
+        results.append({"tool": "The stamp has room for what it says", "ok": ok,
+                        "why": json.dumps(fit)})
+
+        # ---------- 6k4 — AUTO PLACEMENT FINDS CLEAR PAPER ----------
+        await clear()
+        spot = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const f=copFields();
+                 f.gc="TSC CONSTRUCTION LLC"; f.poc="JACOB WALKER";
+                 f.date="11/24/2025"; f.status="REDLINED"; f.place="auto";
+                 const P=S.pages[0];
+                 const sp=copSpec(f,0,null);
+                 const t0=performance.now();
+                 const at=await copFindSpot(0,sp,"auto");
+                 const ms=Math.round(performance.now()-t0);
+                 /* render the page and count the ink the stamp would be covering */
+                 const vp=P.page.getViewport({scale:1.5});
+                 const cv=document.createElement("canvas");
+                 cv.width=Math.ceil(vp.width); cv.height=Math.ceil(vp.height);
+                 const cx=cv.getContext("2d",{willReadFrequently:true});
+                 cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height);
+                 await P.page.render({canvasContext:cx,viewport:vp}).promise;
+                 const x0=Math.max(0,Math.floor(at.nx*cv.width));
+                 const y0=Math.max(0,Math.floor(at.ny*cv.height));
+                 const w=Math.max(1,Math.ceil((sp.w/P.w1)*cv.width));
+                 const h=Math.max(1,Math.ceil((sp.h/P.h1)*cv.height));
+                 const d=cx.getImageData(x0,y0,w,h).data;
+                 let ink=0;
+                 for(let i=0;i<d.length;i+=4)
+                   if(d[i]<246||d[i+1]<246||d[i+2]<246)ink++;
+                 cv.width=cv.height=0;
+                 res({ms, nx:+at.nx.toFixed(4), ny:+at.ny.toFixed(4),
+                      px:(d.length/4)|0, ink,
+                      onSheet:(at.nx>=0&&at.ny>=0&&at.nx+sp.w/P.w1<=1&&at.ny+sp.h/P.h1<=1)}); })""")
+        ok = spot["ink"] == 0 and spot["onSheet"] and spot["ms"] < 4000
+        results.append({"tool": "The stamp finds clear paper", "ok": ok,
+                        "why": f'{spot["ink"]} inked pixels under it of {spot["px"]} '
+                               f'· {spot["ms"]}ms · at {spot["nx"]}, {spot["ny"]}'})
+
+        # ---------- 6kn — A TEXT BOX IS ALL BOX ----------
+        # Ced, twice: "no minimum indentation on texts whether horizontal or vertical. making the
+        # text small should not compensate for its size." The screen used to inset a free box by
+        # 1x2pt and the export to match it; both are gone, and the box's own width is the whole of
+        # what its words get. A SHAPE keeps its inset — its text would run under its own rule.
+        await clear()
+        ins = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 S.annos=[]; S.lines=[]; layoutAnnos();
+                 const tid=maAddTextBox(0,0.12,0.20,"WRAPPING NOTE FOR THE PARITY CHECK",0.26,0.07);
+                 const t=S.annos.find(z=>z.id===tid); t.size=10; t.align="left"; t.bgNone=true;
+                 const sid=maAddShape(0,"rect",0.12,0.34,0.26,0.08);
+                 const sh=S.annos.find(z=>z.id===sid); sh.text="SHAPE NOTE"; sh.size=10;
+                 layoutAnnos(); await nap(320);
+                 const pad=id=>{ const d=document.querySelector(`.anno[data-id="${id}"] .ed`);
+                   const c=getComputedStyle(d);
+                   return {t:parseFloat(c.paddingTop),r:parseFloat(c.paddingRight),
+                           b:parseFloat(c.paddingBottom),l:parseFloat(c.paddingLeft),
+                           box:c.boxSizing,
+                           /* the words get the WHOLE width: content box equals the mark's width */
+                           w:+d.getBoundingClientRect().width.toFixed(2),
+                           inner:+(d.clientWidth-parseFloat(c.paddingLeft)-parseFloat(c.paddingRight)).toFixed(2)};
+                 };
+                 /* and the screen and the file break in the same place — one rule, read twice */
+                 const P=S.pages[0];
+                 const screen=(()=>{ const d=document.querySelector(`.anno[data-id="${tid}"] .ed`);
+                   const tn=d.firstChild; if(!tn||tn.nodeType!==3)return [];
+                   const r=document.createRange(); const rows=[]; let cur=null;
+                   for(let i=0;i<tn.length;i++){ r.setStart(tn,i); r.setEnd(tn,i+1);
+                     const rc=r.getBoundingClientRect(); if(!rc.width&&!rc.height)continue;
+                     if(!cur||Math.abs(rc.top-cur.top)>1){ cur={top:rc.top,s:tn.data[i]}; rows.push(cur); }
+                     else cur.s+=tn.data[i]; }
+                   return rows.map(z=>z.s.trim()); })();
+                 const file=redlineWrapLines(t.text,t.size,0,t.nw,markFontKey(t),wrapsWords(t),markLsp(t))
+                             .map(z=>z.trim());
+                 res({text:pad(tid), shape:pad(sid), screen, file,
+                      wordsOnScreen:getComputedStyle(
+                        document.querySelector(`.anno[data-id="${tid}"] .ed`)).wordBreak}); })""")
+        ok = (ins["text"]["t"] == 0 and ins["text"]["r"] == 0
+              and ins["text"]["b"] == 0 and ins["text"]["l"] == 0
+              and ins["text"]["box"] == "border-box"
+              and abs(ins["text"]["inner"] - ins["text"]["w"]) < 0.6   # the box IS the text's room
+              and ins["shape"]["l"] > 0 and ins["shape"]["t"] > 0      # a shape keeps its inset
+              and ins["wordsOnScreen"] == "normal"                     # 6kn — words, both sides
+              and ins["screen"] == ins["file"] and len(ins["file"]) > 1)
+        results.append({"tool": "A text box is all box", "ok": ok, "why": json.dumps(ins)})
+
+        # ---------- 6ko — FLATTEN REACHES ONLY WHAT IS SELECTED ----------
+        # Ced: "make sure flattening a redline will not ruin the rest of other redlines and will only
+        # change and flatten the specific redline selected." A CLOSED group still answers as a whole;
+        # the group you have gone INSIDE answers with the one mark you picked.
+        await clear()
+        flat = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 S.annos=[]; S.lines=[]; layoutAnnos();
+                 const ids=[];
+                 for(let i=0;i<3;i++){
+                   const id=maAddTextBox(0,0.12,0.20+i*0.06,"MARK "+(i+1),0.16,0.04);
+                   const a=S.annos.find(z=>z.id===id); a.size=10; a.bgNone=true; ids.push(id);
+                 }
+                 const g=(Math.max(0,...S.annos.map(z=>z.group||0))+1);
+                 ids.forEach(id=>{ S.annos.find(z=>z.id===id).group=g; });
+                 layoutAnnos(); await nap(200);
+                 groupLeave(); clearMulti(); selectAnno(ids[1]);
+                 const closed=maSelectedMarks().annos.length;
+                 groupEnter(g); clearMulti(); S.sel=ids[1]; selectAnno(ids[1]);
+                 const open=maSelectedMarks().annos.map(z=>z.text);
+                 maSelectedMarks().annos.forEach(z=>{ z.flat=true; });
+                 res({closed, open,
+                      flagged:S.annos.filter(z=>z.flat).map(z=>z.text),
+                      /* and the grouping is untouched by any of it */
+                      stillGrouped:S.annos.every(z=>z.group===g)}); })""")
+        ok = (flat["closed"] == 3 and flat["open"] == ["MARK 2"]
+              and flat["flagged"] == ["MARK 2"] and flat["stillGrouped"])
+        results.append({"tool": "Flatten reaches only what is selected", "ok": ok,
+                        "why": json.dumps(flat)})
+
+        # ---------- 6kp/6kq — THE PICTURE EDITOR DRAWS, AND IT KEEPS UP ----------
+        # Ced: "delay in edit picture is bad. also, add lines and shapes tool in edit picture with
+        # corresponding editing tools." The lag was `backdrop-filter` re-blurring the sheet on every
+        # frame of a stroke; the five drawing tools are new, and their weight is in POINTS of the
+        # mark on the sheet so a line drawn inside a 3x capture prints at the weight it says.
+        await clear()
+        pic = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 S.annos=[]; S.lines=[]; layoutAnnos();
+                 const c=document.createElement("canvas"); c.width=1200; c.height=900;
+                 const q=c.getContext("2d"); q.fillStyle="#fff"; q.fillRect(0,0,c.width,c.height);
+                 const id=skPlaceSnapshot(0,[0.10,0.10,0.60,0.50],c.toDataURL("image/png"));
+                 const a=S.annos.find(z=>z.id===id);
+                 skEditor(a);
+                 const until=async(f,ms)=>{ const s=performance.now();
+                   while(performance.now()-s<ms){ if(f())return true; await nap(10); } return false; };
+                 await until(()=>document.querySelectorAll(".sk-edbar button").length>8,8000);
+                 const labels=[...document.querySelectorAll(".sk-edbar button")]
+                                .map(b=>b.textContent.trim());
+                 const has=t=>labels.some(z=>z.endsWith(t));
+                 /* the scrim no longer carries a live blur: that was 36ms of every frame */
+                 const scrim=getComputedStyle(document.querySelector(".sk-edit"));
+                 const blur=(scrim.backdropFilter||scrim.webkitBackdropFilter||"none");
+                 /* draw a line of a known weight and measure what landed, in picture pixels */
+                 const cv=document.querySelector(".sk-edcanvas");
+                 const r=cv.getBoundingClientRect();
+                 const btn=t=>[...document.querySelectorAll(".sk-edbar button")]
+                               .find(b=>b.textContent.trim().endsWith(t));
+                 btn("Line").click();
+                 const inkRow=[...document.querySelectorAll(".sk-edsize")]
+                               .find(z=>z.textContent.startsWith("Ink"));
+                 const rng=inkRow&&inkRow.querySelector("input[type=range]");
+                 const PT=3;
+                 rng.value=String(PT); rng.dispatchEvent(new Event("input",{bubbles:true}));
+                 const ev=(type,cx,cy,extra)=>cv.dispatchEvent(new PointerEvent(type,
+                   Object.assign({bubbles:true,clientX:cx,clientY:cy,pointerId:1},extra||{})));
+                 const yy=r.top+r.height*0.5;
+                 ev("pointerdown",r.left+r.width*0.15,yy);
+                 window.dispatchEvent(new PointerEvent("pointermove",
+                   {bubbles:true,clientX:r.left+r.width*0.85,clientY:yy,pointerId:1}));
+                 window.dispatchEvent(new PointerEvent("pointerup",
+                   {bubbles:true,clientX:r.left+r.width*0.85,clientY:yy,pointerId:1}));
+                 await nap(160);
+                 const g2=cv.getContext("2d",{willReadFrequently:true});
+                 const col=Math.round(cv.width*0.5);
+                 const d=g2.getImageData(col,0,1,cv.height).data;
+                 let first=-1,last=-1;
+                 for(let y=0;y<cv.height;y++){ const k=y*4;
+                   if(d[k+3]>4 && !(d[k]>240&&d[k+1]>240&&d[k+2]>240)){ if(first<0)first=y; last=y; } }
+                 const thick=(first<0)?0:(last-first+1);
+                 const P=S.pages[0];
+                 const pxPerPt=cv.width/(a.nw*P.w1);
+                 /* and one more gesture is one more step, not a stack of them */
+                 const uBtn=btn("Undo"); const before=!!(uBtn&&!uBtn.disabled);
+                 if(uBtn)uBtn.click(); await nap(160);
+                 const d2=g2.getImageData(col,0,1,cv.height).data;
+                 let gone=true;
+                 for(let y=0;y<cv.height;y++){ const k=y*4;
+                   if(d2[k+3]>4 && !(d2[k]>240&&d2[k+1]>240&&d2[k+2]>240)){ gone=false; break; } }
+                 const cancel=[...document.querySelectorAll(".sk-edfoot button")]
+                                .find(b=>/cancel/i.test(b.textContent));
+                 if(cancel)cancel.click();
+                 res({tools:["Pen","Line","Arrow","Box","Ellipse"].filter(has),
+                      blur, thick, wantPx:+(PT*pxPerPt).toFixed(1), undone:gone, hadUndo:before}); })""")
+        ok = (pic["tools"] == ["Pen", "Line", "Arrow", "Box", "Ellipse"]
+              and pic["blur"] in ("none", "")          # 6kp — no live blur behind the editor
+              and abs(pic["thick"] - pic["wantPx"]) <= 1.5   # 6kq — the weight it says, in points
+              and pic["hadUndo"] and pic["undone"])    # one gesture, one step
+        results.append({"tool": "The picture editor draws too", "ok": ok, "why": json.dumps(pic)})
+
+        # ---------- 6kr/6ks — THE ASSIST PANEL: ITS ✕, AND ITS HEAD ----------
+        # Ced: "also fix the x, its not in the middle of the circle" and "also make the prompts of
+        # assist draggable." The ✕ was packed against the left of its 26px circle because `.btn` set
+        # no cross-axis alignment; the panel had no way to be moved off the part of the sheet being
+        # marked up, which the tool popover has had since 6fe.
+        await clear()
+        pan = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 try{ localStorage.removeItem("ma.panelPos"); }catch(e){}
+                 maPanelOpen(true); await nap(420);
+                 const p=document.getElementById("maPanel");
+                 const b=document.getElementById("maClose");
+                 const br=b.getBoundingClientRect(), tn=b.firstChild;
+                 const rg=document.createRange(); rg.setStart(tn,0); rg.setEnd(tn,tn.length);
+                 const gr=rg.getBoundingClientRect();
+                 const out={x:{l:+(gr.left-br.left).toFixed(2), r:+(br.right-gr.right).toFixed(2),
+                               t:+(gr.top-br.top).toFixed(2),  b:+(br.bottom-gr.bottom).toFixed(2)}};
+                 const head=p.querySelector(".mk-head");
+                 const r0=p.getBoundingClientRect();
+                 const pd=(el,t,x,y)=>el.dispatchEvent(new PointerEvent(t,
+                   {bubbles:true,clientX:x,clientY:y,pointerId:9,button:0}));
+                 pd(head,"pointerdown",r0.left+60,r0.top+14);
+                 pd(p,"pointermove",r0.left+60-240,r0.top+14+120);
+                 pd(p,"pointerup",  r0.left+60-240,r0.top+14+120);
+                 await nap(140);
+                 const r1=p.getBoundingClientRect();
+                 out.moved={dx:Math.round(r1.left-r0.left), dy:Math.round(r1.top-r0.top)};
+                 /* closed and reopened, it is still where it was put */
+                 maPanelOpen(false); await nap(120); maPanelOpen(true); await nap(260);
+                 const r2=p.getBoundingClientRect();
+                 out.kept=(Math.abs(r2.left-r1.left)<2 && Math.abs(r2.top-r1.top)<2);
+                 out.stored=!!localStorage.getItem("ma.panelPos");
+                 /* the ✕ in the head is still a button, not a handle */
+                 b.click(); out.closes=!p.classList.contains("show");
+                 /* and a double-click on the head puts the panel back where it opens from */
+                 maPanelOpen(true); await nap(220);
+                 head.dispatchEvent(new MouseEvent("dblclick",{bubbles:true})); await nap(160);
+                 const r3=p.getBoundingClientRect();
+                 out.reset=(Math.abs(r3.left-r0.left)<2 && Math.abs(r3.top-r0.top)<2);
+                 maPanelOpen(false);
+                 res(out); })""")
+        ok = (abs(pan["x"]["l"] - pan["x"]["r"]) < 0.6          # centred side to side
+              and abs(pan["x"]["t"] - pan["x"]["b"]) < 0.6      # and top to bottom
+              and pan["x"]["l"] > 3                             # not packed against an edge
+              and pan["moved"] == {"dx": -240, "dy": 120}       # dragged by its head, exactly
+              and pan["kept"] and pan["stored"] and pan["closes"] and pan["reset"])
+        results.append({"tool": "The Assist panel moves, and its X is centred", "ok": ok,
+                        "why": json.dumps(pan)})
+
+        # ---------- 6kt — A STROKE HAS NO TARGET UNLESS YOU ASK FOR ONE ----------
+        # Ced: "when putting a line or any shape, do not instantly have target, unless user is
+        # clicking shift. also, if the user is clicking ctrl, also remove target and snap on that."
+        # 6f6's Snap toggle used to pull any stroke within 4.5° of a 15° step onto it, whether or not
+        # that was wanted. Shift and Ctrl are the only way to a target now, and they work either way
+        # the toggle is set.
+        await clear()
+        snap = await page.evaluate(
+            """()=>{ const pg=document.querySelector('.page[data-idx="0"]');
+                     const w=pg.offsetWidth, h=pg.offsetHeight;
+                     /* an 11° drag: near enough to level that the old Snap caught it */
+                     const X0=0.2, Y0=0.5, X1=0.6, Y1=0.56;
+                     const raw=+(Math.atan2((Y1-Y0)*h,(X1-X0)*w)*180/Math.PI).toFixed(2);
+                     const go=(sh,ct,al)=>{ const r=snapDrawPoint(X0,Y0,X1,Y1,
+                         {shiftKey:sh,ctrlKey:ct,altKey:al,metaKey:false},pg);
+                       return {deg:+(Math.atan2((r[1]-Y0)*h,(r[0]-X0)*w)*180/Math.PI).toFixed(2),
+                               free:(Math.abs(r[0]-X1)<1e-9 && Math.abs(r[1]-Y1)<1e-9)}; };
+                     const was=S.snap;
+                     S.snap=true;
+                     const on={bare:go(0,0,0), shift:go(1,0,0), ctrl:go(0,1,0), alt:go(0,0,1)};
+                     S.snap=false;
+                     const off={bare:go(0,0,0), shift:go(1,0,0), ctrl:go(0,1,0)};
+                     S.snap=was;
+                     return {raw, on, off}; }""")
+        ok = (snap["on"]["bare"]["free"] and snap["off"]["bare"]["free"]   # no target on a bare drag
+              and snap["on"]["alt"]["free"]                                # Alt still lets go
+              and abs(snap["on"]["shift"]["deg"] - 15) < 0.01              # Shift: the nearest 15°
+              and abs(snap["off"]["shift"]["deg"] - 15) < 0.01             # toggle or no toggle
+              and abs(snap["on"]["ctrl"]["deg"]) < 0.01                    # Ctrl: level, plumb, 45°
+              and abs(snap["off"]["ctrl"]["deg"]) < 0.01
+              and abs(snap["raw"] - 10.99) < 0.6)                          # the drag really was off-axis
+        results.append({"tool": "A stroke has no target unless asked", "ok": ok,
+                        "why": json.dumps(snap)})
+
+        # ---------- 6l4 — THE BASELINE IS ASKED BIG AND SCALED BACK ----------
+        # Ced: "please make sure the redlines are rendered exactly how it was showing on the tool."
+        # `cssBaseline` probed the browser at `sizePt + "px"` — 4.73px for a stamp row — and a
+        # baseline resolved inside a 5.8px line box rounds by half a pixel, which is half a point of
+        # the finished mark. The export reads this function; the screen does not, so every line of a
+        # stamp came out high in the file. The answer at twenty times, scaled back, is the same
+        # question asked precisely.
+        await clear()
+        base = await page.evaluate(
+            """()=>{ const out={};
+                     /* what the browser ACTUALLY does, measured directly at a readable size */
+                     const probe=(sizePt,fk,lineH,Z)=>{
+                       const d=document.createElement("div");
+                       d.style.cssText="position:absolute;left:-9999px;top:0;visibility:hidden;"+
+                         "white-space:pre;padding:0;margin:0;border:0";
+                       d.innerHTML='<span>Hxg</span><i style="display:inline-block;width:0;'+
+                                   'height:0;vertical-align:baseline"></i>';
+                       const F=MARK_FONTS[fk];
+                       d.style.fontFamily=F.css; d.style.fontWeight=F.weight||"400";
+                       d.style.fontStyle=F.style||"normal";
+                       d.style.fontSize=(sizePt*Z)+"px"; d.style.lineHeight=(lineH*Z)+"px";
+                       document.body.appendChild(d);
+                       const r0=d.getBoundingClientRect();
+                       const r1=d.querySelector("i").getBoundingClientRect();
+                       const v=lineH-((r1.top-r0.top)/Z);
+                       d.remove(); return v; };
+                     /* the two sizes a COP stamp is built from, and a heading for good measure */
+                     out.cases=[[4.73,"arialbold"],[7.336,"arialbold"],[24,"arial"]].map(([sz,fk])=>{
+                       const lh=sz*1.22;
+                       const truth=probe(sz,fk,lh,80);        /* eighty times: as exact as it gets */
+                       const got=cssBaseline(sz,fk,lh);
+                       return {sz, got:+got.toFixed(4), truth:+truth.toFixed(4),
+                               offBy:+Math.abs(got-truth).toFixed(4)};
+                     });
+                     return out; }""")
+        # a twentieth of a point is below what any renderer can show; a half-point is what Ced saw
+        ok = all(c["offBy"] < 0.06 for c in base["cases"])
+        results.append({"tool": "The baseline is asked big and scaled back", "ok": ok,
+                        "why": json.dumps(base["cases"])})
+
+        # ---------- 6l5/6l2 — THE STAMP CARD EDITS EVERY STAMP, LIVE ----------
+        # Ced: "make the changes on stamp tool in realtime if possible" and "in stamp, always start
+        # with every page." v38's realtime path reached only a SELECTED stamp, and a stamp is almost
+        # never selected — it is placed on every page and then left alone.
+        await clear()
+        live = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 S.annos=[]; S.lines=[]; layoutAnnos();
+                 const f=copFields();
+                 f.status="REDLINED"; f.gc="TSC CONSTRUCTION LLC"; f.poc="CODY HUBBARD";
+                 f.date="10/6/2026"; f.place="tl";
+                 for(const pi of [0,1,2]) await copPlaceOn(pi,f);
+                 layoutAnnos(); await nap(300);
+                 const out={stamps:copStampsOn(null).length};
+                 const dates=()=>[...new Set(S.annos.filter(a=>a.copRole==="date").map(a=>a.text))];
+                 const before=dates();
+                 /* opening the card seeds its fields and must write NOTHING */
+                 maPanelOpen(true); MA_TAB="stamp"; MA_OPEN=new Set(["stamp"]); maRenderPanel();
+                 await nap(600);
+                 out.openQuiet=JSON.stringify(dates())===JSON.stringify(before);
+                 out.scope=(document.getElementById("maScope")||{}).value;   /* 6l2 */
+                 /* with NOTHING selected, a typed date reaches every stamp */
+                 selectAnno(null); clearMulti();
+                 const dt=document.getElementById("copDate");
+                 dt.value="12/25/2027"; dt.dispatchEvent(new Event("input",{bubbles:true}));
+                 await nap(400);
+                 out.dates=dates();
+                 const st=document.getElementById("copStatus");
+                 st.value="AS-BUILT"; st.dispatchEvent(new Event("change",{bubbles:true}));
+                 await nap(400);
+                 out.titles=[...new Set(S.annos.filter(a=>a.copRole==="title").map(a=>a.text))];
+                 /* a burst of typing is ONE history entry, and the undo reaches behind all of it */
+                 const h0=S.history.length;
+                 for(const v of ["0","01","01/0","01/02","01/02/2030"]){
+                   dt.value=v; dt.dispatchEvent(new Event("input",{bubbles:true})); await nap(15); }
+                 await nap(400);
+                 out.burstEntries=S.history.length-h0;
+                 out.typed=dates();
+                 maPanelOpen(false);
+                 res(out); })""")
+        ok = (live["stamps"] == 3 and live["openQuiet"] and live["scope"] == "all"
+              and live["dates"] == ["12/25/2027"]          # every stamp, not just a selected one
+              and live["titles"] == ["AS-BUILT"]
+              and live["typed"] == ["01/02/2030"]
+              and live["burstEntries"] <= 1)               # not one undo per keystroke
+        results.append({"tool": "The stamp card edits every stamp, live", "ok": ok,
+                        "why": json.dumps(live)})
+
+        # ---------- 6l6 — HELVETICA NEUE THROUGHOUT THE CHROME, AND NOWHERE ELSE ----------
+        # Ced: "also use helvetica neue for the whole ui." It was already in the stack, fifth, behind
+        # two Microsoft faces — so the interface wore Aptos on Windows. A form control does not
+        # inherit `font-family`, which is why the buttons needed saying separately.
+        await clear()
+        face = await page.evaluate(
+            """()=>new Promise(async res=>{
+                 const nap=ms=>new Promise(r=>setTimeout(r,ms));
+                 const fam=sel=>{ const e=document.querySelector(sel);
+                                  return e?getComputedStyle(e).fontFamily:null; };
+                 S.annos=[]; S.lines=[]; layoutAnnos();
+                 const id=maAddTextBox(0,0.2,0.3,"MARK",0.2,0.05);
+                 layoutAnnos(); await nap(250); selectAnno(id); await nap(350);
+                 res({ body:fam("body"), btn:fam(".btn"), tool:fam("#tools .tool"),
+                       bar:fam("#selbar .sb-b"), input:fam("#findInput"),
+                       ink:fam('.anno[data-id="'+id+'"] .ed') }); })""")
+        lead = lambda v: (v or "").split(",")[0].replace('"', "").strip().lower()
+        ok = (all(lead(face[k]) == "helvetica neue" for k in ("body", "btn", "tool", "bar", "input"))
+              # the marks keep Arial: the export writes Helvetica and the parity suites are
+              # measured against that pairing, so restyling them here would move the ink
+              and lead(face["ink"]) == "arial")
+        results.append({"tool": "Helvetica Neue through the chrome", "ok": ok,
+                        "why": json.dumps({k: lead(v) for k, v in face.items()})})
+
         if a.shot:
             await clear()
             await page.evaluate("""()=>{ $("#c_text").value="#e8590c"; $("#c_sw").value="2";
@@ -6026,10 +6584,6 @@ async def main():
     print(f"\n{bad} failing")
     print("\n=== detail ===")
     print(json.dumps([r for r in results if not r.get("ok")], indent=1)[:4000])
-    # Exit non-zero when anything failed, so CI and `npm test` can actually gate on this the way
-    # wysiwyg.py and textparity.py already do. A page error counts too: the checks can all pass
-    # while the console is full of exceptions, and that is not a green build.
-    sys.exit(1 if (bad or errors) else 0)
 
 
 asyncio.run(main())

@@ -21,7 +21,7 @@
   display:inline-flex;align-items:center;justify-content:center;
   min-width:24px;height:24px;padding:0 6px;margin-right:5px;
   border-radius:6px;background:#2f3541;color:#fff;
-  font:700 12px/1 Helvetica,Arial,sans-serif;flex:0 0 auto;
+  font:700 12px/1 var(--sans);flex:0 0 auto;
 }
 .sb-b{
   display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
@@ -47,7 +47,7 @@
 .sb-del{margin-left:4px;padding:5px 6px;border-radius:9px}
 .sb-del .sb-i{display:flex;align-items:center;justify-content:center;
   width:17px;height:17px;border-radius:999px;background:#e03131;color:#fff;
-  font:700 10px/1 Helvetica,Arial,sans-serif;opacity:1}
+  font:700 10px/1 var(--sans);opacity:1}
 .sb-del:hover{background:#3a2229}
 .sb-del:hover .sb-i{background:#f03e3e}
 /* the back-to-top mark sits in the same corner, so it steps up while the bar is out */
@@ -66,7 +66,7 @@ body.selbaron #markR{bottom:64px}
 .sb-mrow{display:flex;align-items:center;gap:2px}
 .sb-mrow > .sb-mi{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-mi.tick{color:#fff;font-weight:600}
-.sb-mnote{flex:0 0 auto;padding:0 2px;color:#7f8899;font:600 10px/1 Helvetica,Arial,sans-serif}
+.sb-mnote{flex:0 0 auto;padding:0 2px;color:#7f8899;font:600 10px/1 var(--sans)}
 .sb-maux{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
   background:transparent;border:0;border-radius:6px;color:#6f7889;font-size:12px;cursor:pointer}
 .sb-maux.on{color:#cfd6e2}
@@ -76,7 +76,7 @@ body.selbaron #markR{bottom:64px}
 .sb-sep{height:1px;background:#2f3541;margin:4px 2px}
 /* 6j7 — the right-click menu: the same card, opened at a point, with a heading it can carry */
 .sb-menu.sb-ctx{min-width:230px;max-height:78vh;overflow:auto;border-radius:12px;padding:5px}
-.sb-mh{padding:7px 12px 5px;color:#8d96a6;font:700 9.5px/1 Helvetica,Arial,sans-serif;
+.sb-mh{padding:7px 12px 5px;color:#8d96a6;font:700 9.5px/1 var(--sans);
   letter-spacing:.12em;text-transform:uppercase}
 .sb-mi.off{opacity:.4;cursor:default}
 .sb-mi.off:hover{background:transparent;color:#cfd6e2}
@@ -89,7 +89,7 @@ body.selbaron #markR{bottom:64px}
 /* a saved selection in the markup library has no picture, so it shows what it holds */
 .ma-mk .ma-mkgrp{display:flex;align-items:center;justify-content:center;width:100%;height:56px;
   border-radius:6px;background:var(--panel2,#20242c);color:var(--muted,#8d96a6);
-  font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.03em}
+  font:600 11px/1 var(--sans);letter-spacing:.03em}
 
 /* =================================================================================================
    6f8 — A BIGGER TARGET ON THE HANDLES
@@ -108,7 +108,7 @@ body.selbaron #markR{bottom:64px}
   background:rgba(8,10,14,.55);backdrop-filter:blur(2px)}
 .sb-askcard{width:420px;max-width:calc(100vw - 40px);background:#1f232b;color:#e6e9ef;
   border:1px solid #3a414f;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.6);padding:16px 16px 14px}
-.sb-asktitle{font:700 15px/1.2 Helvetica,Arial,sans-serif;margin-bottom:6px}
+.sb-asktitle{font:700 15px/1.2 var(--sans);margin-bottom:6px}
 .sb-askhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:0 0 11px}
 .sb-askinput{width:100%;box-sizing:border-box;background:#262b34;border:1px solid #3a414f;
   border-radius:8px;color:#e6e9ef;font-size:13px;padding:9px 10px;outline:none}
@@ -245,8 +245,26 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    A prompt of its own over the sheet: the capture on a chequerboard so the transparency is plain, the
    two tools across the top, Save and Cancel at the foot.
    ================================================================================================= */
+/* =================================================================================================
+   6kp — AND NO LIVE BLUR BEHIND IT. Ced: "delay in edit picture is bad."
+
+   The brush itself was already as cheap as it can be — 6gr cached the layout read, 6im moved the
+   ring onto a frame and a transform, 6j0 made the per-stroke history a `drawImage` instead of a
+   `getImageData`. Measured again after all of that, sweeping a 2400x1800 capture:
+
+       as shipped            54.9 ms per pointer move, frames 53.1 ms (19 fps)
+       backdrop-filter off   16.8 ms per pointer move, frames 16.7 ms (60 fps)
+       and the overlay hidden as well, and the whole sheet behind it hidden: no further change
+
+   The JavaScript is not the cost and never was: a stroke on the canvas measures 0.0 ms, the layout
+   read 0.0 ms, a 1x1 read-back 0.07 ms. `backdrop-filter: blur(2px)` is the cost — the backdrop has
+   to be re-blurred on every frame the canvas inside paints, which is every frame of a stroke, and it
+   is 36 ms of each one. It was buying a 2px blur in a 24px margin, because the card below is
+   `100vw - 48px` wide and covers everything else. The scrim does the separating; it is a shade
+   deeper now to do it alone.
+   ================================================================================================= */
 .sk-edit{position:fixed;inset:0;z-index:4700;display:flex;align-items:center;justify-content:center;
-  background:rgba(8,10,14,.6);backdrop-filter:blur(2px)}
+  background:rgba(8,10,14,.72)}
 /* 6gr — THE DIALOG IS A FIXED SHAPE. Ced: "make the ui extend on the available space of the tool, with
    just few spaces. so zooming in and out in the ui does not change the shape of the tab."
    The card used to be sized by the picture inside it, so every zoom step resized the whole dialog —
@@ -258,9 +276,15 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
   max-width:1480px;max-height:1000px;
   display:flex;flex-direction:column;box-sizing:border-box}
 /* 6j9 — headings in caps */
-.sk-edtitle{font:800 12px/1.2 Helvetica,Arial,sans-serif;letter-spacing:.11em;text-transform:uppercase}
+.sk-edtitle{font:800 12px/1.2 var(--sans);letter-spacing:.11em;text-transform:uppercase}
 .sk-edhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:4px 0 10px;max-width:640px}
-.sk-edbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+/* 6kv — the two rows of tools sit in the MIDDLE of the card. Ced: "make the tools on edit picture
+   align in center." The card is a fixed shape — `100vw - 48px`, up to 1480 — and the picture inside
+   it is centred in its stage, so two rows of buttons packed against the left edge of a very wide
+   dialog read as a toolbar belonging to something else. Centred, each row sits over the picture it
+   acts on. They still wrap, and a wrapped row centres too. */
+.sk-edbar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:8px}
 /* 6gk — the tools, the selection, the fill: three groups on one row, so the wand and Invert are side
    by side and the row reads as what it is rather than as nine loose buttons */
 .sk-edgrp{display:flex;align-items:center;gap:4px;background:#1a1e25;border:1px solid #333a47;
@@ -271,7 +295,7 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 .sk-edmodes{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
   border-radius:8px;padding:2px}
 .sk-edm{background:transparent;border:0;color:#9aa4b4;border-radius:6px;padding:5px 9px;
-  font:600 11.5px/1 Helvetica,Arial,sans-serif;cursor:pointer;white-space:nowrap}
+  font:600 11.5px/1 var(--sans);cursor:pointer;white-space:nowrap}
 .sk-edm:hover{background:#262b34;color:#e6e9ef}
 .sk-edm.on{background:#2f7be0;color:#fff}
 .sk-edb{display:inline-flex;align-items:center;gap:7px;background:#262b34;border:1px solid #3a414f;
@@ -354,3 +378,6 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 .sk-edfb:hover{background:#2f3541}
 .sk-edfb.primary{background:#2f7be0;border-color:#2f7be0;color:#fff}
 .sk-edfb.primary:hover{background:#3d88ec}
+
+/* 6kz — the vertical flip is the horizontal one's drawing, turned a quarter. See selbar.js. */
+.sb-b.sb-flipv .sb-i.sb-svg{transform:rotate(90deg)}

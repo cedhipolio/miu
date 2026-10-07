@@ -7,7 +7,7 @@
   "trailingSlash": false,
   "headers": [
     {
-      "source": "/app.html",
+      "source": "/",
       "headers": [
         {
           "key": "Cache-Control",
@@ -33,7 +33,8 @@
     }
   ],
   "redirects": [
-    { "source": "/tool", "destination": "/app", "permanent": false },
-    { "source": "/miu", "destination": "/app", "permanent": false }
+    { "source": "/app", "destination": "/", "permanent": false },
+    { "source": "/tool", "destination": "/", "permanent": false },
+    { "source": "/miu", "destination": "/", "permanent": false }
   ]
 }

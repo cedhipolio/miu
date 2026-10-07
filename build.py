@@ -17,7 +17,7 @@ ASSETS = [
     ("pk-pdf", ["pdfjs.js"]),
     ("pk-wrk", ["pdfworker.js"]),
     ("pk-lib", ["pdflib.js"]),
-    ("pk-app", ["fonts.js", "app.js", "ma.js", "toolpop.js", "selbar.js", "selectkit.js"]),
+    ("pk-app", ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"]),
 ]
 
 
@@ -35,7 +35,7 @@ def pack(names):
 
 
 def main():
-    for name in ("fonts.js", "app.js", "ma.js", "toolpop.js", "selbar.js", "selectkit.js"):
+    for name in ("fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"):
         check_js(os.path.join(SRC, name))
     parts = [open(os.path.join(SRC, "shell.html"), "rb").read().decode("utf-8")]
     for sid, names in ASSETS:

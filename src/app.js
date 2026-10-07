@@ -797,6 +797,10 @@ function _cleanA(a){ return { id:a.id, page:a.page, fixFree:a.fixFree, nx:a.nx, 
         bg      the ground behind text        maKind  what the mark is FOR (callout, note, fix …) */
   shape:a.shape, col:a.col, sw:a.sw, fill:a.fill, fillOp:a.fillOp, bg:a.bg, bgNone:a.bgNone, font:a.font,
   box:a.box, maKind:a.maKind,
+  /* 6k4 — which line of a COP stamp this mark is. The stamp IS its group; `copRole` is what says
+     the group is a stamp and not any other grouped set of marks, so it has to survive a snapshot,
+     an undo, an autosave and a reopen or re-dating a reopened document would find nothing. */
+  copRole:a.copRole, padIn:a.padIn, userSized:a.userSized,
   /* 6f6 — the rest of what a tool's properties panel can set. `colOp` is the ink's own opacity (the
      slider under the swatches), `under`/`strikeout` the two text decorations, `valign` where the text
      sits in a box, `dash` the rule's pattern, `pat`/`patCol`/`patScale`/`patRot` a hatched interior,
@@ -2461,7 +2465,7 @@ async function loadPdf(file){
     if($("#homeBtn"))$("#homeBtn").disabled=false;
     if($("#orgBtn")){ $("#orgBtn").disabled=false; $("#orgBtn").onclick=openPageOrg; } $("#copyBtn").disabled=false; $("#saveBtn").disabled=false; $("#clearBtn").disabled=false;
     $("#selAllBtn").disabled=false; $("#photoBtn").disabled=false;
-    $("#fitBtn").disabled=false; ["#fitPageBtn","#actualBtn","#facingBtn","#pageViewBtn"].forEach(q=>{ const b=$(q); if(b)b.disabled=false; }); $("#findInput").disabled=false; $("#findPrev").disabled=false; $("#findNext").disabled=false; $("#marksBtn").disabled=false; ["#maBtn","#analyzeMaBtn","#noteBtn","#partsBtn","#markupsBtn","#importBtn"]
+    $("#fitBtn").disabled=false; ["#fitPageBtn","#actualBtn","#facingBtn","#pageViewBtn"].forEach(q=>{ const b=$(q); if(b)b.disabled=false; }); $("#findInput").disabled=false; $("#findPrev").disabled=false; $("#findNext").disabled=false; $("#marksBtn").disabled=false; ["#analyzeMaBtn","#markupsBtn","#stampBtn"]   /* 6kx */
        .forEach(q=>{ const b=$(q); if(b)b.disabled=false; });
     maDetectSite();        // read the site code off the cover page; it names the export
     $("#rail").classList.add("show"); document.body.classList.add("railon");
@@ -2479,6 +2483,23 @@ async function loadPdf(file){
     await tryRestoreAutosave();
     try{ fitColumn(); }catch(e){}       /* 6gb — size the centred column to this document's sheets */
     LOG("Loaded and rendered",S.pages.length,"pages");
+    /* ==============================================================================================
+       6k7 — AND THE KEYBOARD IS THE DOCUMENT'S FROM THE FIRST FRAME.
+       Ced: "hot keys and shortcuts are still not working well. kindly ensure they work even in boot
+       up of the pdf."
+       6js made a press on anything that is not a text field hand the keyboard back, which fixed every
+       case where a field had STOLEN it. It cannot fix the case where a field never gave it up in the
+       first place: opening a document through the file picker leaves `<input id="file">` focused, so
+       the very first thing you do with a freshly opened PDF — reach for B, or R, or L — does nothing,
+       and there is no way to know why short of clicking the sheet. A drag-and-drop open leaves the
+       focus wherever it was, which is the same problem wearing different clothes.
+       A document has just become the subject of the whole window, so the window's keyboard is its
+       own. Nothing is taken from a mark being typed in, because at this point there are no marks.
+       ============================================================================================== */
+    try{
+      const ae=document.activeElement;
+      if(ae&&ae!==document.body&&!(ae.classList&&ae.classList.contains("ed")))ae.blur();
+    }catch(e){}
     /* 6gh — the trailer went: you are looking at the pages, and clicking a cell is what the tool does.
        Ced: "remove some texts on the ui, like sentences that are self explanatory." */
     setStatus(`${S.doc.numPages} PAGES`);
@@ -2506,7 +2527,26 @@ function buildRail(){
 }
 function updateRail(){
   const red=new Set([...S.annos.map(a=>a.page),...S.lines.map(l=>l.page)]);
-  document.querySelectorAll("#rail .rt").forEach(b=>b.classList.toggle("done",red.has(+b.dataset.idx)));
+  /* ==============================================================================================
+     6kg — A PAGE THAT ONLY CARRIES A STAMP IS NOT A PAGE YOU HAVE REDLINED.
+     Ced: "change the shade of color in pages if the redline is only the stamp."
+     Stamping every page is one action, and it lit the whole rail: forty pages marked "has work on
+     it", which is the same as none of them being marked. A page whose only marks are the stamp gets
+     a paler shade of the same colour — present, accounted for, and plainly not the thing you are
+     looking for when you scan the rail for the pages you actually corrected.
+     ============================================================================================== */
+  const stampOnly=new Set();
+  red.forEach(pi=>{
+    const A=S.annos.filter(a=>a.page===pi), L=(S.lines||[]).filter(l=>l.page===pi);
+    if(!A.length&&!L.length)return;
+    if(L.length)return;                                   /* a stroke is never part of a stamp */
+    if(A.every(a=>!!a.copRole))stampOnly.add(pi);
+  });
+  document.querySelectorAll("#rail .rt").forEach(b=>{
+    const i=+b.dataset.idx;
+    b.classList.toggle("done",red.has(i));
+    b.classList.toggle("stamponly",stampOnly.has(i));
+  });
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("redlined",red.has(+p.dataset.idx)));
 }
 let io=null;
@@ -2663,14 +2703,22 @@ function reflectToggles(){
   try{
     set("railToggle",document.body.classList.contains("railon"));
     set("marksBtn",document.body.classList.contains("markson"));
-    set("maBtn",shown("#maPanel"));
+    /* 6kx — the Assist buttons that open the panel light while it is open. This used to be one
+       line for `maBtn`; Notes is gone, so it is the two that are left, each lit only when the panel
+       is showing ITS card — pressing Markups while the stamp is up must not leave both lit. */
+    {
+      const _maUp=shown("#maPanel");
+      const _card=(()=>{ try{ const p=document.getElementById("maPanel");
+                              return (p&&p.dataset)?p.dataset.ma:""; }catch(e){ return ""; } })();
+      set("markupsBtn",_maUp&&_card==="markups");
+      set("stampBtn",  _maUp&&_card==="stamp");
+    }
     set("pageViewBtn",(typeof _pageView!=="undefined")&&!!_pageView);
     set("facingBtn",(typeof _facing!=="undefined")&&!!_facing);
     set("snapBtn",!!(S&&S.snap));
     set("magnetBtn",!!(S&&S.magnet));
     set("ribSideBtn",(typeof RIBBON_SIDE==="function")&&!!RIBBON_SIDE());
     set("palBtn",shown("#palMenu"));
-    set("reportBtn",shown("#reportModal"));
     set("orgBtn",shown("#pageOrg"));
     set("helpBtn",shown("#helpModal"));
     /* Snap and Magnet also carry `active`, which is what the icon ribbon paints; keep the two in step
@@ -3548,7 +3596,28 @@ const DRAW_MODES=new Set(["line","arrow","poly","box","circle","text","dim","cal
 function toolDraws(){ return DRAW_MODES.has(S.mode); }
 /* 6jx — switching tools, or putting one down, abandons a start point that is still waiting */
 function clickRunDrop(){ try{ if(typeof clickRunClear==="function")clickRunClear(true); }catch(e){} }
+/* =================================================================================================
+   6l1 — WHETHER THE SELECTION CAME FROM DRAWING, WHICH IS WHAT ESCAPE NEEDS TO KNOW.
+   Ced: "esc once means deselect, but if the user clicked on the ui/pdf or on a different
+   shape/redline without dragging for shape again, it should go to select mode... the esc click
+   (once) should always put the tool on select if it was not from a tool and just selecting other
+   redlines."
+
+   6jt made Escape a ladder so that drawing a box, pressing Escape to lose the handles, and drawing
+   the next one keeps the tool in the hand — and that is still exactly right for the hand that is
+   drawing. It is wrong for the hand that has STOPPED: pick a tool, change your mind, click an
+   existing redline to look at it, and Escape only drops the selection while the tool you are no
+   longer using stays armed, so the next click on the sheet draws something you did not want.
+
+   The difference between those two is one fact: did this selection come from a mark you just drew,
+   or from one you just clicked? `toolDone` runs at the end of every draw and nowhere else, so that
+   is where the first is recorded; every path that picks up an EXISTING mark clears it. Escape's
+   selection rung then keeps the tool only when the tool is what put the mark there.
+   ================================================================================================= */
+var _selFromDraw=false;
+function selNotFromDraw(){ _selFromDraw=false; }
 function toolDone(){
+  _selFromDraw=true;                 /* 6l1 — this selection is the thing just drawn */
   if(STICKY_TOOLS&&STICKY_MODES.has(S.mode)){
     /* the tool stays; the status line is what tells you so, once, rather than a toast every time */
     try{ updateMiniBar(); }catch(e){}
@@ -3739,17 +3808,38 @@ var _activeMarquee=null;
 /* the tools whose strokes are rules through something, never pointers at it */
 const STRIKE_MODES=["cross","strikerow","crossout","fix"];
 const SNAP_DEG=4.5;                    /* how close to an axis counts as meant-to-be-on-it */
+/* =================================================================================================
+   6kt — A STROKE GOES WHERE IT IS DRAWN, UNLESS YOU ASK FOR A TARGET.
+   Ced: "when putting a line or any shape, do not instantly have target, unless user is clicking
+   shift. also, if the user is clicking ctrl, also remove target and snap on that."
+
+   6f6 made the Snap toggle straighten a stroke as it was DRAWN: come within 4.5° of a 15° step and
+   the stroke is pulled onto it. Measured against how it is actually used, that is the wrong default
+   — a leader across a drawing is very often meant to lie at the angle the hand gave it, and a pull
+   that happens on its own is one you have to fight, with no way to know in advance that this
+   particular drag will be caught. A target you ASK for is a different thing entirely.
+
+   So, while drawing:
+     nothing held   the stroke lands exactly where the pointer is. No target, ever.
+     Shift          the nearest 15° — level, plumb and every useful diagonal between them — with no
+                    tolerance to fall outside, so holding it always gives a target rather than
+                    sometimes giving one.
+     Ctrl / Cmd     the nearest 45°: level, plumb, or a true diagonal and nothing else.
+     Alt            free, the same as nothing held, for a hand already on Ctrl.
+
+   Shift used to force dead level outright. The 15° grid contains level, so the old reflex still
+   lands level whenever the hand is anywhere near it, and it now reaches plumb and the diagonals too
+   rather than only the one axis.
+
+   The Snap toggle keeps what it meant before 6f6 and still means everywhere else: the alignment
+   guides a mark MOVES onto, and the 15° settle on a rotation. It no longer reaches a stroke being
+   drawn, which is the whole of this change.
+   ================================================================================================= */
 function snapDrawPoint(sx,sy,x,y,e,pg){
-  if(e&&e.shiftKey)return [x,sy];                       // Shift: level, as it always has been
-  /* 6gd — CTRL FORCES THE ANGLE INSTEAD OF SUSPENDING THE SNAP.
-     Ced: "clicking ctrl while adding lines and arrows must snap and magnet it on the nearest vertical,
-     horizontal, or diagonal." So Ctrl is now the strong version of the snap rather than its off
-     switch: the stroke goes onto the nearest 45° — level, plumb or either diagonal — however far off
-     it is, with no tolerance to fall outside. Alt is the release valve for a stroke that must lie at
-     some other angle. */
   const hard=!!(e&&(e.ctrlKey||e.metaKey));
+  const soft=!!(e&&e.shiftKey);
   if(e&&e.altKey)return [x,y];
-  if(!S.snap&&!hard)return [x,y];
+  if(!hard&&!soft)return [x,y];                /* 6kt — no modifier, no target */
   /* the angle has to be measured in PIXELS — a page is not square, so equal steps in normalised
      units are not equal on screen and a "vertical" line would come out leaning */
   const w=(pg&&pg.offsetWidth)||1, h=(pg&&pg.offsetHeight)||1;
@@ -3759,7 +3849,6 @@ function snapDrawPoint(sx,sy,x,y,e,pg){
      The length is kept; only the direction moves, so a stroke does not jump as it settles. */
   const ang=Math.atan2(dy,dx)*180/Math.PI;
   const step=hard?45:SNAP_DEG_STEP, snapped=Math.round(ang/step)*step;
-  if(!hard&&Math.abs(ang-snapped)>SNAP_DEG)return [x,y]; // not near an angle — leave it where it is
   const len=Math.hypot(dx,dy), th=snapped*Math.PI/180;
   return [ sx+Math.cos(th)*len/w, sy+Math.sin(th)*len/h ];
 }
@@ -4005,9 +4094,48 @@ function attachPagePointer(pg,i){
         return; }  // tiny = click-deselect
       groupLeave();                                     /* 6jz — and so does a marquee */
       clearMulti(); selectAnno(null);
-      S.annos.forEach(a=>{ if(a.page!==i)return; if(a.nx>=rx1&&a.nx<=rx2&&a.ny>=ry1&&a.ny<=ry2) S.selMulti.add(a.id); });
-      S.lines.forEach(l=>{ if(l.page!==i)return; const mx=(l.x1+l.x2)/2;   // a strike is caught by its midpoint
-        if(mx>=rx1&&mx<=rx2&&l.y1>=ry1&&l.y1<=ry2) S.selMultiL.add(l.id); });
+      /* ============================================================================================
+         6kb — A MARQUEE CATCHES WHAT IT TOUCHES.
+         Ced: "shapes and redlines should be selected if you select it even with just the fill or the
+         text."
+         The test was whether a mark's TOP-LEFT CORNER fell inside the box — so dragging a selection
+         across the middle of a shape, over its fill or over the words in it, caught nothing at all,
+         and the only way to pick a box up was to start the drag above and to the left of its origin
+         and enclose that one point. On a crowded sheet that is most of the marks on the page.
+         Two rectangles that OVERLAP is the test now, which is what every editor means by a marquee
+         and what the gesture looks like it is doing. A stroke is caught when any part of its run is
+         inside, rather than when its midpoint happens to be — a long leader crossing the box is
+         caught by the part that crosses it.
+         ============================================================================================ */
+      const _hits=(ax1,ay1,ax2,ay2)=>!(ax2<rx1||ax1>rx2||ay2<ry1||ay1>ry2);
+      S.annos.forEach(a=>{
+        if(a.page!==i)return;
+        if(maLayerHidden(a))return;                       /* a hidden layer is not selectable */
+        if(a.lock||a.flat)return;                         /* nor is a locked or flattened mark */
+        const x0=a.nx||0, y0=a.ny||0;
+        if(_hits(x0,y0,x0+(a.nw||0),y0+(a.nh||0)))S.selMulti.add(a.id);
+      });
+      S.lines.forEach(l=>{
+        if(l.page!==i)return;
+        if(l.lock||l.flat)return;
+        const pts=(l.pts&&l.pts.length)?l.pts:[[l.x1,l.y1],[l.x2,l.y2]];
+        /* any segment that enters the box catches the stroke; the bounding box alone would catch a
+           long diagonal whose line never comes near the marquee */
+        let got=false;
+        for(let k=0;k<pts.length&&!got;k++){
+          const p=pts[k];
+          if(p[0]>=rx1&&p[0]<=rx2&&p[1]>=ry1&&p[1]<=ry2){ got=true; break; }
+          const q=pts[k+1]; if(!q)break;
+          /* sample the segment — cheap, exact enough at marquee scale, and it cannot miss a
+             crossing the way two endpoints outside the box can */
+          const n=Math.max(2,Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])/0.004));
+          for(let t=1;t<n;t++){
+            const x=p[0]+(q[0]-p[0])*t/n, y=p[1]+(q[1]-p[1])*t/n;
+            if(x>=rx1&&x<=rx2&&y>=ry1&&y<=ry2){ got=true; break; }
+          }
+        }
+        if(got)S.selMultiL.add(l.id);
+      });
       paintMulti();
       if(multiCount())toast(`Selected ${multiCount()} mark${multiCount()>1?"s":""}`);
       return; }
@@ -4362,6 +4490,24 @@ function dimRelayout(l){ if(l&&l.maKind==="dim"){ try{ layoutAnnos(); }catch(e){
    tool goes down — which is what 6gn asked a do-nothing click to do, and is still what it does.
    Escape calls the run off at any point, as the first rung of the ladder in 6jt.
    ================================================================================================= */
+/* 6l7 — a press that a drawing tool let through to the page, and the mark it landed on. Read once,
+   at the pointerup that ends the same gesture, and dropped either way. */
+let _toolClickOn=null;
+const TOOL_CLICK_SLOP=4;               /* px: a hand is never perfectly still on a click */
+window.addEventListener("pointerup",e=>{
+  const c=_toolClickOn; _toolClickOn=null;
+  if(!c)return;
+  if(Math.abs(e.clientX-c.x)>TOOL_CLICK_SLOP||Math.abs(e.clientY-c.y)>TOOL_CLICK_SLOP)return;
+  if(((S.annos||[]).length+(S.lines||[]).length)!==c.n)return;   /* it drew something after all */
+  const a=(S.annos||[]).find(z=>z.id===c.id);
+  if(!a||a.lock)return;
+  try{ clickRunClear(true); }catch(_){}   /* a line tool armed a run on the way past; call it off */
+  selNotFromDraw();                       /* 6l1 — this selection did not come from drawing */
+  if(S.mode!=="select")setMode("select");
+  if(a.group!=null&&typeof selectGroup==="function"&&!groupOpenIs(a.group))selectGroup(a.group);
+  else selectAnno(a.id);
+  setStatus("Picked up — the tool is down. Pick it up again to keep drawing.");
+},true);
 let _clickRun=null;      /* {page,mode,x,y} — a start point waiting for its end */
 function clickRunActive(){ return !!_clickRun; }
 function clickRunClear(quiet){
@@ -4719,6 +4865,7 @@ function startLineRotate(ev,l,pg){
 }
 let _ldrag=null;
 function startLineDrag(ev,l,mode,pg){
+  selNotFromDraw();                    /* 6l1 — a stroke picked up is not a stroke drawn */
   if(l&&l.lock){ try{toast("This stroke is locked");}catch(_){ } return; }   /* 6fb */
   ev.preventDefault();
   /* 6gt — as with a mark: the snapshot is taken now, and put on the stack the moment the stroke
@@ -4840,11 +4987,39 @@ function cssBaseline(sizePt,fontKey,lineH){
     _baseProbe.style.fontFamily=F.css;
     _baseProbe.style.fontWeight=F.weight||"400";
     _baseProbe.style.fontStyle=F.style||"normal";
-    _baseProbe.style.fontSize=sizePt+"px";
-    _baseProbe.style.lineHeight=L+"px";
+    /* =============================================================================================
+       6l4 — ASK THE QUESTION BIG, THEN DIVIDE. Ced: "please make sure the redlines are rendered
+       exactly how it was showing on the tool."
+
+       This probe used to be set at `sizePt + "px"` — the mark's point size read as a pixel count. On
+       a COP stamp's rows that is 4.73px, and a baseline resolved inside a 5.8px line box rounds by
+       about half a pixel, which is half a POINT of the finished mark. v38 found exactly this and
+       fixed it in the stamp's own layout (`copBase`, measured at twenty times and scaled back) and
+       nowhere else — so the stamp was laid out correctly on the sheet and then written into the file
+       through this function, which was still rounding.
+
+       Measured on a real stamp, screen and export rendered onto the same pixel grid (360 dpi against
+       a page element at 5 css px per point), as a fraction of the frame's inner height:
+
+           REDLINED   screen top 0.0720   file 0.0320   out by 5px, about 1.1pt
+           contractor        0.3920        0.3760       out by 2px
+           contact           0.5760        0.5600       out by 2px
+           date              0.7520        0.7440       out by 1-2px
+
+       Every line high in the file, by more at the bigger size — the signature of a rounding error,
+       not of a placement rule. Horizontal agreed to the pixel throughout, which is what said the
+       fault was in the baseline and not in the geometry.
+
+       At twenty times the size the same rounding is a twentieth of a point, and `getBoundingClientRect`
+       returns fractional pixels so nothing is lost on the way back down. The memo key is unchanged:
+       this is a more accurate answer to the same question.
+       ============================================================================================= */
+    const Z=20;
+    _baseProbe.style.fontSize=(sizePt*Z)+"px";
+    _baseProbe.style.lineHeight=(L*Z)+"px";
     const r0=_baseProbe.getBoundingClientRect();
     const r1=_baseProbe.querySelector(".bp-s").getBoundingClientRect();
-    const fromTop=r1.top-r0.top;                     /* the baseline, below the line box's top */
+    const fromTop=(r1.top-r0.top)/Z;                 /* the baseline, below the line box's top */
     if(fromTop>0&&fromTop<L*2)out=L-fromTop;
   }catch(e){}
   _baseMemo[key]=out;
@@ -4876,12 +5051,24 @@ function cssBaseline(sizePt,fontKey,lineH){
    form does — per character — unless it is told otherwise; a CALLOUT and a shape keep word wrapping,
    which is what a note in a box wants. `wrapMode` is the per-mark override, so either kind of wrapping
    is a chip in the panel rather than a rule you cannot reach. */
+/* 6kn — AND A TEXT BOX BREAKS AT ITS WORDS TOO, BECAUSE THAT IS WHAT IT ALREADY DID ON SCREEN.
+   6kf (v39) gave a free text box `word-break:normal; overflow-wrap:break-word` on screen — Ced:
+   "wrapping is not working properly in texts" — and hard-coded it there instead of changing this
+   function, so the default below still said per character and the EXPORT still read it. Measured on
+   the parity fixture, a 122.4pt box holding "THIS NOTE IS LONGER THAN THE BOX IT WAS DRAWN IN":
+
+       screen   THIS NOTE IS LONGER / THAN THE BOX IT WAS / DRAWN IN
+       file     THIS NOTE IS LONGER T / HAN THE BOX IT WAS DR / AWN IN
+
+   Two copies of a wrap rule, which is the fault 6eg was raised to kill. The screen's is the one Ced
+   asked for, so it becomes the definition and the file reads it. `wrapMode` is still the per-mark
+   override in the panel, and it now reaches the screen as well — 6kf overrode it unconditionally. */
 function wrapsWords(a){
   if(!a)return false;
   const m=a.wrapMode;
   if(m==="words")return true;
   if(m==="chars")return false;
-  return isFreeBox(a)&&!isTextBox(a);
+  return isFreeBox(a);
 }
 function redlineWrapLines(text,size,pi,maxW,fontKey,words,lsp){
   const s=String(text==null?"":text);
@@ -5257,6 +5444,17 @@ function refitCentred(a,ed,pg){
    back, down to the box you drew and no further. */
 function growTextBox(a,ed,pgEl){
   if(!a||!ed||!pgEl)return false;
+  /* ==============================================================================================
+     6ke — A BOX THE USER HAS SIZED KEEPS THE SIZE THEY GAVE IT.
+     Ced: "if the user is adjusting the text, do not change its properties and text box size after
+     the fact. always retain what the user intends."
+     This grows a text box downward so typing never disappears below its own edge, which is right up
+     to the moment somebody drags a handle: from then on the height is a DECISION, and a tool that
+     quietly undoes a decision on the next keystroke is worse than one that lets text overflow. A box
+     that has been resized by hand wraps to the width it was given and stays exactly as tall as it
+     was left — the same contract every drawing program has.
+     ============================================================================================== */
+  if(a.userSized)return false;
   const ph=pgEl.offsetHeight; if(!(ph>0))return false;
   if(a.minNh==null)a.minNh=a.nh||0.03;
   const prev=ed.style.height;
@@ -5932,9 +6130,36 @@ function flexVAlign(a,dflt){
 }
 /* 6hj — the same three positions as `align-content` on the grid the boxes now are, and as the one
    word the export reads. `start` is the top of the box, which is where a text box fills from. */
+/* =================================================================================================
+   6kd — HOW FAR A MARK'S TEXT SITS INSIDE ITS OWN BOX, IN POINTS. ONE DEFINITION.
+   Ced: "no minimum indentation on texts whether horizontal or vertical. making the text small should
+   not compensate for its size."
+
+   A SHAPE keeps an inset, because its text would otherwise run under its own rule — but capped at a
+   quarter of the box, so a small shape is not held open by its insets (6iv). A TEXT BOX gets none at
+   all: it has no rule to clear, and a constant inset is a bigger share of a 4pt note than of a 24pt
+   one, so the small end of the range was paying for it.
+
+   The screen and the export both read this. They used to disagree — the screen inset a text box by
+   1x2pt and the export by 2pt a side with 4pt taken out of the wrap width — which is a wrap that
+   happens in a different place in the file from on the sheet. One function, one answer.
+   ================================================================================================= */
+function markTextInset(a,bwPt,bhPt){
+  if(!a||!isShape(a))return {x:0,y:0};
+  const sw=markSw(a)||0;
+  return {
+    x:Math.max(0,Math.min(4+sw,(bwPt||0)/4)),
+    y:Math.max(0,Math.min(2+sw,(bhPt||0)/4))
+  };
+}
+/* 6l3 — and the DEFAULT is translated too, not passed through raw. This used to read `a.valign`
+   and hand back `dflt` untouched, so the default had to be written in CSS words ("center") while
+   `vAlignFrac` wanted the mark's own ("middle") — two vocabularies for one rule, which is how a
+   shared default would have gone in as the literal string `middle` and been ignored by the grid.
+   Either word is understood now; "start" is still the fallback for anything else. */
 function gridVAlign(a,dflt){
-  const v=a&&a.valign;
-  return v==="top"?"start":(v==="bottom"?"end":(v==="middle"?"center":dflt));
+  const v=(a&&a.valign)||dflt;
+  return v==="top"?"start":(v==="bottom"?"end":((v==="middle"||v==="center")?"center":"start"));
 }
 /* Where a block of text sits in the box it is in, as a fraction: 0 at the top, 0.5 centred, 1 at the
    bottom. One definition, read by the screen through `gridVAlign` and by the export directly, so a
@@ -5943,6 +6168,34 @@ function vAlignFrac(a,dflt){
   const v=(a&&a.valign)||dflt;
   return v==="middle"?0.5:(v==="bottom"?1:0);
 }
+/* =================================================================================================
+   6l3 — WHERE A FREE BOX'S BLOCK SITS WHEN NOTHING TELLS IT. ONE DEFINITION, READ BY BOTH.
+   Ced: "please make sure the redlines are rendered exactly how it was showing on the tool. look at
+   before and after."
+
+   Measured off Ced's two screenshots of the same stamp — the frame's inner height is the only unit
+   both images share, so every edge is given as a fraction of it:
+
+       band        on screen   exported    out by
+       title top     0.0781      0.0577     -0.0204
+       title bottom  0.2813      0.2500     -0.0313
+       row 1 top     0.4063      0.3846     -0.0217
+       row 2 top     0.5938      0.5673     -0.0265
+       row 3 bottom  0.9063      0.8750     -0.0313
+
+   Every line of it sits high in the file by the same ~0.025 of the box — about a point. Not a
+   rounding error and not a font difference: a uniform shift is a placement rule, and there were two
+   of them. 6kc (v39) made a text box's block sit in the MIDDLE of its box on screen — Ced: "make
+   sure texts are always in the middle vertically and horizontally first" — and changed only the
+   screen. The export kept 6hi's older default of TOP, and 6hi's own comment ("`vAlignFrac` is the
+   same rule the grid on screen is given, so the two cannot part") had quietly stopped being true.
+
+   Until 6kn the export's 1pt `padV` happened to cover most of the gap, because the stamp's row boxes
+   carried a matching 1pt of slack (`COP_EDY`); taking both away at once left the difference naked,
+   which is what Ced is looking at. The default lives here now and both sides ask for it, so a
+   change to one cannot leave the other behind again.
+   ================================================================================================= */
+function freeVAlignDflt(a){ return "middle"; }
 /* The two text decorations, as one CSS value. */
 function textDecoOf(a){
   const bits=[];
@@ -6228,8 +6481,44 @@ function layoutAnnos(){
         ed.style.backgroundColor=a.bgNone?"transparent":_rgbaOf(markBg(a),(a.fillOp!=null?a.fillOp:1));
         ed.style.backgroundImage="none";
         ed.style.border="0";
-        ed.style.padding=(1*S.scale)+"px "+(2*S.scale)+"px";   /* 6hi — points, see above */
-        ed.style.alignContent=gridVAlign(a,"start");   /* a text box fills from the top */
+        /* 6k4/6kd — NO MINIMUM INDENTATION ON A TEXT BOX. Ced: "no minimum indentation on texts
+           whether horizontal or vertical. making the text small should not compensate for its size."
+           There was a 1x2pt inset here so a box's words would not sit flush against their own
+           ground. It is a constant, so at 4pt type it is half the line's height and at 24pt it is
+           invisible — the small end of the range pays for it, which is the opposite of what a floor
+           should do. It also silently took 4pt out of every box's usable width, which is what was
+           clipping a COP stamp's contractor row. The box IS its text now: what the user drew is the
+           whole of what the words get, and the one mark that still wants an inset says so. */
+        /* 6kd — a TEXT BOX is all box: no inset, so what the user drew is the whole of what the
+           words get. A CELL REDLINE keeps the 1x2pt inset it has always had — its width comes from
+           the printed column it covers and the export's own figures are tuned against it; measured
+           when this was applied to both, text parity went from 0 of 10 to 5 of 10. */
+        /* =========================================================================================
+           6kn — AND NOW IT GOES. Ced, twice: "no minimum indentation on texts whether horizontal or
+           vertical", then "do the remaining items".
+
+           6kd deferred this because the first attempt measured text parity 5 of 10, every failure
+           horizontal, 2 to 5pt — and read that as `.ed` being content-box, so that the 1x2pt padding
+           made the element 4pt wider than `a.nw`. Measured again before touching anything: `.ed`
+           resolves `box-sizing: border-box` (app.css line 128, `*{box-sizing:border-box}`), so the
+           padding has always been INSIDE the width and there was never a width to reclaim. The real
+           mismatch was one line in the export — a free box wrapped at `a.nw*W - 4` while the screen
+           wrapped inside `a.nw*W - 4` of CONTENT and then drew its first glyph 2pt in, i.e. the two
+           agreed. Dropping the padding on screen ALONE moved the wrap by 4pt and the left edge by
+           2pt while the export kept both: that is the 5 of 10, and it is a one-sided change, not a
+           property of the box model.
+
+           So both sides move together, in the same three numbers: wrap width `a.nw*W` (no deduction),
+           first glyph at 0, first line at the top of the box. A TEXT BOX is now exactly its own
+           words — "making the text small should not compensate for its size". A SHAPE keeps its
+           inset, capped at a quarter of the box (6iv), because its text would otherwise run under
+           its own rule; a CELL REDLINE keeps the inset chain its figures are tuned against.
+           ========================================================================================= */
+        ed.style.padding=tbox?"0":((1*S.scale)+"px "+(2*S.scale)+"px");
+        /* 6kc — a text box sits in the MIDDLE of its box unless told otherwise; a cell redline still
+           fills from the top, because it is sitting ON a printed line, not in a space of its own */
+        /* 6l3 — the same default the export reads, through the one function that states it */
+        ed.style.alignContent=gridVAlign(a,freeVAlignDflt(a));
       }
       if(a.hl)ed.style.mixBlendMode="multiply";
     }
@@ -6247,6 +6536,41 @@ function layoutAnnos(){
        None of it applies to a shape, whose width and height ARE the mark — so a shape leaves now, with
        the look it was given above. */
     if(shp||tbox){
+      /* 6k4 — A FREE BOX THAT SAYS `nowrap` DOES NOT WRAP. The stylesheet gives `.ed`
+         `white-space:pre-wrap` and `word-break:break-all`, which is right for a cell redline filling a
+         printed column and wrong for a box sized to its own single line: measured on a COP stamp's
+         contractor row, a 71.05px box holding 71.01px of text wrapped "LC" onto a second line that
+         `overflow:hidden` then cut off — the mark read "TSC CONSTRUCTION L" on screen while its text
+         was correct and its width was correct. `a.nowrap` already means this for a cell mark; the free
+         boxes simply never asked. */
+      if(a.nowrap){
+        ed.style.setProperty("white-space","nowrap","important");
+        ed.style.setProperty("word-break","normal","important");
+        ed.style.setProperty("overflow-wrap","normal","important");
+      }else if(tbox){
+        /* ==========================================================================================
+           6kf — A TEXT BOX WRAPS AT ITS WORDS, TO THE WIDTH IT WAS DRAWN.
+           Ced: "wrapping is not working properly in texts. if the user adjusts the text within the
+           left and right size, it should adjust the wrapping."
+           The stylesheet gives `.ed` `word-break:break-all`, which is deliberate and correct for a
+           cell redline: it has to fill a printed column the way the form does, breaking wherever the
+           width runs out. A free text box is not filling anything — it is a note — and breaking
+           "CONSTRUCTION" into "CONSTRUC / TION" is not wrapping, it is damage. Words here.
+           And it OVERFLOWS rather than hides: once 6ke lets a hand-sized box stay the height it was
+           given, `overflow:hidden` would make the extra lines silently invisible, which is the one
+           outcome worse than a box that is too small.
+           6kn — through `wrapsWords`, not hard-coded: words is now that function's answer for a text
+           box, so the file breaks where the screen breaks, and a mark switched to `chars` in the
+           panel is honoured here instead of being overridden. */
+        ed.style.setProperty("white-space","pre-wrap","important");
+        if(wrapsWords(a)){
+          ed.style.setProperty("word-break","normal","important");
+          ed.style.setProperty("overflow-wrap","break-word","important");
+        }else{
+          ed.style.setProperty("word-break","break-all","important");
+          ed.style.setProperty("overflow-wrap","normal","important");
+        }
+      }
       /* 6k0 — AND A FREE BOX OBEYS NO STYLESHEET FLOOR. `.anno .ed` carries `min-width:14px`, a
          sensible last resort for a cell redline whose width is derived and a hard stop for a box the
          user drew: measured, a text box resized as small as it would go sat at 14px on screen while
@@ -6426,7 +6750,26 @@ function layoutAnnos(){
          mark still starts a new one, which is what 6hq asked for. Escape drops the selection and the
          sheet is a drawing surface again. */
       if(toolDraws()&&!(S.sel===a.id||S.selMulti.has(a.id)
-                        ||(a.group!=null&&_groupSelected(a.group)))){ return; }
+                        ||(a.group!=null&&_groupSelected(a.group)))){
+        /* ===========================================================================================
+           6l7 — A CLICK IS NOT A DRAW. Ced, twice: "if the user clicked on the ui/pdf or on a
+           different shape/redline without dragging for shape again, it should go to select mode."
+
+           6hq is right that a tool in the hand must DRAW over a mark rather than shove it aside —
+           drawing a box over a box you have already drawn should make a second box. But drawing is a
+           DRAG. A press that goes down and comes up in the same place has drawn nothing, and what it
+           plainly meant was the mark underneath it; until now it meant nothing at all, and the mark
+           could only be reached by putting the tool down first.
+
+           The decision cannot be taken here, because at pointerdown nobody knows yet whether this is
+           a click or a drag. So the press is let through exactly as before — a drag still draws —
+           and the mark is remembered. `_toolClickOn` below is read at pointerup: if the pointer
+           never travelled and the tool created nothing, that mark is selected and the tool goes
+           down. If it travelled, or something was drawn, the note is discarded and 6hq stands.
+           =========================================================================================== */
+        _toolClickOn={id:a.id, x:e.clientX, y:e.clientY, n:(S.annos||[]).length+(S.lines||[]).length};
+        return;
+      }
       /* 6gs — THE SECOND PRESS OF A DOUBLE-CLICK IS NOT A DRAG. Ced: "double clicking items that has
          texts (length and call outs) should enable editing the texts." Every mark starts a drag on
          mousedown, and on the second press of a double-click that drag was starting too — on a
@@ -6443,6 +6786,7 @@ function layoutAnnos(){
         const dl=(typeof maDimLineOf==="function")?maDimLineOf(a):null;
         if(dl){ selectLine(dl.id); startLineDrag(e,dl,"move",pg); return; }
       }
+      selNotFromDraw();                  /* 6l1 — this is a mark being PICKED UP, not drawn */
       if(e.shiftKey||e.ctrlKey||e.metaKey){
         try{ sbPaintHold(); }catch(_){}    /* 6i0 — adding to a selection is not painting */
         toggleMulti(a.id); return; }
@@ -6843,7 +7187,16 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
     try{
       /* 6hh — a text box you have just made narrower re-wraps, and the height you let go of is the
          new floor it will not shrink below */
-      if(isTextBox(a)&&_rsMoved){ a.minNh=a.nh; growTextBox(a,ed,pg); }
+      /* 6ke — the handle is the user speaking. From here the box is theirs: `growTextBox` steps
+         aside, and the one thing that still happens is a re-wrap to the new width, which is what
+         narrowing a box is FOR. */
+      /* 6ke — the handle is the user speaking. From here the box is theirs, and NOTHING re-measures
+         it: `growTextBox` steps aside, and so does `fitTextInside`, which re-wraps to the new width
+         but also re-derives the HEIGHT from the lines — which is the very decision just taken away
+         from it. Measured with the re-fit left in: a text box dragged as small as it would go sprang
+         back to 26.3pt tall whatever its point size, which is the floor Ced asked to be rid of.
+         The re-wrap happens anyway, in CSS, at the width the box now has. */
+      if(isTextBox(a)&&_rsMoved){ a.minNh=a.nh; a.userSized=true; }
       if(!document.querySelector(".anno.editing")){ layoutAnnos(); }
       else { const dd=document.querySelector(`.anno[data-id="${a.id}"]`);
              paintShapeOutline(dd,a,pg.offsetWidth,pg.offsetHeight,
@@ -7236,7 +7589,7 @@ function paintGroupFrame(){
        ev=>startGroupRotate(ev,pg,bb));
   gbtn("gdrag","\u2725","Drag the selection",ev=>dragMulti(ev,pg));
   gbtn("gdel","\u2715","Delete the selection",ev=>{ ev.preventDefault();
-        const n=deleteSelection(); if(n)setStatus("Deleted "+n+" mark"+(n===1?"":"s")+"."); },true);
+        const n=deleteSelection(); if(n>0)setStatus("Deleted "+n+" mark"+(n===1?"":"s")+"."); },true);
   f.appendChild(grips);
   pg.appendChild(f);
 }
@@ -7901,6 +8254,23 @@ function _emptyMarkFocused(){
    behind and deleting a callout's box left the leader to be swept on the next draw pass. This asks
    the selection what it is made of, which is the same question the bar, the copy and the restyle ask,
    and removes all of it in one history step. Returns how many marks went. */
+/* =================================================================================================
+   6ky — AND A LOCKED MARK CANNOT BE DELETED EITHER. Ced: "lock and unlock does not work correctly."
+
+   The lock has always said what it promises — selbar.js: "a locked mark cannot be moved, resized,
+   restyled or deleted until it is unlocked" — and three of those four were enforced, each at its own
+   gesture (`dragBody`, `startAnnoResize`, `startAnnoRotate`). Measured on the built page: a locked
+   mark really does refuse a drag (nx 0.2 before, 0.2 after) and really does still select and show
+   its bar with Unlock lit — and then Delete took it straight off the sheet. The bar's own Delete
+   checks (`sbDelete` → "Unlock these first"); the KEY does not, because it goes through
+   `deleteSelection`, which nothing had ever told about the lock. Restyling was the fourth: a locked
+   mark took a new colour or weight from the panel without a murmur.
+
+   One predicate, asked by both — a lock that holds for the mouse and not for the keyboard is worse
+   than no lock, because it is the one you stop checking. */
+function lockedAmong(annos,lines){
+  return (annos||[]).concat(lines||[]).some(o=>o&&o.lock);
+}
 function deleteSelection(){
   let annos=[], lines=[];
   try{ const sel=maSelectedMarks(); annos=sel.annos.slice(); lines=sel.lines.slice(); }catch(e){}
@@ -7911,6 +8281,13 @@ function deleteSelection(){
     lines=lids.map(id=>S.lines.find(l=>l.id===id)).filter(Boolean);
   }
   if(!annos.length&&!lines.length)return 0;
+  /* 6ky — and it reports a count of -1 rather than 0, because the Delete key reads this as "did
+     something happen?" and a plain 0 would send it on to say nothing was selected. */
+  if(lockedAmong(annos,lines)){
+    try{ toast("Unlock these first"); }catch(_){}
+    setStatus("Locked \u2014 unlock these marks before deleting them.",true);
+    return -1;
+  }
   pushHistory();
   const ai=new Set(annos.map(a=>a.id)), li=new Set(lines.map(l=>l.id));
   S.annos=S.annos.filter(a=>!ai.has(a.id));
@@ -8099,18 +8476,74 @@ async function addPhotoFromFile(file,at){
   setStatus(`Photo added to page ${pi+1} — drag to move, corner handles to resize. It exports as a movable PDF annotation.`);
   return a.id;
 }
-/* paste a bitmap from the clipboard (screenshot, Snipping Tool, copied image) */
+/* =================================================================================================
+   6l0 — PASTE A PICTURE, HOWEVER IT WAS COPIED. Ced: "make copy pasting photo on ui possible."
+
+   A paste already worked for a screenshot — the Snipping Tool and Cmd-Shift-4 put a real FILE on the
+   clipboard, and the handler looked for exactly that. What they do NOT put there is the thing people
+   copy most often: "Copy image" in a browser, a picture out of a document, a drag from a chat. Those
+   arrive as `text/html` holding an `<img src=…>`, or as a bare `data:image/...` URL in `text/plain`,
+   and the handler walked straight past them, so the paste did nothing at all and there was no way to
+   tell whether the copy or the paste had failed.
+
+   All three forms land now, in order of fidelity: the file if there is one, then an `<img>` in the
+   HTML flavour, then a data URL in the text. A remote `http(s)` src is fetched, which is the one
+   that can fail — the sheet's own network rules apply — and says so rather than failing quietly.
+   ================================================================================================= */
+async function pastePictureFrom(dt){
+  /* 1. a real file: a screenshot, or an image dragged out of the filesystem */
+  const it=[...(dt.items||[])].find(x=>x.kind==="file"&&/^image\//.test(x.type));
+  if(it){ const f=it.getAsFile(); if(f)return f; }
+  const fs=[...(dt.files||[])].find(x=>/^image\//.test(x.type||""));
+  if(fs)return fs;
+  /* 2. an <img> in the HTML flavour, which is what a browser's "Copy image" gives */
+  let url="";
+  try{
+    const html=dt.getData("text/html")||"";
+    if(html){ const m=/<img\b[^>]*\bsrc\s*=\s*("([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(html);
+              if(m)url=(m[2]||m[3]||m[4]||"").replace(/&amp;/g,"&"); }
+  }catch(e){}
+  /* 3. or a data URL sitting in the plain text */
+  if(!url){ try{ const t=(dt.getData("text/plain")||"").trim();
+                 if(/^data:image\//i.test(t))url=t; }catch(e){} }
+  if(!url)return null;
+  if(/^data:image\//i.test(url)){
+    try{ const b=await (await fetch(url)).blob();
+         return new File([b],"pasted.png",{type:b.type||"image/png"}); }catch(e){ return null; }
+  }
+  if(/^https?:/i.test(url)){
+    try{ const r=await fetch(url,{mode:"cors"}); if(!r.ok)throw new Error(r.status);
+         const b=await r.blob();
+         if(!/^image\//.test(b.type||""))throw new Error("not an image");
+         return new File([b],"pasted",{type:b.type}); }
+    catch(e){ setStatus("That picture is on a page this tool cannot fetch from \u2014 copy the image "+
+                        "itself (right-click \u203a Copy image) or save it and use Photo.",true);
+              return null; }
+  }
+  return null;
+}
 document.addEventListener("paste",async ev=>{
   if(!S.doc)return;
   const dt=ev.clipboardData; if(!dt)return;
-  const it=[...(dt.items||[])].find(x=>x.kind==="file"&&/^image\//.test(x.type));
-  if(!it)return;                                   // not an image paste — text handlers deal with it
-  const file=it.getAsFile(); if(!file)return;
+  /* 6l0 — a paste into a mark you are TYPING in is text, but only if there is text to paste. A
+     browser's "Copy image" puts HTML and no plain text on the clipboard, and bailing on the caret
+     alone meant that clicking a mark and then pasting a picture did nothing at all. */
+  let _plain=""; try{ _plain=(dt.getData("text/plain")||"").trim(); }catch(e){}
+  const _typing=(()=>{ try{ return typeof _editTarget==="function"&&_editTarget(); }catch(e){ return false; } })();
+  if(_typing&&_plain&&!/^data:image\//i.test(_plain))return;
+  const hasPic=[...(dt.items||[])].some(x=>x.kind==="file"&&/^image\//.test(x.type))
+    || [...(dt.files||[])].some(x=>/^image\//.test(x.type||""))
+    || /<img\b/i.test((()=>{ try{ return dt.getData("text/html")||""; }catch(e){ return ""; } })())
+    || /^data:image\//i.test((()=>{ try{ return (dt.getData("text/plain")||"").trim(); }catch(e){ return ""; } })());
+  if(!hasPic)return;                               // not a picture — the text handlers deal with it
   ev.preventDefault(); ev.stopPropagation();
+  if(_typing){ try{ document.activeElement.blur(); }catch(e){} }
   const pgEl=pageAtPoint(_ptr.x,_ptr.y);
   let at=null;
   if(pgEl){ const r=pgEl.getBoundingClientRect();
     at={page:+pgEl.dataset.idx, nx:(_ptr.x-r.left)/pgEl.offsetWidth, ny:(_ptr.y-r.top)/pgEl.offsetHeight}; }
+  const file=await pastePictureFrom(dt);
+  if(!file)return;
   await addPhotoFromFile(file,at);
 },true);
 $("#photoBtn").onclick=()=>$("#photoFile").click();
@@ -9234,7 +9667,10 @@ async function exportPdf(){
            mark that now stops short of its cell is enough to cost a whole extra line. Anything that
            still will not fit grows `boxW` below rather than being clipped. */
         /* 6hi — inside the padding, which is what the screen wraps inside */
-        const maxW=Math.max(4,a.nw*W-(isFreeBox(a)?4:0));
+        /* 6kn — and a free box has no padding any more, so it wraps inside the whole of its width.
+           This number and the two below (`padV`, `padH`) are the export's half of dropping the text
+           inset; they move with the screen's `padding:0` or not at all. */
+        const maxW=Math.max(4,a.nw*W);
         const ww=wrapsWords(a);
         linesArr=[]; hard.forEach(t=>{ wrapToWidth(t,size,maxW,a.page,W,fk,ww,lsp).forEach(x=>linesArr.push(x)); });
       }
@@ -9299,9 +9735,9 @@ async function exportPdf(){
          the glyphs belong on that line. `vAlignFrac` is the same rule the grid on screen is given, so
          the two cannot part, and the inset is the 1pt/2pt padding the box is drawn with. */
       const freeV=isFreeBox(a);
-      const blockH=lineH*nL, padV=1;
+      const blockH=lineH*nL, padV=freeV?0:1;   /* 6kn */
       const top=freeV
-        ? (padV+(Math.max(0,boxH-blockH-padV*2))*vAlignFrac(a,shapeOf(a)?"middle":"top"))
+        ? (padV+(Math.max(0,boxH-blockH-padV*2))*vAlignFrac(a,freeVAlignDflt(a)))   /* 6l3 */
         : 2;
       const decoT=[];
       let hzNow=100;
@@ -9309,7 +9745,7 @@ async function exportPdf(){
         const hz=hzOf(ln);
         if(Math.abs(hz-hzNow)>0.05){ ops+=`${hz.toFixed(2)} Tz\n`; hzNow=hz; }
         const tw=twOf(ln)*hz/100;
-        const padH=freeV?2:1;
+        const padH=freeV?0:1;   /* 6kn */
         let tx=padH;
         if(a.align==="center"){ tx=(boxW-tw)/2;
           if(a.textDx)tx=Math.max(0,Math.min(boxW-tw,tx+a.textDx*W)); }
@@ -9580,7 +10016,17 @@ async function exportPdf(){
       const chzOf=t=>{ const p0=cwOf(t), s0=cwScreen(t);
         if(!(p0>0.01)||!(s0>0.01))return 100;
         return Math.max(92,Math.min(108,100*s0/p0)); };
-      const inner=Math.max(8,bw-sw*2-8);   /* 6hi — the 4pt side padding, both sides */
+      /* 6kd — the same inset the screen uses, so the wrap happens in the same place in both.
+         A CELL REDLINE is not covered by this and must not be: its width is derived from the printed
+         column it covers, and the screen gives it its own inset chain (`REDLINE_LEFT_INSET` and the
+         rest) that the figures below were tuned against. Measured when this first went in
+         unconditionally: text parity went from 0 of 10 to 5 of 10. Free boxes only. */
+      /* Only a PURE TEXT BOX loses its inset. A callout, a reading, a cell redline and every other
+         mark keep the figures the export has always used and that both parity suites are tuned
+         against — measured when this was applied to all of them, text parity went from 0 of 10 to
+         5 of 10, every failure horizontal. */
+      const _ti={x:sw+2,y:sw+2};
+      const inner=Math.max(8,bw-sw*2-8);
       const body=[];
       sanitizePdfText(a.text||"").split("\n").filter(t=>t.length).forEach(t=>{
         if(cwOf(t)<=inner){ body.push(t); return; }
@@ -9590,7 +10036,7 @@ async function exportPdf(){
         const blockH=lineH*body.length;
         /* 6f6 — where the block of text sits in the box: middle by default, which is what a callout
            wants, top or bottom when the panel says so. */
-        const pad=sw+2;
+        const pad=_ti.y;
         const cBase=cssBaseline(size,markFontKey(a),lineH);
         let ty=(bh+blockH)/2-lineH+cBase;
         if(a.valign==="top")    ty=bh-pad-lineH+cBase;
@@ -9603,7 +10049,8 @@ async function exportPdf(){
           const chz=chzOf(t);
           if(Math.abs(chz-chzNow)>0.05){ ops+=`${chz.toFixed(2)} Tz\n`; chzNow=chz; }
           const tw=cwOf(t)*chz/100;
-          const tx=(a.align==="left")?(sw+2):((a.align==="right")?(bw-tw-sw-2):((bw-tw)/2));
+          const tx=(a.align==="left")?_ti.x:((a.align==="right")?(bw-tw-_ti.x):((bw-tw)/2));
+          /* (`_ti.x` is `sw+2` for a cell redline, which is what it always was) */
           ops+=`1 0 0 1 ${tx.toFixed(2)} ${ty.toFixed(2)} Tm (${pdfEsc(t)}) Tj\n`;
           if(a.uline)deco.push([tx,ty-size*0.14,tx+tw]);
           if(a.strikeout)deco.push([tx,ty+size*0.28,tx+tw]);
@@ -11170,13 +11617,13 @@ document.addEventListener("keydown",e=>{
     try{ b.click(); }catch(err){ setStatus("Export failed: "+(err&&err.message||err),true); }
     return;
   }
-  /* Ctrl+Shift+A opens the Mount Analysis panel. It is claimed above the plain Ctrl+A below, which
-     matches on `key==="a"` without checking Shift and would otherwise read the chord as "select
-     everything on this page". */
+  /* Ctrl+Shift+A opens Assist. It is claimed above the plain Ctrl+A below, which matches on
+     `key==="a"` without checking Shift and would otherwise read the chord as "select everything on
+     this page". 6kx — it opens MARKUPS now: the Notes button it used to press is gone. */
   if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="a"){
     if(_editTarget())return;
     e.preventDefault();
-    const b=$("#maBtn");
+    const b=$("#markupsBtn");
     if(b&&!b.disabled)b.click();
     return;
   }
@@ -11267,8 +11714,17 @@ document.addEventListener("keydown",e=>{
   }
   if(_releaseChromeFocus()){ setStatus("Back to the document — the shortcuts are live again."); return; }
   if(_editTarget())return;
-  /* 6jx — a start point waiting for its end is the nearest thing to undo */
-  if(clickRunActive()){ clickRunClear(); return; }
+  /* 6jx — a start point waiting for its end is the nearest thing to undo.
+     6l7 — and a run with only its START point down has drawn nothing, so this press is the one Ced
+     means by "the esc click (once) should always put the tool on select if it was not from a tool":
+     the run is called off AND the tool goes down, in the one press. A run with real segments behind
+     it (a polyline three corners in) is work, so there the first press only ends the run. */
+  if(clickRunActive()){
+    const bare=!(typeof _maPoly!=="undefined"&&_maPoly&&_maPoly.pts&&_maPoly.pts.length>1);
+    clickRunClear();
+    if(bare&&S.mode!=="select"){ setMode("select"); setStatus("Back to Select."); }
+    return;
+  }
   /* 6jt — ESCAPE IS A LADDER, NOT A SWITCH. Ced: "when you are in a tool mode, the tool should still
      work in one esc click, a single esc click will deselect the shape while double esc click will put
      the tool to select."
@@ -11295,6 +11751,13 @@ document.addEventListener("keydown",e=>{
   const hadSel=(multiCount()||S.sel!=null||S.selLine!=null);
   if(hadSel){
     clearMulti(); selectAnno(null); selectLine(null);
+    /* 6l1 — the tool stays in the hand only if the tool is what put this mark there. A selection
+       made by CLICKING an existing redline means the drawing is over, so one press reaches Select. */
+    if(S.mode!=="select"&&!_selFromDraw){
+      setMode("select");
+      setStatus("Selection cleared — back to Select.");
+      return;
+    }
     setStatus(S.mode!=="select"
       ? "Selection cleared — the tool is still in your hand. Escape again puts it down."
       : "Selection cleared.");
@@ -11447,10 +11910,15 @@ function reflectSnapBtns(){
   if(b){ b.classList.toggle("active",!!S.magnet); b.classList.toggle("on",!!S.magnet);
          b.setAttribute("aria-pressed",S.magnet?"true":"false"); }
 }
+/* 6kt — the toggle no longer reaches a stroke being DRAWN; Shift and Ctrl are how a stroke is given
+   a target now, and they work whether this is on or off. What is left to it is what it meant before
+   6f6: a rotation settling on 15°, alongside Magnet's alignment guides. */
 $("#snapBtn").onclick=()=>{ S.snap=!S.snap; reflectSnapBtns(); saveSnapPrefs();
-  toast(S.snap?"Snap on — a stroke settles on the nearest 15°":"Snap off — strokes go exactly where you drag");
-  setStatus(S.snap?"Snap on: angles settle on 15°. Shift forces level, Ctrl suspends."
-                 :"Snap off: a stroke goes exactly where you drag it."); };
+  toast(S.snap?"Snap on — a turn settles on the nearest 15°":"Snap off — a turn stops where you leave it");
+  setStatus(S.snap?"Snap on: a rotation settles on 15°. Drawing is unaffected — hold Shift for the "+
+                   "nearest 15° as you draw, or Ctrl for level, plumb or a true diagonal."
+                 :"Snap off: a turn stops exactly where you leave it. Drawing is unaffected — hold "+
+                  "Shift for the nearest 15° as you draw, or Ctrl for level, plumb or a true diagonal."); };
 const _mb=$("#magnetBtn");
 if(_mb)_mb.onclick=()=>{ S.magnet=!S.magnet; reflectSnapBtns(); saveSnapPrefs(); dropSnapCache();
   toast(S.magnet?"Magnet on — marks pull onto the printed page":"Magnet off");
@@ -11658,9 +12126,65 @@ function outputFilename(){
   /* a SITE CODE is the signal that this is one of the reports: it was read off the first page, or it
      was typed into the SITE box. Either way the filed copy is named the way the filed copies are. */
   const code=clean((($("#s_site")&&$("#s_site").value)||S.siteCode||"").trim());
-  if(code)return `${code} - Redlined Mount Analysis`;
-  const base=clean(String(S.name||"").replace(/\.pdf$/i,""))||"Document";
-  return `${base} - Marked Up`;
+
+  /* ==============================================================================================
+     6ki — THE DOCUMENT SAYS WHAT IT IS. WE SAY WHAT WE DID TO IT.
+     Ced: "remove the 'Mount Analysis' as default name, use the name of the file as the default
+     name. may it be final construction drawings, mount analysis, preliminary construction drawings,
+     etc. just retain the site name input in the start of name and whether it is as built or
+     redlined based on the stamp."
+
+     Every export was called "<SITE> - Redlined Mount Analysis", whatever had been opened — so a set
+     of construction drawings came back claiming to be a mount analysis, and an as-built set came
+     back claiming to be a redline. Three parts, and only the middle one is ours to decide:
+
+        <SITE>   the code read off the cover page, or whatever is typed in the SITE box
+        <STATE>  Redlined or As-Built, taken from the stamp actually on the document
+        <KIND>   what the file already said it was, with any previous state word taken out
+
+     The kind is the opened file's own name, stripped of the site code it usually starts with and of
+     a leading "Redlined"/"As-Built" from a previous pass, so re-exporting a file this tool has
+     already named does not stack the words up. Nothing is invented: a file with nothing left after
+     the stripping keeps the old generic ending rather than guessing at a document type.
+     ============================================================================================== */
+  const state=exportStateWord();
+  let kind=clean(String(S.name||"").replace(/\.pdf$/i,""));
+  if(code){
+    /* drop a leading site code, however it is punctuated off the rest */
+    kind=kind.replace(new RegExp("^"+code.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\s*[-–—_:]*\\s*","i"),"");
+  }
+  kind=kind.replace(/^(STAMPED[_\s]+)?/i,"")
+           /* 6ki — the state word goes wherever it sits, not only at the front. Without a site code
+              in the box the file name still starts with its own code ("SOH3361 - Redlined Mount
+              Analysis"), so anchoring the strip to the start left the old "Redlined" in place and
+              the export came out "... - Redlined Mount Analysis - Redlined". */
+           .replace(/(^|[\s\-–—_:])(redlined|red\s*lined|as[-\s]?built|marked[-\s]?up)(?=$|[\s\-–—_:])/ig,"$1")
+           .replace(/^\s*[-–—_:]\s*/,"")
+           .replace(/\s*[-–—_:]\s*$/,"")
+           .replace(/\s{2,}/g," ")
+           .trim();
+  /* The site code leads, then what we did, then what the document is — "SOH3361 - Redlined Final
+     Construction Drawings". With no site code there is nothing to lead with, so the state does:
+     "Redlined Mount Analysis". The order is the same in both; only the prefix differs. */
+  if(code)return kind ? `${code} - ${state} ${kind}` : `${code} - ${state}`;
+  return kind ? `${state} ${kind}` : `Document - ${state}`;
+}
+/* 6ki — Redlined or As-Built, according to the stamp. A document with no stamp on it has not said
+   which it is, and "Redlined" is what this tool does by default, so that is the fallback. Mixed
+   stamps — which should not happen, but can — are reported as the state the FIRST one carries, so
+   the name is at least something a person put there. */
+function exportStateWord(){
+  try{
+    if(typeof copStampsOn==="function"){
+      const gs=copStampsOn(null);
+      for(const g of gs){
+        const st=copReadStamp(g);
+        if(st&&/^AS/i.test(String(st.status).replace(/\s+/g,"")))return "As-Built";
+        if(st)return "Redlined";
+      }
+    }
+  }catch(e){}
+  return "Redlined";
 }
 function updateFnamePreview(){ try{ updateMiniBar(); }catch(e){} const f=$("#detectFname"); if(f)f.title=BUILD_ID; if(f)f.innerHTML=`Export name: <b>${escapeHtml(outputFilename())}.pdf</b>`; }
 (function(){ const si=$("#s_site"); if(si)si.addEventListener("input",()=>{ S.siteCode=si.value.trim(); S.atollName=S.siteCode; updateFnamePreview(); }); })();
@@ -11765,7 +12289,6 @@ const RIBBON_ICONS={
   dlPdf:"\u2713",
   /* FILE */
   openBtn:"\u2b06", homeBtn:"\u2302", saveBtn:"\ud83d\uddab", copyBtn:"\u29c9", photoBtn:"\u25a3",
-  reportBtn:"\u2261",
   /* a bin: this one empties what the browser has kept, it does not touch the open document */
   cacheBtn:"\u232b",
   /* EDIT */
@@ -11778,8 +12301,8 @@ const RIBBON_ICONS={
      gave it a drawn star, which wins. So Notes wore a star whatever this line said, and the swap only
      moved the grid off Read table. The star is gone from `RIBBON_SHAPES` and the glyphs are back the
      way they read: ruled lines for the note, a grid for the table. */
-  maBtn:"\u2261", analyzeMaBtn:"\u25a6", noteBtn:"\u2261", partsBtn:"\u26d3",
-  markupsBtn:"\u25e9", importBtn:"\u21c4",
+  analyzeMaBtn:"\u25a6",                              /* 6kx — notes, parts and as-built are gone */
+  markupsBtn:"\u25e9", stampBtn:"\u25a3",
   /* VIEW — stacked bars for the page rail, a filled grid for marks, arrows for the two fits,
      a bisected square for two-up, a banded square for page view, a half-disc for day/night */
   /* 6ca — the View group was seven variations on "small square": a trigram, a filled grid, a banded
@@ -11831,6 +12354,10 @@ const MA_ICONS={
   layers:"M24.00 17.82L23.66 17.30L20.48 15.77L13.50 19.29L11.57 19.57L3.29 15.83L0.17 17.42L0.00 18.10L0.28 18.50L10.61 23.66L12.43 24.00L23.72 18.50Z M24.00 11.91L23.66 11.40L20.48 9.87L13.50 13.39L11.63 13.67L10.61 13.45L3.29 9.93L0.17 11.52L0.00 12.20L0.28 12.60L11.01 17.93L12.43 18.10L23.60 12.65Z M0.00 5.90L0.28 6.70L11.52 12.20L12.99 12.03L23.60 6.75L24.00 6.24L23.66 5.50L12.26 0.00L10.67 0.34Z",
   copy:"M1.35 0.76L0.11 2.87L0.11 16.20L1.03 18.04L2.55 18.96L4.82 19.07L5.20 22.10L7.42 23.89L20.75 24.00L22.65 23.24L23.89 21.13L23.89 7.80L22.92 5.91L21.24 4.98L19.18 4.93L18.64 1.63L16.36 0.05L3.25 0.00Z M6.93 6.45L8.02 6.01L20.75 6.01L22.43 7.04L22.81 7.96L22.81 20.97L21.89 22.43L20.59 22.92L8.23 22.92L6.45 22.00L5.96 20.91L5.96 8.02Z M16.96 1.46L17.99 2.82L17.99 4.93L7.86 4.93L6.66 5.31L5.53 6.28L4.88 7.86L4.88 17.93L3.25 17.99L2.17 17.55L1.19 16.04L1.19 3.03L1.68 2.00L3.09 1.14L16.14 1.14Z",
   duplicate:"M9.77 8.18L9.35 8.71L9.35 13.27L4.57 13.38L4.25 13.59L4.14 14.23L4.67 14.65L9.24 14.65L9.35 19.33L9.66 19.75L10.19 19.86L10.62 19.33L10.62 14.76L15.29 14.65L15.72 14.34L15.82 13.81L15.40 13.38L10.73 13.38L10.51 12.42L10.62 8.60L10.41 8.28Z M5.42 0.32L4.25 1.59L4.04 3.82L1.38 4.35L0.00 6.27L0.00 21.77L0.42 22.73L2.23 24.00L17.73 24.00L18.69 23.58L19.75 22.41L19.96 20.07L22.73 19.54L24.00 17.73L23.68 1.38L21.77 0.00Z M2.12 5.52L17.20 5.31L18.48 6.16L18.69 21.24L17.84 22.51L2.44 22.62L1.49 21.88L1.27 6.69Z M6.16 1.49L21.35 1.27L22.30 1.81L22.73 2.65L22.73 17.31L21.88 18.48L19.96 18.48L19.96 6.27L19.43 5.10L17.73 4.04L5.52 4.04L5.42 2.34Z",
+  /* 6k9 — the rubber stamp, traced off the mark Ced sent: dome, neck, platen and the bar
+     under it. Drawn rather than borrowed from a glyph, so it sits at the same weight as the
+     rest of the ribbon at 15px. */
+  stamp:"M12 0.4C9.3 0.4 7.1 2.6 7.1 5.3C7.1 6.6 7.6 7.6 8.2 8.6C8.9 9.7 9.3 10.6 9.5 11.5L14.5 11.5C14.7 10.6 15.1 9.7 15.8 8.6C16.4 7.6 16.9 6.6 16.9 5.3C16.9 2.6 14.7 0.4 12 0.4Z M10.4 12.7L13.6 12.7C14.8 12.7 15.6 13.5 15.6 14.7L15.6 15.6L8.4 15.6L8.4 14.7C8.4 13.5 9.2 12.7 10.4 12.7Z M4.2 15.6L19.8 15.6C21.6 15.6 22.6 16.9 22.6 18.5L22.6 19.0C22.6 19.4 22.3 19.6 21.9 19.6L2.1 19.6C1.7 19.6 1.4 19.4 1.4 19.0L1.4 18.5C1.4 16.9 2.4 15.6 4.2 15.6Z M3.0 21.2L21.0 21.2L21.0 22.0C21.0 23.1 20.1 24.0 19.0 24.0L5.0 24.0C3.9 24.0 3.0 23.1 3.0 22.0L3.0 21.2Z",
   applypages:"M7.22 6.43L0.00 13.80L1.15 14.80L4.18 12.03L1.57 15.37L2.77 16.47L4.97 14.75L3.29 17.10L5.23 19.03L8.05 16.42L5.80 19.50L7.11 20.92L12.44 15.90L7.69 21.33L8.84 22.64L10.46 21.80L9.57 23.16L10.30 24.00L17.57 16.63Z M22.80 0.00L21.07 0.21L18.82 1.52L14.01 6.95L10.09 3.24L9.67 3.24L7.90 5.07L7.95 5.44L18.61 16.05L19.03 16.00L20.76 14.01L16.99 9.93L20.44 7.16L23.22 4.03L24.00 1.57L23.58 0.42Z"
 };
 /* one inline drawing, sized to sit on the same line as a word */
@@ -11849,11 +12376,10 @@ function maIconEl(name,px){
 const RIBBON_SHAPES={
   homeBtn:"--i-home", openBtn:"--i-file", cacheBtn:"--i-cache",   /* 6j1 — maBtn keeps its glyph */
   saveBtn:"--i-save", copyBtn:"--i-copy", clearBtn:"--i-clear",
-  importBtn:"--i-transfer",     /* the two-arrow mark: values coming in from another document */
   railToggle:"--i-eye",         /* 6gh — show / hide the page list */
   orgBtn:"--i-org",       /* 6ep — a stack of pages, not another pair of arrows */
   /* 6jo — the two the ribbon shares with the selection bar, so one idea has one picture */
-  groupBtn:"--i-group", markupsBtn:"--i-library"
+  groupBtn:"--i-group", markupsBtn:"--i-library", stampBtn:"--i-stamp"   /* 6k9 */
 };
 const MODE_SHAPES={ select:"--i-arrow", redline:"--i-pen", crossout:"--i-cross",
                     strikerow:"--i-strikerow", cross:"--i-striketext", line:"--i-line",

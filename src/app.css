@@ -88,6 +88,7 @@
        ribbon looks like it. */
     /* 6jo — Ced's own drawings, traced; the ribbon masks with them, the bar draws them inline */
     --i-group:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M14.98%2010.42L14.55%2010.95L11.17%2016.97L11.28%2017.61L11.81%2017.99L19.06%2017.99L19.33%2017.88L19.70%2017.34L19.65%2016.81L16.32%2010.95L15.79%2010.36Z%20M15.36%2012.99L15.52%2012.99L17.23%2015.95L17.34%2016.16L17.29%2016.32L13.58%2016.32L13.53%2016.27L13.64%2015.95Z%20M8.54%206.01L6.98%206.55L5.91%207.52L5.26%208.86L5.15%2010.31L5.69%2011.87L6.60%2012.89L7.79%2013.53L9.45%2013.69L11.01%2013.15L12.03%2012.24L12.67%2011.06L12.83%209.40L12.67%208.64L12.30%207.84L11.38%206.82L10.20%206.17Z%20M0.38%200.11L0.00%204.46L1.72%205.15L1.72%2018.85L0.05%2019.38L0.11%2023.62L4.46%2024.00L5.15%2022.28L18.85%2022.28L19.38%2023.95L23.62%2023.89L24.00%2019.54L22.28%2018.85L22.28%205.15L23.95%204.62L23.89%200.38L19.54%200.00L18.85%201.72L5.15%201.72L4.62%200.05Z%20M5.15%203.38L18.85%203.38L19.01%204.72L20.62%205.15L20.62%2018.85L19.28%2019.01L18.85%2020.62L5.15%2020.62L4.99%2019.28L3.38%2018.85L3.38%205.15L4.72%204.99Z%22%2F%3E%3C%2Fsvg%3E");
+    --i-stamp:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%200.4C9.3%200.4%207.1%202.6%207.1%205.3C7.1%206.6%207.6%207.6%208.2%208.6C8.9%209.7%209.3%2010.6%209.5%2011.5L14.5%2011.5C14.7%2010.6%2015.1%209.7%2015.8%208.6C16.4%207.6%2016.9%206.6%2016.9%205.3C16.9%202.6%2014.7%200.4%2012%200.4Z%20M10.4%2012.7L13.6%2012.7C14.8%2012.7%2015.6%2013.5%2015.6%2014.7L15.6%2015.6L8.4%2015.6L8.4%2014.7C8.4%2013.5%209.2%2012.7%2010.4%2012.7Z%20M4.2%2015.6L19.8%2015.6C21.6%2015.6%2022.6%2016.9%2022.6%2018.5L22.6%2019.0C22.6%2019.4%2022.3%2019.6%2021.9%2019.6L2.1%2019.6C1.7%2019.6%201.4%2019.4%201.4%2019.0L1.4%2018.5C1.4%2016.9%202.4%2015.6%204.2%2015.6Z%20M3.0%2021.2L21.0%2021.2L21.0%2022.0C21.0%2023.1%2020.1%2024.0%2019.0%2024.0L5.0%2024.0C3.9%2024.0%203.0%2023.1%203.0%2022.0L3.0%2021.2Z%22%2F%3E%3C%2Fsvg%3E");
     --i-library:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0.00%204.75L1.18%2018.72L1.70%2019.90L12.66%2022.72L22.56%2019.57L24.00%205.41L23.74%204.56L12.59%207.38L0.52%204.56Z%20M21.97%202.66L19.93%203.25L16.46%204.03L15.34%204.43L13.97%205.28L13.05%206.20L12.98%206.46L21.90%204.23Z%20M1.97%202.59L2.03%204.16L10.95%206.46L10.95%206.26L9.97%205.28L8.59%204.43L7.48%204.03L5.64%203.64Z%20M19.15%201.28L15.93%202.00L15.02%202.33L13.97%202.98L13.18%203.90L12.85%204.62L12.79%205.28L12.92%205.28L13.38%204.75L14.03%204.23L14.95%203.70L16.07%203.31L19.02%202.66Z%20M4.79%201.28L4.92%202.59L6.95%203.05L8.98%203.70L9.90%204.23L10.62%204.82L11.02%205.28L11.15%205.28L11.08%204.62L10.75%203.90L10.43%203.44L9.51%202.66L8.92%202.33L8.00%202.00Z%22%2F%3E%3C%2Fsvg%3E");
     --i-org:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%2214%22%20height%3D%2216%22%20rx%3D%221.6%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%229%22%20width%3D%224%22%20height%3D%222.2%22%20rx%3D%221%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2213%22%20width%3D%224%22%20height%3D%222.2%22%20rx%3D%221%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%222%22%20width%3D%2214%22%20height%3D%222.4%22%20rx%3D%221.2%22%2F%3E%3C%2Fsvg%3E");
     --i-star:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%22-1.6%20-1.6%2027.2%2027.2%22%3E%3Cpath%20d%3D%22M12%200.8c1.05%206.2%205%2010.15%2011.2%2011.2-6.2%201.05-10.15%205-11.2%2011.2-1.05-6.2-5-10.15-11.2-11.2C7%2010.95%2010.95%207%2012%200.8Z%22%2F%3E%3C%2Fsvg%3E");
@@ -98,8 +99,23 @@
        machines this tool is used on; everything after it is the fallback chain for a machine without
        it, in descending order of resemblance. Nothing is fetched — a web font would mean a network
        round trip on a tool that is meant to open and work with no connection at all. */
-    --sans:"Aptos Display","Aptos","Segoe UI Variable Display","Segoe UI",
-           "Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+    /* 6l6 — HELVETICA NEUE, THROUGHOUT. Ced: "also use helvetica neue for the whole ui."
+       It was already in this stack, fifth, behind two Microsoft faces — so the interface wore Aptos
+       on Windows and Helvetica Neue only on a Mac. It leads now, with Helvetica behind it for the
+       machines that have the one and not the other, Arial behind that, and the two Segoe entries
+       kept at the end so a Windows machine with neither still gets a face chosen rather than
+       whatever `sans-serif` resolves to.
+
+       Nothing is fetched. A web font would mean a network round trip on a tool that is meant to open
+       and work with no connection at all, which is the same reason the stack has always been local.
+
+       Two families are deliberately NOT part of this. `.anno .ed` — the marks themselves — stays
+       Arial, because the export writes Helvetica and the two are metric-compatible, and every figure
+       in both parity suites is measured against that pairing: restyling a mark here would move the
+       ink on the sheet away from the ink in the file. `.cop-pv-l`, the stamp's preview, stays Arial
+       for the same reason: it is a picture of what will be drawn, not a piece of chrome. */
+    --sans:"Helvetica Neue",Helvetica,Arial,
+           "Aptos Display","Aptos","Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
   }
   /* ---- day mode: same structure, inverted surfaces. Page canvas stays white in both. ---- */
   html.light{
@@ -126,6 +142,13 @@
   html,body{transition:background-color .18s ease,color .18s ease}
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  /* 6l6 — AND THE CONTROLS TOO. A form control does not inherit `font-family`: left alone, every
+     button, field and menu in the interface wears whatever the browser picks for a widget, which is
+     a different face on every machine and none of them the one above. Measured before this line, with
+     the stack already changed: `body` resolved to Helvetica Neue and `.btn`, `.tool` and the selection
+     bar's buttons all resolved to Arial. This is chrome only — a mark's `.ed` is a div and keeps the
+     Arial that the export's Helvetica is matched against. */
+  button,input,select,textarea,optgroup{font-family:inherit}
   /* 6gm — THE COLUMN IS AS WIDE AS THE WINDOW, AND THE USER OWNS ITS WIDTH. Ced: "can you maximize the
      space of the top ribbon based on how big the space at the top is? i think the WIP can still fit at
      the top row. also have the user the freedom to adjust the top ribbon like the right ribbon."
@@ -315,6 +338,10 @@
      interface to a hue no palette could move. The redlines on the page stay red; the indicator that
      points at them belongs to the chrome. */
   #rail .rt.done{background:var(--accent);border-color:var(--accent);color:var(--ico-inv)}
+  /* 6kg — stamped, but not corrected: the same colour at a third of the weight, so a rail of
+     stamped pages still reads as "nothing to look at here" at a glance. */
+  #rail .rt.done.stamponly{background:color-mix(in srgb,var(--accent) 30%,transparent);
+    border-color:color-mix(in srgb,var(--accent) 55%,transparent);color:var(--ink)}
   #rail .rt.cur{outline:2px solid var(--accent);outline-offset:1px}
   .main{flex:1;min-width:0}
 
@@ -948,7 +975,20 @@
   label.mini{font-size:11px;color:var(--muted);display:flex;flex-direction:row;align-items:center;gap:5px;white-space:nowrap}
   input,select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:7px 9px;font-size:12.5px;font-family:var(--sans)}
   input:focus,select:focus{outline:none;border-color:var(--accent)}
-  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.14s;white-space:nowrap}
+  /* =================================================================================================
+     6kr — A BUTTON'S CONTENTS SIT IN THE MIDDLE OF IT. Ced: "also fix the x, its not in the middle of
+     the circle."
+     The ✕ on the Assist panel's head is a `.btn` squared to 26x26 with `padding:0`, and `.btn` was
+     `inline-flex; align-items:center` with nothing said about the cross axis — so the glyph was
+     centred top to bottom and packed against the LEFT. Measured on the built page: the glyph box ran
+     1px from the left edge and 14px from the right, inside a 26px circle, which is 6.5px off centre
+     and exactly what the screenshot shows.
+     A `.btn` with a label is as wide as its label plus its padding, so centring changes nothing for
+     any of them; it only reaches the ones given a width of their own, which is every icon button —
+     and each of those had to remember to say it. One of them already did (`.btn-redline` in the right
+     ribbon), which is how a default earns its place. The vertical was already right to a quarter of a
+     pixel — ink centre 12.76 in a 26px box — so only the one axis changes. */
+  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:.14s;white-space:nowrap}
   .btn:hover{border-color:var(--accent);color:var(--ink-strong)}
   .btn:disabled{opacity:.45;cursor:not-allowed}
   .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#ffffff}
@@ -1144,11 +1184,26 @@
      moving dashes that say it is on its way somewhere. Two outlines, white over dark, so the dashes
      read on a white sheet and on a dark drawing alike, and only the offset animates — nothing is laid
      out again per frame. */
-  @keyframes ma-ants{ to{ background-position:14px 0, -14px 0, 0 -14px, 0 14px; } }
+  /* 6k6 — AND THE ANTS ACTUALLY WALK ROUND THE SHAPE. Ced: "change the animation of cut, i think it
+     is broken, just do it on the border of the shape."
+     It was broken, and in a way a still screenshot hides. The four edges are four background layers,
+     each anchored to its own side — `0 0, 0 100%, 0 0, 100% 0`. The `to` keyframe listed four
+     offsets and nothing else, so every layer animated from its own anchor to a plain `Npx 0`: the
+     bottom edge travelled from the foot of the box to the top of it, the right edge from the right
+     side to the left, and what should have been a rectangle crawling in place became two edges
+     sliding diagonally off the mark. The anchors belong in BOTH keyframes — only the offset along
+     each edge may change.
+     The ants also sat 3px outside the mark on a rounded rectangle of their own. They trace the
+     shape's own outline now, which is what was asked for, and the mark is no longer faded: the one
+     thing that says "this is on its way somewhere" is the border, moving. */
+  @keyframes ma-ants{
+    from{ background-position:0 0, 0 100%, 0 0, 100% 0; }
+    to{   background-position:14px 0, -14px 100%, 0 -14px, 100% 14px; }
+  }
   @keyframes ma-antsvg{ to{ stroke-dashoffset:-14; } }
   .anno.cutting{ z-index:3; }
   .anno.cutting::after{
-    content:""; position:absolute; inset:-3px; pointer-events:none; border-radius:3px;
+    content:""; position:absolute; inset:0; pointer-events:none;
     background-image:
       linear-gradient(90deg,#fff 50%,#111418 50%), linear-gradient(90deg,#fff 50%,#111418 50%),
       linear-gradient(0deg,#fff 50%,#111418 50%),  linear-gradient(0deg,#fff 50%,#111418 50%);
@@ -1157,7 +1212,6 @@
     background-repeat:repeat-x, repeat-x, repeat-y, repeat-y;
     animation:ma-ants .7s linear infinite;
   }
-  .anno.cutting .ed{ opacity:.55; }
   svg.draw .cutants{ stroke-dasharray:7 7; animation:ma-antsvg .7s linear infinite; }
   svg.draw .cutants.b{ stroke-dashoffset:-7; }
   @media (prefers-reduced-motion:reduce){
@@ -1458,13 +1512,13 @@
   .boot-mark svg{display:block;width:100%;height:auto}
   .boot-mark .bm-ink{fill:currentColor}
   .boot-mark .bm-acc{fill:currentColor;opacity:.42}
-  .boot-sub{font-family:Helvetica,Arial,sans-serif;font-size:8px;font-weight:300;letter-spacing:.78em;
+  .boot-sub{font-family:var(--sans);font-size:8px;font-weight:300;letter-spacing:.78em;
     color:var(--muted);margin:9px 0 0 .78em;text-transform:uppercase}
   .boot-track{width:190px;height:2px;border-radius:2px;background:var(--line);margin:26px 0 0;
     overflow:hidden}
   .boot-track i{display:block;height:100%;width:0;background:var(--accent);
     transition:width .22s ease}
-  .boot-stage{font-family:Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;
+  .boot-stage{font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;
     color:var(--faint);margin-top:11px;text-transform:uppercase;min-height:12px}
   body.chromehide .wrap{padding-top:0;padding-bottom:0}
   /* the banner and status strip go too — page view is for reading the page */
@@ -1660,6 +1714,13 @@
   #toolbar #analyzeBtn.ico.icoimg:hover::before{background:var(--assist-ink,#ffffff)}
   #toolbar #analyzeBtn.ico.icoimg:disabled::before{background:var(--muted)}
   #toolbar #cacheBtn.ico.icoimg::before{background:var(--danger)}
+  /* 6ku — AND THE STAMP IS RED. Ced: "make the logo for stamp red too like the delete icons."
+     It is the one Assist tool that puts ink on the sheet rather than reading it, and it is the ink
+     the whole package is about — so it reads in the mark colour, by the same mechanism the
+     destructive pair already use: the glyph is a MASK, painted with `background`, not `color`. */
+  #toolbar #stampBtn.ico.icoimg::before{background:var(--danger)}
+  #toolbar #stampBtn.ico:hover{border-color:var(--danger)}
+  #toolbar #stampBtn.ico.icoimg:disabled::before{background:var(--muted)}
   #toolbar button.ico.on.icoimg[data-mode="redline"]::before,
   #toolbar button.ico.active.icoimg[data-mode="redline"]::before{background:var(--ico-inv)!important}
   /* Export: a tick in a circle. The label stays in the DOM (font-size:0) so nothing that reads it breaks.
@@ -2390,7 +2451,7 @@
      to the size rather than copied: the lockup's .84em is for 8px type, and at 14px the same value would
      throw the words apart. Both sit a step darker than the lockup's --faint, which is the one thing asked
      for that the lockup itself does not do. */
-  .az-title{font-family:Helvetica,"Helvetica Neue",Arial,sans-serif;
+  .az-title{font-family:var(--sans);
     font-size:14px;font-weight:600;letter-spacing:.17em;text-transform:uppercase;
     color:var(--ink-strong)}
   .az-sub{font-size:12px;color:var(--muted);margin-top:2px}
@@ -2407,7 +2468,7 @@
      of nothing. */
   .az-tab{border:1px solid var(--line);border-bottom:none;background:var(--panel2);color:var(--ink);
     border-radius:9px 9px 0 0;padding:8px 8px;
-    font-family:Helvetica,"Helvetica Neue",Arial,sans-serif;
+    font-family:var(--sans);
     font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;cursor:pointer}
   .az-tab.active{background:var(--panel);color:var(--ink-strong);border-color:var(--accent)}
   /* the count is a number in a pill: tracking would push it off its own centre */

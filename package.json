@@ -1,6 +1,6 @@
 {
   "name": "mark-it-up",
-  "version": "37.0.0",
+  "version": "42.0.0",
   "private": true,
   "description": "Single-file PDF redlining tool for mount analyses and construction drawings",
   "type": "module",
@@ -11,12 +11,15 @@
     "build": "node build.mjs --target=web",
     "build:artifact": "node build.mjs --target=artifact",
     "build:all": "node build.mjs --target=both",
-    "check": "node --check src/app.js && node --check src/ma.js && node --check src/toolpop.js && node --check src/selbar.js && node --check src/selectkit.js && node --check src/fonts.js",
+    "check": "node --check src/app.js && node --check src/ma.js && node --check src/stamp.js && node --check src/toolpop.js && node --check src/selbar.js && node --check src/selectkit.js && node --check src/fonts.js",
     "verify:packers": "node scripts/verify-packers.mjs",
     "dev": "node build.mjs --target=web && node scripts/serve.mjs",
     "test": "python3 test/tools.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\"",
     "test:wysiwyg": "python3 test/wysiwyg.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\"",
-    "test:text": "python3 test/textparity.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\""
+    "test:text": "python3 test/textparity.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\"",
+    "test:stamp": "python3 test/stampparity.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\"",
+    "test:behave": "python3 test/behave.py dist/mark-it-up.artifact.html \"$MIU_FIXTURE\"",
+    "release:check": "node scripts/release-check.mjs"
   },
   "license": "UNLICENSED"
 }
