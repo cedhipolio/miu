@@ -824,10 +824,17 @@ function _cleanA(a){ return { id:a.id, page:a.page, fixFree:a.fixFree, nx:a.nx, 
      over it again — Ced: "the result, if copy and pasted, should not change looks". */
   _tintCol:a._tintCol,
   /* 6gs — the picture as it was first made, so Restore in the picture editor can bring it back after
-     a save, a reopen, or a copy — and so an edit is never one-way */
+     a save or a copy — and so an edit is never one-way.
+     6le — THIS LIST IS ALSO WHAT GOES IN THE FILE, and `srcOrig` and `picRaw` below hold a whole
+     picture each. They belong here, because a snapshot, an undo, a copy and the browser autosave all
+     want them and all live in memory. They must NOT reach the exported PDF: `_stripPicBytes` takes
+     them out of the payload and out of every tag on the way, and `PIC_FIELDS` is the list to add to
+     if a fourth field ever holds pixels. */
   srcOrig:a.srcOrig,
   /* 6jb — the picture WITHOUT its frame, and how much of the box the frame takes. Kept with the mark
-     so the width can still be changed, or the frame taken off, after a save and a reopen. */
+     so the width can still be changed, or the frame taken off, after a save and a reopen.
+     6le — the three small numbers travel in the file; the picture does not. `maPicRawOf` crops it back
+     out of the framed pixels, which is exact, so nothing is lost by leaving it behind. */
   picRaw:a.picRaw, _frPadX:a._frPadX, _frPadY:a._frPadY, _frKey:a._frKey,
   /* 6jc — which named layer it belongs to */
   lay:a.lay }; }
@@ -2905,6 +2912,7 @@ function applyColWidth(px,save){
   try{ document.body.classList.toggle("colmax", val>=max-4); }catch(e){}
   try{ markRibbonRowsSoon(); }catch(e){}
   try{ syncRailTopSoon(); }catch(e){}     /* 6gu — a wider ribbon is a taller ribbon is a new top */
+  try{ syncPageColSoon(); }catch(e){}     /* 6lb — the sheet keeps the window, not the column */
   if(px!=null&&save!==false){
     /* within 4px of the edge counts as "fill", so dragging back out resumes tracking the window */
     try{ localStorage.setItem(COL_W_KEY, val>=max-4 ? "fill" : String(val)); }catch(e){}
@@ -3372,6 +3380,7 @@ async function renderAll(){
   }
   updateRail();
   setupVirtualization();
+  try{ syncPageColSoon(); }catch(e){}     /* 6lb — a new document gets the window, not the column */
 }
 /* 6gr — the printed text, as clickable boxes over the picture. One function, because the re-sharpen
    after a zoom rebuilds it at the new scale and the two must agree exactly. */
@@ -5782,6 +5791,42 @@ function maLayerStamp(){
   (S.lines||[]).forEach(l=>{ if(l.lay==null)l.lay=cur; });
 }
 function maPicUnframed(a){ return (a&&a.picRaw)||(a&&a.src)||""; }
+/* ==================================================================================================
+   6le — THE UNFRAMED PICTURE, RECOVERED BY CROPPING WHEN IT WAS NOT CARRIED.
+   `picRaw` no longer travels in the file (see `_stripPicBytes`), so a framed photo comes back from a
+   reopen with its frame in its pixels and no separate copy of what was underneath. That costs nothing,
+   because the frame is drawn AROUND the picture and the picture is drawn on top of it last:
+   `maPicFrame` stamps the silhouette round a circle of radius `pad` and then does
+   `g.drawImage(im,pad,pad)` at full alpha, into a lossless PNG. So the rectangle inset by `_frPadX` /
+   `_frPadY` IS the original, pixel for pixel, and cropping it back out is exact.
+   The one case where it is not exact is a picture with transparency in it, where the ring shows
+   through the holes by design and a crop would bake that showing-through in. A photo has no holes; and
+   the alternative on offer was losing the photo altogether.
+   ================================================================================================== */
+function maPicRawOf(a){
+  if(!a)return Promise.resolve("");
+  if(a.picRaw)return Promise.resolve(a.picRaw);
+  const px=+a._frPadX||0, py=+a._frPadY||0;
+  if(!(a.src&&px>0&&py>0&&px<0.5&&py<0.5))return Promise.resolve(a.src||"");
+  return new Promise(res=>{
+    const im=new Image();
+    im.onerror=()=>res(a.src||"");
+    im.onload=()=>{
+      try{
+        const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height;
+        const sx=Math.round(iw*px), sy=Math.round(ih*py);
+        const cw=Math.max(1,iw-sx*2), ch=Math.max(1,ih-sy*2);
+        const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+        cv.getContext("2d").drawImage(im,sx,sy,cw,ch,0,0,cw,ch);
+        const url=cv.toDataURL("image/png");
+        cv.width=cv.height=0;
+        LOG&&LOG("recovered a photo's unframed picture by cropping",iw+"x"+ih,"to",cw+"x"+ch);
+        res(url);
+      }catch(e){ res(a.src||""); }
+    };
+    im.src=a.src;
+  });
+}
 /* the pads are fractions of the FRAMED box, so the un-framed box survives the mark being resized */
 function maPicBox(a){
   const px=a._frPadX||0, py=a._frPadY||0;
@@ -5798,7 +5843,12 @@ function maPicFrame(a){
   if(!a||a.kind!=="img"||a._frBusy)return Promise.resolve(false);
   const key=maPicFrameKey(a);
   if(a._frKey===key)return Promise.resolve(false);
-  const raw=maPicUnframed(a);
+  /* 6le — ask for the unframed picture rather than reading a field that may not have travelled. On a
+     mark that still carries `picRaw` this is the same value it always was and resolves at once. */
+  a._frBusy=true;
+  return maPicRawOf(a).then(raw=>{ a._frBusy=false; return _maPicFrameWith(a,key,raw); });
+}
+function _maPicFrameWith(a,key,raw){
   if(!raw)return Promise.resolve(false);
   const B=maPicBox(a);                    /* the picture's own box, whatever the frame is doing */
   const sw=+(a.sw||0);
@@ -6436,7 +6486,22 @@ function layoutAnnos(){
          places the block up, down or in the middle of the box. */
       ed.style.display="grid"; ed.style.justifyContent="stretch"; ed.style.justifyItems="stretch";
       ed.style.gridAutoRows="min-content";
-      ed.style.whiteSpace="pre-wrap"; ed.style.overflow="hidden"; ed.style.resize="none";
+      /* 6lc — A TEXT BOX SHOWS THE LINES IT CANNOT FIT; A SHAPE CLIPS.
+         Ced, again: "wrapping in textbox is still not working accordingly." Screen and file agree on
+         WHERE the words break — measured on a 53-character note at three widths, the two line sets are
+         identical. What was wrong is what happens to the lines that do not fit: `overflow:hidden` here
+         cut them off without a trace, so narrowing a hand-sized box (which 6ke rightly stops growing
+         back) looked like text being eaten rather than text being re-wrapped. 6kf said this in words —
+         "it OVERFLOWS rather than hides: once 6ke lets a hand-sized box stay the height it was given,
+         `overflow:hidden` would make the extra lines silently invisible, which is the one outcome worse
+         than a box that is too small" — and then set `hidden` three hundred lines above, where every
+         free box passes. Measured on the built page, the same 53-character note narrowed three times
+         by its east grip: 2 lines in 38px of 38px, then 3 lines needing 41px, then 5 needing 56px —
+         so at the narrowest two of the five lines sat outside a box that was clipping them. Same
+         gestures with this line changed and nothing else: identical line breaks, nothing clipped.
+         A SHAPE keeps the clip: its fill and hatch are painted on this element's background and must
+         stop at the outline. Only a text box, which has neither, lets its words show. */
+      ed.style.whiteSpace="pre-wrap"; ed.style.overflow=(tbox&&!shp)?"visible":"hidden"; ed.style.resize="none";
       /* 6ht — HOW IT BREAKS is the mark's own choice now. A callout and a shape hold prose and break
          between words; a text box fills each line to the edge, breaking inside a word where it runs
          out, which is what the printed columns do and what Ced asked a narrowed box to do. Either can
@@ -7101,10 +7166,32 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          the DRAW gesture has: hold Ctrl and the box squares off — a perfect square, a true circle. The
          longer side wins, and the edge you are NOT holding stays where it is, so the shape grows from
          the corner opposite the handle rather than jumping. */
-      if((startCtrl||e.ctrlKey||e.metaKey)&&!isImg){
+      /* 6lc — A TEXT BOX IS NOT A SHAPE, AND CTRL MEANS SOMETHING ELSE ON ONE.
+         Ced: "expanding a text using ctrl should only make the textbox longer in width not in height
+         if dragged with the left or right handle." On a shape Ctrl squares the box off, which is what
+         it has always meant; on a TEXT box the same modifier has meant "grow about the middle" since
+         6dr — a redline sits centred over the value it covers, so widening it from one side walks it
+         off that value. A text box arrived in this branch with the shapes (6kn made every free box one
+         gesture) and picked up the square-off with them, so Ctrl on a side handle was turning a note
+         into a square: measured on a 240x29px box, one Ctrl-drag of the `e` handle took it to 331x331.
+         So Ctrl on a text box's SIDE handle grows the width about the middle and leaves the height
+         exactly where it was, and Ctrl on a corner is left to the shape rule, where it still squares. */
+      const _ctrl=(startCtrl||e.ctrlKey||e.metaKey);
+      const _tbSide=isTextBox(a)&&!isImg&&(pos==="e"||pos==="w");
+      if(_ctrl&&_tbSide){
+        const grow=(pos==="e"?dx:-dx);                   /* outward on either side is positive */
+        nw=Math.max(FW,startW+grow*2);
+        nh=startH;                                       /* the height is not in this gesture */
+      }
+      else if(_ctrl&&!isImg){
         const side=Math.max(nw,nh); nw=side; nh=side;
       }
-      let [nl,nt]=place(nw,nh);
+      /* 6lc — growing about the middle means the CENTRE is what stays put, not the opposite edge, so
+         this one gesture places itself rather than asking `place()`, which holds the far edge. The
+         box turns about its centre, so a rotated box needs no extra correction here. */
+      let [nl,nt]=(_ctrl&&_tbSide)
+        ? [startLeft+(startW-nw)/2, startTop]
+        : place(nw,nh);
       ed.style.width=nw+"px"; ed.style.height=nh+"px";
       d.style.left=nl+"px"; d.style.top=nt+"px";
       a.nw=nw/w; a.nh=nh/h0;
@@ -7115,7 +7202,15 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          their old point size — which is why a 30pt note floored at 90px and a 6pt one at 11px, the
          "minimum relies on size" Ced reported. Only a vertical handle rescales, exactly as the
          ordinary text path does: a side handle re-wraps, which is what a side handle is for. */
-      if(isTextBox(a)&&!isImg&&startH>0&&(pos.indexOf("n")>=0||pos.indexOf("s")>=0)){
+      /* 6lc — AND NOW ONLY A CORNER DOES. Ced: "resizing using the top and bottom handles should not
+         make the font smaller in texts. it should only work when the corner handles were used."
+         `pos.indexOf("n")>=0` is true of `nw` and `ne` as well as `n`, so this read every handle but
+         `e` and `w` — eight handles, six of which changed the point size. A top or bottom handle is
+         how you give a note more room to wrap into, and taking the type size with it meant you could
+         not do that at all: the box got taller and the words grew to match, so nothing re-wrapped.
+         A CORNER is the one that scales the mark as a picture, and it is the only one left that does.
+         `pos.length===2` is exactly the four corners. */
+      if(isTextBox(a)&&!isImg&&startH>0&&pos.length===2){
         const k=nh/startH;
         const npt=Math.max(0.5,(startPx/S.scale)*k);
         if(Math.abs(npt-a.size)>0.01){
@@ -7172,7 +7267,10 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
     /* 6dt — the text follows the box as it is dragged: narrow it and the value wraps inside rather
        than spilling past the edge you are dragging. */
     if(pos==="e"||pos==="w"||pos.length===2) fitTextInside(a,ed,pg);
-    if(pos==="n"||pos==="s"||pos.length===2){ // corners + top/bottom scale font
+    /* 6lc — CORNERS ONLY, the same rule the boxed path now has. A plain redline has no box of its own,
+       so a top or bottom handle has nothing left to change and does nothing, which is the honest
+       answer to "it should only work when the corner handles were used". */
+    if(pos.length===2){                       // a corner scales the type; an edge does not
       const delta=(pos.includes("s")?dy:-dy);
       /* 6ha — down to 2pt, the same floor the panel now has */
       const npx=Math.max(2*S.scale,startPx+delta); ed.style.fontSize=npx+"px"; a.size=npx/S.scale;
@@ -7900,10 +7998,65 @@ function syncMarkClear(){
 let _markRaf=0;
 function syncMarkClearSoon(){
   if(_markRaf)return;
-  _markRaf=requestAnimationFrame(()=>{ _markRaf=0; syncMarkClear(); });
+  _markRaf=requestAnimationFrame(()=>{ _markRaf=0; syncMarkClear(); syncPageCol(); });
 }
 window.addEventListener("resize",syncMarkClearSoon);
 window.addEventListener("scroll",syncMarkClearSoon,{passive:true});
+/* ================================================================================================
+   6lb — THE READING MEASURE CAPS THE CHROME, NOT THE SHEET.
+   ------------------------------------------------------------------------------------------------
+   Ced: "make sure the pdf is in the middle of the ui", with a capture of an 11x17 sheet jammed against
+   the right edge of the window and 476px of empty white to the left of it.
+
+   `.wrap` is a reading column — `max-width:var(--col-w)` with `margin:0 auto` — and the page column
+   lives inside it. A sheet NARROWER than that column is centred in it by `.page`'s auto margins, and
+   that has always looked right. A sheet WIDER than it is not: auto margins resolve to zero when there
+   is no free space to share, so the sheet goes flush to the column's LEFT edge and the whole overflow
+   hangs off to the right. Measured on Ced's own window — 1895px wide, column dragged to 951px, sheet
+   zoomed to 1322px: the sheet sat at 546..1868, so gapL=476 and gapR=27, and the reproduction lands
+   within 2px of his capture. Nothing was broken; the column cap was simply being asked a question it
+   is not the answer to. The cap exists so the RIBBON and the chrome do not stretch to a 2000px window.
+   Where the paper sits is a different question, and its answer is the space the chrome leaves.
+
+   So the page column escapes the cap by exactly as much as it needs to span that space, and nothing
+   else moves. `_chromeInset()` is already the one function that knows how far in the chrome reaches on
+   each side — the rail, the side ribbon, the marks list, the Mount Analysis panel — so the free space
+   is `inset.left .. innerWidth-inset.right` and the escape is the difference between that and where
+   `.main`'s content box already ends. `.main` is measured rather than `#pages` because `.main`'s own
+   box does not depend on the margins being written, so this is idempotent and needs no reset pass.
+
+   Once the column spans the free space, `.page`'s auto margins do the centring again, and a sheet too
+   wide for even that goes flush to the free space's LEFT edge — reachable, and scrolling right reveals
+   the rest, which is the behaviour that loses nothing.
+   ================================================================================================ */
+let _pcL=null,_pcR=null;
+function syncPageCol(){
+  try{
+    const ps=document.getElementById("pages"); if(!ps)return;
+    const host=ps.parentElement; if(!host)return;
+    if(document.documentElement.classList.contains("nodoc")){
+      if(_pcL!==0||_pcR!==0){ ps.style.marginLeft="0px"; ps.style.marginRight="0px"; _pcL=_pcR=0; }
+      return;
+    }
+    const r=host.getBoundingClientRect(); if(!(r.width>0))return;
+    const cs=getComputedStyle(host);
+    const cl=r.left +(parseFloat(cs.paddingLeft )||0)+(parseFloat(cs.borderLeftWidth )||0);
+    const cr=r.right-(parseFloat(cs.paddingRight)||0)-(parseFloat(cs.borderRightWidth)||0);
+    const ins=_chromeInset();
+    const freeL=ins.left, freeR=window.innerWidth-ins.right;
+    /* only ever OUTWARD: the column may escape its cap, never pull in tighter than the layout
+       already placed it, or a narrow window would start squeezing the paper. */
+    const dl=Math.max(0,cl-freeL), dr=Math.max(0,freeR-cr);
+    if(_pcL!==null&&Math.abs(dl-_pcL)<0.5&&Math.abs(dr-_pcR)<0.5)return;
+    _pcL=dl; _pcR=dr;
+    ps.style.marginLeft =(-dl)+"px";
+    ps.style.marginRight=(-dr)+"px";
+    /* the column just changed width, and `resizePageBoxes` decides per page whether it fits —
+       auto margins if it does, flush left if it does not. That decision is now stale. */
+    try{ if(typeof resizePageBoxes==="function")resizePageBoxes(); }catch(e){}
+  }catch(e){}
+}
+function syncPageColSoon(){ syncMarkClearSoon(); }
 /* 6gq — THE RIBBON'S SIDEWAYS OFFSET. A zoomed-in sheet makes the document scroll across, and a sticky
    element can only hold inside its own containing block — the ribbon is that block's full width, so it
    has no room to stick in and travels with the page. `--sx` is the horizontal scroll, and the ribbon
@@ -8890,9 +9043,34 @@ function pasteAnnos(){
      else, so a cut you never paste has cost you nothing. */
   const _cut=maCutCommit();
   layoutAnnos(); drawAllLines(); updateRail(); updateCount();
-  newIds.forEach(id=>S.selMulti.add(id));
-  newLids.forEach(id=>S.selMultiL.add(id));
-  paintMulti();
+  /* ==============================================================================================
+     6ld — A PASTE OF ONE MARK IS AN ORDINARY SELECTION.
+     Ced: "pasting should select the pasted item where you can already drag it immediately."
+     6gu stopped the paste hovering and left the marks "selected and ready to be dragged like anything
+     else" — in `S.selMulti`, which for a SET is right and for ONE mark is not. Measured on the built
+     page, pasting a single text box: `S.sel` came back `null`, `S.selMulti` held the one id, and
+     there was no `.anno.selui .rz` anywhere on the page. Dragging it did work — `dragMulti` takes
+     that gesture — so what was missing was everything else a selection is: no grips, so the mark
+     could not be resized without first clicking it again; and the floating bar was the multi bar,
+     offering what you do to a SET rather than this mark's own properties.
+     One mark pasted is therefore selected the way one mark clicked is: `selectAnno`, its own grips,
+     its own bar. A set keeps the group selection, which is what a set is.
+     And the mode comes back to Select, because a paste is an edit. Measured the same way: pasting
+     with the Text tool still in hand left `S.mode` on `text`, so the next drag drew a new box instead
+     of working on what had just arrived. 6l1's `selNotFromDraw` is told, so Escape reads this as a
+     selection rather than as something left over from a tool.
+     ============================================================================================== */
+  const _one=(newIds.length===1&&newLids.length===0);
+  const _oneL=(newLids.length===1&&newIds.length===0);
+  try{ if(S.mode!=="select")setMode("select"); }catch(e){}
+  try{ selNotFromDraw(); }catch(e){}
+  if(_one){ clearMulti(); selectAnno(newIds[0]); }
+  else if(_oneL){ clearMulti(); selectLine(newLids[0]); }
+  else{
+    newIds.forEach(id=>S.selMulti.add(id));
+    newLids.forEach(id=>S.selMultiL.add(id));
+    paintMulti();
+  }
   /* 6gu — A PASTE LANDS, IT DOES NOT HOVER. Ced: "make sure shortcuts also work (copy paste
      delete) in keyboard." Copy and Delete always did; paste put the marks on the page and then left
      them FOLLOWING THE CURSOR until you clicked, so the natural next gesture — pasting and then
@@ -9423,9 +9601,61 @@ document.addEventListener("keydown",e=>{
    Base64 has no backslashes, so nothing in it can be re-escaped on the way through. Older files are
    still read: plain JSON first, and failing that the same JSON with its control characters escaped
    back to what they were before the PDF parser got to them. */
+/* ==================================================================================================
+   6le — A PICTURE'S BYTES TRAVEL ONCE, AND NEVER INSIDE A STRING.
+   Ced: "the photo redlines are not being kept when a pdf was reopened on the tool."
+
+   6fg found this once already and fixed it for ONE field. The rule it established is right: a photo's
+   pixels are in its annotation's own appearance stream, so carrying them a second time in the re-edit
+   payload is pure weight — and worse than weight, because pdf-lib's `decodeText()` spreads a string's
+   code units through `String.fromCharCode` and throws `RangeError: Maximum call stack size exceeded`
+   somewhere past a million and a half of them. A payload that big is not merely large, it is
+   UNREADABLE, and an unreadable payload loses every mark in it.
+
+   6fg wrote `delete o.src` and stopped there. Since then two more fields have been added to `_cleanA`
+   that hold a whole picture each — `srcOrig` (6gs, what Restore goes back to) and `picRaw` (6jb, the
+   picture without its baked frame) — and both have been riding in the payload AND in every photo's
+   own `MAPhoto` tag ever since. Measured on three 1200x873 photos that had been through the picture
+   editor, which is all it takes to set `srcOrig`:
+
+       each photo's src          776,279 chars
+       each MAPhoto tag        1,035,409 chars     ← one whole picture inside it
+       the re-edit payload     3,106,394 chars     ← three more
+
+   Both routes past the ceiling, so both were unreadable, and the reopen said it plainly: "Detached 3
+   of our annotation(s) ... 4 annotation(s) are not ours" — the three it detached were the file's own
+   text marks and all three photos were counted as somebody else's. Nothing was corrupt. The photos
+   were simply written in a form that could not be read back.
+
+   So the rule gets a function instead of a line in one caller, which is the 6ff lesson: one place that
+   knows pictures do not travel in strings, used by the payload and by the tag, and no way for a third
+   field to be added without passing through it. `maPicFrame` recovers the unframed picture by cropping
+   when it needs it (see there), so nothing is lost by leaving `picRaw` out.
+   ================================================================================================== */
+const PIC_FIELDS=["src","srcOrig","picRaw"];
+function _stripPicBytes(o){
+  if(!o)return o;
+  PIC_FIELDS.forEach(k=>{ delete o[k]; });
+  return o;
+}
+/* the tripwire. With `_stripPicBytes` in front of both writers this cannot fire; it is here so that
+   if a fourth picture field is ever added and NOT routed through it, the file says so at the moment it
+   is written rather than at the reopen that loses the marks. 1,000,000 is comfortably under the
+   measured ceiling and comfortably over anything a legitimate tag holds. */
+const TAG_SAFE_MAX=1000000;
 function _tagEnc(o){
-  try{ return "b64:"+btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
-  catch(e){ try{ return JSON.stringify(o); }catch(_){ return ""; } }
+  let s;
+  try{ s="b64:"+btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
+  catch(e){ try{ s=JSON.stringify(o); }catch(_){ return ""; } }
+  if(s.length>TAG_SAFE_MAX){
+    let big="";
+    try{ big=Object.keys(o||{}).map(k=>[k,String(JSON.stringify(o[k])||"").length])
+            .filter(p=>p[1]>20000).sort((x,y)=>y[1]-x[1])
+            .map(p=>p[0]+" "+p[1]).join(", "); }catch(_){}
+    LOG&&LOG("WRITING A TAG OF",s.length,"chars — past what pdf-lib can read back (6le). Biggest "+
+             "field(s):",big||"(could not measure)");
+  }
+  return s;
 }
 function _tagDec(v){
   if(v==null)return null;
@@ -10154,8 +10384,10 @@ async function exportPdf(){
       /* the tag carries everything BUT the picture: the bytes are already in this annotation's own
          appearance stream, and a second copy in the tag would add a third of every image to the file.
          `recoverPhotoSrcs` reads the picture back out of that stream on a reopen. */
-      const itag=Object.assign({}, _cleanA(a), {kind:"img"});
-      delete itag.src;
+      /* 6le — the same one rule, not a second hand-written `delete`. This is where `srcOrig` was
+         riding: a photo the picture editor had touched put a whole second copy of itself in its own
+         tag, and the tag then could not be read back at all. */
+      const itag=_stripPicBytes(Object.assign({}, _cleanA(a), {kind:"img"}));
       const _dict={ Type:"Annot", Subtype:"Stamp", Rect:rect, F:4, T:PDFString.of(author),
         CA:1, Border:[0,0,0], Name:PDFName.of("Photo"),
         MARL:PDFString.of("1"), MAPhoto:PDFString.of(_tagEnc(itag)),
@@ -10219,7 +10451,9 @@ async function exportPdf(){
        `src` is dropped too, for the same reason the tag omits it: since 6ff a photo's picture is read back
        out of its own appearance stream, so carrying the base64 a second time is pure weight. An OLDER
        file's payload still has `src` and is still read — this only changes what we WRITE. */
-    const _payA=z=>{ const o=_cleanA(z); delete o.src; return o; };
+    /* 6le — and so are the other two fields that hold a whole picture, through the one function that
+       knows which those are. `delete o.src` alone let `srcOrig` and `picRaw` back in. */
+    const _payA=z=>_stripPicBytes(_cleanA(z));
     let outAnnos=(S.annos||[]).map(_payA), outLines=(S.lines||[]).map(_cleanL);
     if(drop.length){
       const gone=new Set(drop);

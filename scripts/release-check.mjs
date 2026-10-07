@@ -9,7 +9,7 @@
  *
  * It asserts only the MECHANICAL half of a release: the version moved, both targets build, the two
  * packers agree, the changelog has a section for this version, and nothing is uncommitted. The
- * half it cannot assert — that the five test suites were run and were green — is asserted by CI
+ * half it cannot assert — that the seven test suites were run and were green — is asserted by CI
  * running them on the same push.
  *
  *   node scripts/release-check.mjs

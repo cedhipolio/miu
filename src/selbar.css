@@ -303,6 +303,10 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 .sk-edb:hover{background:#2f3541}
 .sk-edb.on{background:#2f7be0;border-color:#2f7be0;color:#fff}
 .sk-edg{font-size:13px;line-height:1}
+/* 6lf — a drawn glyph sits on the text's own line and takes the button's ink. 1.15em rather than 1em
+   because the bucket's artwork is taller than it is wide, so matched by WIDTH it reads smaller than
+   the typed glyphs beside it. */
+.sk-edg svg{display:block;width:1.15em;height:1.15em;fill:currentColor}
 .sk-edsize{display:inline-flex;align-items:center;gap:8px;color:#8d96a6;font-size:11.5px;
   background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:5px 10px}
 .sk-edsize input[type=range]{width:110px}
@@ -368,6 +372,14 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
   transition:opacity .12s ease}
 .sk-edring.on{opacity:1}
 .sk-edring.restore{border-color:#7ee0a0;box-shadow:0 0 0 1px rgba(0,0,0,.55) inset,0 0 0 1px rgba(0,0,0,.35)}
+/* 6lf — the PEN's ring is a nib, not a rub-out: it is filled in the ink it will draw with (written
+   from `--sk-ink`), so what you are about to put down is the thing under the pointer. Kept light
+   enough to see the picture through, with the same dark hairline either side that the brush ring has
+   so it reads on white paper and on black ink alike. */
+/* opacity is left to `.on` alone, so the nib still appears and disappears with the pointer the way
+   the brush ring does — a tinted ring parked at the last place the hand was is not a cursor. */
+.sk-edring.pen{border-color:rgba(255,255,255,.95);background:var(--sk-ink,#fa3237)}
+.sk-edring.pen.on{opacity:.82}
 .sk-edcol{width:30px;height:26px;padding:0;border:1px solid #3a414f;border-radius:7px;
   background:#262b34;cursor:pointer}
 .sk-edcount{color:#8d96a6;font-size:11.5px;margin-left:2px;font-variant-numeric:tabular-nums}

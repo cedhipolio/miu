@@ -653,9 +653,16 @@ async function skDrawAnnos(cx,pg,i,sx,sy,k,under){
    Three things are kept, and they are kept in three different places because they cost three very
    different amounts:
 
-     · THE ORIGINAL (`a.srcOrig`) lives on the mark, so it is saved and reopened with everything else.
-       Restore brushes THAT back, not "the picture as it was when this editor opened" — so an edit made
-       last week can still be undone by brushing over it.
+     · THE ORIGINAL (`a.srcOrig`) lives on the mark, so it survives a save, a copy, an undo and the
+       autosave in this browser. Restore brushes THAT back, not "the picture as it was when this editor
+       opened" — so an edit made earlier in the session can still be undone by brushing over it.
+       6le — it does NOT travel in the EXPORTED PDF any more, and this is the one place that is felt.
+       It held a whole second copy of the picture in a string, and three edited photos were enough to
+       put both the re-edit payload (3,106,394 chars) and each photo's own tag (1,035,409) past what
+       pdf-lib can read back — so the photos came back from a reopen as somebody else's annotations
+       and were lost outright. A Restore that reaches one version further back is not worth the photo
+       itself. On a reopened file the line below seeds `srcOrig` from the picture as it stands, so
+       Restore still works; its floor is the reopen rather than the first edit.
      · THE SESSION'S HISTORY stays in memory, exactly as it was: reopening the editor on the same
        picture puts the same undo and redo stacks back, instantly and at no cost.
      · A TAIL OF THAT HISTORY is written to this browser as PNGs when the editor closes — a few steps,
@@ -830,6 +837,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   let drawCol="#fa3237";                 /* the ribbon's redline red, which is what this is for */
   let drawFill=false;                    /* a box or an ellipse: outline, or painted through */
   let drawPt=1.5;                        /* the weight, in POINTS of the mark as it sits on the sheet */
+  let shapeSelEll=false;                 /* 6la — the shaped selection: a rectangle, or an ellipse */
+  let autoMinLen=0;                      /* 6la — 0 means "take it from the picture's size" */
   /* 6gs — Ced: "add should also be the default magic wand setting." Selecting one space and then
      another is the common gesture on a drawing — a detail has several enclosed regions — so the wand
      starts in ADD, and New is one chip away when a fresh selection is what is wanted. */
@@ -927,7 +936,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const b=document.createElement("button");
     b.type="button"; b.className="sk-edb"+(on?" on":"");
     if(title)b.title=title;
-    const gl=document.createElement("span"); gl.className="sk-edg"; gl.textContent=glyph;
+    /* 6lf — a glyph may be DRAWN rather than typed. Ced sent a picture of the bucket he wanted for
+       Fill, and an emoji is not a thing you can match to a picture: it is whatever face the machine
+       happens to have, in whatever colour that face was designed in, and on this bar it came out as a
+       cartoon in someone else's palette beside six monochrome marks. An inline SVG takes the button's
+       own `currentColor`, so it goes white on the dark chip and white-on-blue when the tool is on,
+       exactly like the glyphs either side of it. Anything that is not markup is still text. */
+    const gl=document.createElement("span"); gl.className="sk-edg";
+    if(/^\s*<svg\b/i.test(String(glyph||"")))gl.innerHTML=glyph; else gl.textContent=glyph;
     const tx=document.createElement("span"); tx.textContent=label;
     b.appendChild(gl); b.appendChild(tx);
     b.onclick=fn; where.appendChild(b); return b;
@@ -938,6 +954,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   /* ---- row one: the brushes, then the selection, then the fill ---- */
   const gTools=group(bar), gDraw=group(bar), gSel=group(bar), gFill=group(bar);
   let bErase,bRestore,bWipe,bWand,bLasso,bCrop,bInv,bClr,bFill,bErase2,bUndo,bRedo,countTag,zoomTag;
+  let bShapeSel=null, shapeRow=null;     /* 6la */
   const drawBtns={};                     /* 6kq — pen · line · arrow · box · ellipse */
   const say=()=>{
     const n=mask?skMaskCount(mask):0;
@@ -947,11 +964,19 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(bClr)bClr.disabled=!mask;
   };
   const syncHist=()=>{ if(bUndo)bUndo.disabled=!undo.length; if(bRedo)bRedo.disabled=!redo.length; };
-  const DRAW_TOOLS=["pen","line","arrow","rect","ellipse"];   /* 6kq */
+  const DRAW_TOOLS=["pen","line","arrow","rect","ellipse","bucket"];   /* 6kq, 6la */
   const isDrawTool=t=>DRAW_TOOLS.indexOf(t)>=0;
   const setTool=t=>{ tool=t;
     try{ dropBox(); }catch(e){}          /* 6ha — the rows below change height; the picture moves */
-    const brushy=(t==="erase"||t==="restore");
+    /* 6lf — THE PEN HAS A SIZE, SO THE PEN HAS A RING.
+       Ced: "in pen, also preview the size of the pen in cursor and apply the shift rule where it
+       becomes big or small." The ring has been the eraser's cursor since 6gr and Shift-wheel has sized
+       the eraser since 6ip, and the pen — the one other tool whose whole gesture is "how wide is this"
+       — had neither: you picked a weight off a slider in points and found out how wide that was by
+       drawing with it. Both are the same two rules applied to the same kind of tool, so the pen is
+       added to both rather than given a pair of its own. `brushy` is now "this tool paints with a
+       width", which is what it always meant. */
+    const brushy=(t==="erase"||t==="restore"||t==="pen");
     bErase.classList.toggle("on",t==="erase");
     bRestore.classList.toggle("on",t==="restore");
     bWipe.classList.toggle("on",t==="wipe");
@@ -960,19 +985,30 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(bCrop)bCrop.classList.toggle("on",t==="crop");
     /* 6kq — the five drawing tools light the same way, and their settings come up with them */
     DRAW_TOOLS.forEach(k=>{ if(drawBtns[k])drawBtns[k].classList.toggle("on",t===k); });
+    if(bShapeSel)bShapeSel.classList.toggle("on",t==="shapesel");
+    /* the bucket takes its colour from the ink row and its reach from the tolerance row, so it
+       shows both and the shape of neither is new to learn */
     if(inkRow)inkRow.style.display=isDrawTool(t)?"":"none";
+    if(shapeRow)shapeRow.style.display=(t==="shapesel")?"":"none";
     /* only a closed shape can be filled, so the chip that says so is only there for those two */
     if(bInkFill)bInkFill.style.display=(t==="rect"||t==="ellipse")?"":"none";
-    brushRow.style.display=brushy?"":"none";
-    tolRow.style.display=(t==="wand"||t==="wipe")?"":"none";   /* the wand and the line eraser share it */
+    /* 6lf — but the ERASER'S slider is still the eraser's. The pen's weight is in points, on the Ink
+       row, because it has to mean the same thing as every other weight on the sheet; the brush's is
+       in picture pixels. Two different measures, so two different sliders, and only the one belonging
+       to the tool in hand is shown. */
+    brushRow.style.display=(t==="erase"||t==="restore")?"":"none";
+    tolRow.style.display=(t==="wand"||t==="wipe"||t==="bucket")?"":"none";   /* and the bucket */
     /* 6gt — New / Add / Subtract belong to the SELECTION, not to the wand: the lasso builds the same
        mask through the same three chips. */
-    modeRow.style.display=(t==="wand"||t==="lasso")?"":"none";
+    modeRow.style.display=(t==="wand"||t==="lasso"||t==="shapesel")?"":"none";
     /* the ring IS the cursor for a brush, so the arrow gets out of its way */
     /* 6gr — Ced: "do not hide the cursor in the ui." The ring says how big the brush is; the pointer
        says exactly where its centre is, and taking the pointer away made a careful rub-out guesswork. */
     cv.style.cursor="crosshair";
-    if(ring){ ring.hidden=!brushy; ring.classList.toggle("restore",t==="restore"); }
+    if(ring){ ring.hidden=!brushy; ring.classList.toggle("restore",t==="restore");
+              ring.classList.toggle("pen",t==="pen");
+              /* 6lf — and it carries the ink it is about to draw with */
+              try{ ring.style.setProperty("--sk-ink",drawCol); }catch(e){} }
     sizeRing(); };
   bErase  =mkb(gTools,"Erase","◧",()=>setTool("erase"),true,
                "Rub the picture out — hold and sweep");
@@ -1017,12 +1053,62 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
                        "Drag a box — Shift makes it square");
   drawBtns.ellipse=mkb(gDraw,"Ellipse","◯",()=>setTool("ellipse"),false,
                        "Drag an ellipse — Shift makes it a circle");
+  /* 6la — THE BUCKET. Ced: "add fill option (like bucket)". `Fill selection` paints what the wand
+     has already chosen, behind the ink, which is the job for putting a ground under a capture. A
+     bucket is the other job: click a space and that space takes the colour, on top, with no
+     selection step in between. Same flood as the wand, same tolerance slider, different composite. */
+  /* 6lf — Ced: "in edit photo tab, make the fill icon like this", with a picture of a black bucket:
+     tall arching handle with a grip at its top, a rim bar across, a tapered body and a bar under the
+     base. Traced in the picture's own proportions (it was 358x404, which is the viewBox) so the shape
+     is his and not an approximation of it, and drawn in `currentColor` so it is the same ink as every
+     other glyph on the bar. */
+  const BUCKET_SVG=
+    '<svg viewBox="0 0 358 404" fill="currentColor" aria-hidden="true" focusable="false">'+
+      '<path d="M75 150 A104 104 0 0 1 283 150" fill="none" stroke="currentColor" stroke-width="17" '+
+        'stroke-linecap="round"/>'+
+      '<rect x="137" y="13" width="84" height="45" rx="22"/>'+
+      '<rect x="57" y="136" width="244" height="23" rx="11"/>'+
+      '<path d="M70 169 L288 169 L252 364 L106 364 Z"/>'+
+      '<rect x="93" y="373" width="172" height="23" rx="11"/>'+
+    '</svg>';
+  drawBtns.bucket=mkb(gDraw,"Fill",BUCKET_SVG,()=>setTool("bucket"),false,
+                      "Click a space and it takes the ink colour — Shift to pick the space first");
+  /* =================================================================================================
+     6la — AUTO. Ced: "have a automatic mode that will read the photo and will do what it should do.
+     basically it will capture the shape and then erase the lines, and the make the fill ... this is
+     not ai assisted tool, it should be aware without ai."
+     It is not. It is a crowd detector and three set operations; `skAutoSolid` carries the reasoning
+     and the measurements. One press, one undo step, and it says what it took away.
+     ================================================================================================= */
+  mkb(gTools,"Auto","✺",()=>{
+    const res=skAutoSolid(g,cv,autoMinLen);
+    if(!res){ setStatus("Nothing to work on — the picture is empty.",true); return; }
+    push();
+    if(res.nStray)skMaskErase(g,cv,res.stray);
+    skMaskFill(g,cv,res.solid,fillCol);
+    mask=null; skMaskShow(ov,mask); say();
+    picChanged=true;
+    /* What it did, and — because this is the part that matters — what it could not. A line that
+       enters the shape on one side and leaves on the other has both ends on the contour, which
+       makes it part of a closed loop, which makes it indistinguishable from a real member by the
+       only test there is. Saying so beats letting Ced wonder whether the tool missed it. */
+    setStatus("Auto: "+res.nStray.toLocaleString()+" pixels of outside line removed and "+
+              res.nFill.toLocaleString()+" filled behind the drawing — the shape was found by its "+
+              res.nClosed.toLocaleString()+" closed lines against "+res.nEnds.toLocaleString()+
+              " with a free end. A line that crosses right through the shape is left: it closes on "+
+              "the outline at both ends, so take it with Erase line. Undo puts all of this back.");
+  },false,"Find the subject, take the stray lines off it, and fill it behind the ink — one press");
   bWand   =mkb(gSel,"Magic wand","✦",()=>setTool("wand"),false,
                "Click a space to select it — Shift adds another");
   /* 6gt — Ced: "add a lasso effect on edit photo." For everything the wand cannot reach: draw round
      it by hand and what you drew round is selected, through the same three chips. */
   bLasso  =mkb(gSel,"Lasso","◌",()=>setTool("lasso"),false,
                "Draw round a region by hand — Shift adds it, Alt takes it out");
+  /* 6la — SHAPED SELECT. Ced: "shaped select - within magic wand type tool". The lasso is for a
+     region with no shape to it; most of what wants selecting on a drawing is a rectangle, and
+     drawing one by hand round it is both slower and worse. It answers to the same three chips. */
+  bShapeSel=mkb(gSel,"Shape select","▱",()=>setTool("shapesel"),false,
+               "Drag a rectangle or an ellipse over what you want — Shift adds, Alt takes out");
   bInv    =mkb(gSel,"Select inverse","⧉",()=>{
     push();
     mask=skMaskInvert(mask,cv.width*cv.height);
@@ -1081,13 +1167,16 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const dcol=document.createElement("input");
   dcol.type="color"; dcol.value=drawCol; dcol.className="sk-edcol";
   dcol.title="What the pen, the line, the arrow and the shapes draw in";
-  dcol.oninput=()=>{ drawCol=dcol.value; };
+  /* 6lf — the pen's ring is painted in this colour, so it follows the swatch as it is dragged */
+  dcol.oninput=()=>{ drawCol=dcol.value;
+    try{ if(ring)ring.style.setProperty("--sk-ink",drawCol); }catch(e){} };
   inkRow.appendChild(dcol);
   const drng=document.createElement("input");
   drng.type="range"; drng.min="0.25"; drng.max="12"; drng.step="0.25"; drng.value=String(drawPt);
   const dnum=document.createElement("span"); dnum.className="sk-ednum";
   const dsay=()=>{ dnum.textContent=drawPt.toFixed(2).replace(/\.?0+$/,"")+" pt"; };
-  drng.oninput=()=>{ drawPt=+drng.value; dsay(); };
+  /* 6lf — and the ring is the weight, so it moves with the slider as well as with the wheel */
+  drng.oninput=()=>{ drawPt=+drng.value; dsay(); try{ sizeRing(); }catch(e){} };
   dsay();
   inkRow.appendChild(drng); inkRow.appendChild(dnum);
   bInkFill=document.createElement("button");
@@ -1097,6 +1186,19 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   bInkFill.onclick=()=>{ drawFill=!drawFill; bInkFill.classList.toggle("on",drawFill); };
   inkRow.appendChild(bInkFill);
   gSet.appendChild(inkRow);
+  /* 6la — what Shape select draws with, and how wide a crowd Auto looks for */
+  shapeRow=document.createElement("label"); shapeRow.className="sk-edsize";
+  shapeRow.appendChild(document.createTextNode("Shape"));
+  [["Rectangle","▭",false],["Ellipse","◯",true]].forEach(([lbl,gl,ell])=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="sk-edm"+((ell===shapeSelEll)?" on":"");
+    b.textContent=gl+" "+lbl; b.title="Select with a "+lbl.toLowerCase();
+    b.onclick=()=>{ shapeSelEll=ell;
+      [...shapeRow.querySelectorAll(".sk-edm")].forEach(z=>
+        z.classList.toggle("on", /ellipse/i.test(z.textContent)===shapeSelEll)); };
+    shapeRow.appendChild(b);
+  });
+  gSet.appendChild(shapeRow);
   /* 6gk — what the next wand click does to the selection. It sits with the tolerance, because both are
      settings for the tool in your hand rather than actions of their own. */
   const modeRow=document.createElement("div"); modeRow.className="sk-edmodes";
@@ -1333,6 +1435,17 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      bar for, so it rides the wheel under the hand: Shift for the brush, Ctrl for the zoom. The step is
      proportional, so it is fine at 4px and still quick at 90. */
   const bumpBrush=dir=>{
+    /* 6lf — Shift-wheel sizes WHATEVER IS IN YOUR HAND. With the pen that is the weight in points,
+       on its own slider and with its own step: proportional like the brush's, floored at a quarter
+       point so it still moves at the bottom of the range, and rounded to the slider's own 0.25
+       so the number under the slider and the stroke on the picture never disagree. */
+    if(tool==="pen"){
+      const st=Math.max(0.25,Math.round(drawPt*0.18*4)/4);
+      const v=Math.max(+drng.min,Math.min(+drng.max,Math.round((drawPt+dir*st)*4)/4));
+      if(v===drawPt)return;
+      drawPt=v; drng.value=String(v); dsay(); sizeRing();
+      return;
+    }
     const step=Math.max(1,Math.round(brush*0.16));
     const v=Math.max(+rng.min,Math.min(+rng.max,brush+dir*step));
     if(v===brush)return;
@@ -1376,7 +1489,12 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      pixels and the picture is shown at whatever zoom, so the ring is brush × zoom. */
   function sizeRing(){
     if(!ring)return;
-    const d=Math.max(4,brush*zoom);
+    /* 6lf — the ring is the width the TOOL IN HAND paints with. For the eraser and Restore that is
+       `brush`, already in picture pixels; for the pen it is `drawPx()`, which turns the weight in
+       points into picture pixels through the same `ptPx` the stroke itself uses — so the ring is the
+       stroke, not an impression of it. `zoom` takes both from picture pixels to screen pixels. */
+    const px=(tool==="pen")?drawPx():brush;
+    const d=Math.max(4,px*zoom);
     ring.style.width=d+"px"; ring.style.height=d+"px";
   }
   /* 6im — THE RING RIDES A FRAME, NOT AN EVENT. Ced: "the responsiveness of this is too slow, make it
@@ -1552,6 +1670,65 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       paintBox();
       return;
     }
+    /* 6la — THE BUCKET. The same flood the wand runs, painted rather than selected. Shift makes it
+       a selection instead, so one tool covers "colour this space" and "give me this space". */
+    if(tool==="bucket"){
+      const run=skWand(g,cv,Math.round(x),Math.round(y),tol,null,"new");
+      const n=run?skMaskCount(run):0;
+      if(!n){ setStatus("Nothing to fill there — the tolerance may be too tight.",true); return; }
+      if(ev.shiftKey){ push(); mask=run; skMaskShow(ov,mask); say();
+        setStatus(n.toLocaleString()+" pixels selected — Fill paints behind the drawing, the "+
+                  "bucket paints on top."); return; }
+      push();
+      skMaskPaint(g,cv,run,drawCol);
+      picChanged=true;
+      setStatus("Filled "+n.toLocaleString()+" pixels with "+drawCol+".");
+      return;
+    }
+    /* 6la — SHAPED SELECT: a rectangle or an ellipse, through the same three chips as the wand. */
+    if(tool==="shapesel"){
+      const og=ov.getContext("2d");
+      let x1=x, y1=y;
+      skOvShow(ov,true);
+      const paint=()=>{
+        og.clearRect(0,0,ov.width,ov.height);
+        skMaskShow(ov,mask);                 /* what is already selected, underneath */
+        const u=Math.max(1,1/Math.max(0.05,zoom));
+        og.save();
+        og.strokeStyle="rgba(30,110,255,.95)"; og.lineWidth=u*1.4;
+        og.setLineDash([u*6,u*4]);
+        const X=Math.min(x,x1), Y=Math.min(y,y1), W=Math.abs(x1-x), H=Math.abs(y1-y);
+        og.beginPath();
+        if(shapeSelEll)og.ellipse(X+W/2,Y+H/2,Math.max(0.5,W/2),Math.max(0.5,H/2),0,0,Math.PI*2);
+        else og.rect(X,Y,W,H);
+        og.stroke(); og.restore();
+      };
+      try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+      const smove=e2=>{ const q=at(e2); x1=q[0]; y1=q[1]; paint(); };
+      const sup=e2=>{
+        cv.removeEventListener("pointermove",smove);
+        cv.removeEventListener("pointerup",sup);
+        cv.removeEventListener("pointercancel",sup);
+        skOvShow(ov,false);
+        if(Math.abs(x1-x)<2||Math.abs(y1-y)<2){ skMaskShow(ov,mask);
+          setStatus("Drag a shape over what you want selected.",true); return; }
+        const m=(e2&&e2.shiftKey)?"add":((e2&&e2.altKey)?"sub":wandMode);
+        const hit=skShapeMask(cv,x,y,x1,y1,shapeSelEll);
+        push();
+        mask=skMaskCombine(mask,hit,m,cv.width*cv.height);
+        skMaskShow(ov,mask); say();
+        const n=mask?skMaskCount(mask):0;
+        setStatus(n?(n.toLocaleString()+" pixels selected"+
+                     (m==="add"?" (added)":(m==="sub"?" (subtracted)":""))+
+                     " — Fill, Erase selection, or Invert to take everything else.")
+                   :"Nothing selected — you took all of it out.",!n);
+      };
+      cv.addEventListener("pointermove",smove);
+      cv.addEventListener("pointerup",sup);
+      cv.addEventListener("pointercancel",sup);
+      paint();
+      return;
+    }
     if(tool==="lasso"){
       /* the loop is collected in the picture's own pixels and drawn live over the selection that is
          already there, so you can see what you are adding to */
@@ -1678,7 +1855,17 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         const [x0,y0,X1,Y1]=geom();
         ctx.save();
         ctx.strokeStyle=drawCol; ctx.fillStyle=drawCol;
-        ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
+        /* 6lf — SHARP CORNERS. Ced: "make the shapes all have sharp corners."
+           `lineJoin:"round"` put a radius on all four corners of a box — at 12pt on a 1200px capture
+           that is a 24px fillet, which reads as a rounded rectangle and not as the box that was
+           drawn — and `lineCap:"round"` hung half a stroke width past each end of a line, so a line
+           dragged to a corner overshot it. A box, a line and an arrow are drawing instruments and a
+           drawing instrument has corners. `miter` for the join, `butt` for the cap, and a miter limit
+           high enough that a shallow corner stays a point instead of being cut square by the default
+           limit of 10.
+           The PEN keeps its round cap and join and is not drawn here: a freehand stroke is dabs joined
+           end to end, and butt caps would leave a notch at every one of them. */
+        ctx.lineWidth=w; ctx.lineCap="butt"; ctx.lineJoin="miter"; ctx.miterLimit=24;
         if(tool==="line"||tool==="arrow"){
           const dx=X1-x0, dy=Y1-y0, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
           if(tool==="arrow"){
@@ -1854,6 +2041,573 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
    transparent: the redlines are never painted over, they are painted BEHIND. Their antialiased edges
    composite onto the new ground properly, so a filled capture has no halo around its lines.
    ================================================================================================= */
+/* =================================================================================================
+   6la — SHAPE ARITHMETIC ON A MASK, AND THE AUTOMATIC PASS BUILT OUT OF IT.
+
+   Ced: "have a automatic mode that will read the photo and will do what it should do. basically it
+   will capture the shape and then erase the lines, and the make the fill (much better to select the
+   outside shape then inverse then fill) ... this is not ai assisted tool, it should be aware without
+   ai."
+
+   His recipe is right and it is the last two thirds of the job. Taken on its own it fails on a real
+   capture, and it fails in a way that looks worse than doing nothing: a snapshot of a detail brings
+   the drawing's OTHER lines with it — grid lines, leaders, the edge of a neighbouring view — and
+   those cross the open space around the subject. Flood the outside and a stray line stops the
+   flood; invert and the region beyond that line is "inside"; fill it and a white wedge appears
+   across the sheet where there should be nothing.
+
+   So the lines come off first, and the question is how to know which ink is the subject when there
+   is no model of what a subject looks like. Measured on Ced's own capture:
+
+       the ink is 18.2% of the frame, in 7 connected pieces
+       the largest piece is 98.8% of it
+
+   — the strays TOUCH the subject, so labelling cannot separate them and neither can thickness: a
+   mount drawn in 3px strokes is as thin as the lines crossing it.
+
+   What does separate them is DENSITY. A subject is a crowd of strokes within a few pixels of each
+   other; a stray line is alone. Dilating by the gap the subject's own strokes sit within merges it
+   into one solid blob and leaves a stray line as a band twice that wide plus its own width; eroding
+   by a little more than the dilation kills the band and leaves the blob. That is a morphological
+   closing used as a crowd detector, and on the capture above it keeps 84% of the ink and throws
+   away 5,870 pixels of line.
+
+   What survives is a short stub where a stray crossed into the crowd. Those are walked out
+   afterwards: a geodesic dilation from the discarded ink, travelling ONLY through ink that an
+   opening of 2px would throw away, so it runs along a hairline until the hairline meets something
+   solid and stops there rather than eating the subject's own outlines.
+
+   Then, and only then, Ced's three steps: flood the outside, invert, fill — underneath the ink, so
+   the lines still read on top of the new ground.
+
+   Everything here is a Uint8Array of one byte per pixel. The box operations are separable and run as
+   a sliding count, so a dilation by 8 on a four-megapixel capture is two passes and no inner loop.
+   ================================================================================================= */
+
+/* A square dilation of a mask by `r`, in two separable passes with a sliding count — so growing a
+   four-megapixel mask by eight pixels is two passes and no inner loop. */
+function skMaskGrow(m,w,h,r){
+  if(!(r>0))return Uint8Array.from(m);
+  const a=new Uint8Array(w*h), b=new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    const o=y*w; let cnt=0;
+    for(let x=0;x<=r&&x<w;x++)cnt+=m[o+x]?1:0;
+    for(let x=0;x<w;x++){
+      a[o+x]=cnt>0?1:0;
+      const add=x+r+1, rem=x-r;
+      if(add<w)cnt+=m[o+add]?1:0;
+      if(rem>=0)cnt-=m[o+rem]?1:0;
+    }
+  }
+  for(let x=0;x<w;x++){
+    let cnt=0;
+    for(let y=0;y<=r&&y<h;y++)cnt+=a[y*w+x]?1:0;
+    for(let y=0;y<h;y++){
+      b[y*w+x]=cnt>0?1:0;
+      const add=y+r+1, rem=y-r;
+      if(add<h)cnt+=a[add*w+x]?1:0;
+      if(rem>=0)cnt-=a[rem*w+x]?1:0;
+    }
+  }
+  return b;
+}
+
+/* =================================================================================================
+   6lg — HOW CROWDED IS IT HERE? The mean of a mask over a (2r+1) square around every pixel, as a
+   fraction from 0 to 1. Separable and running — two passes of a sliding sum — so the window costs the
+   same whatever r is, which matters because r grows with the stroke width. `Float32Array` because the
+   answer is a proportion, not a count. The borders divide by the part of the window that is on the
+   picture, so an arc running near an edge is not reported as emptier than it is.
+   ================================================================================================= */
+function skDensity(m,w,h,r){
+  const a=new Float32Array(w*h), b=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const o=y*w; let s=0;
+    for(let x=0;x<=r&&x<w;x++)s+=m[o+x]?1:0;
+    for(let x=0;x<w;x++){
+      const n=Math.min(w-1,x+r)-Math.max(0,x-r)+1;
+      a[o+x]=s/n;
+      const add=x+r+1, rem=x-r;
+      if(add<w)s+=m[o+add]?1:0;
+      if(rem>=0)s-=m[o+rem]?1:0;
+    }
+  }
+  for(let x=0;x<w;x++){
+    let s=0;
+    for(let y=0;y<=r&&y<h;y++)s+=a[y*w+x];
+    for(let y=0;y<h;y++){
+      const n=Math.min(h-1,y+r)-Math.max(0,y-r)+1;
+      b[y*w+x]=s/n;
+      const add=y+r+1, rem=y-r;
+      if(add<h)s+=a[add*w+x];
+      if(rem>=0)s-=a[rem*w+x];
+    }
+  }
+  return b;
+}
+/* =================================================================================================
+   6lg — HOW THICK IS THE LINE HERE? A chamfer distance transform of the ink: two passes, forward and
+   back, with the 3-4 weights, divided by 3 at the end. That is within a few per cent of the true
+   Euclidean distance to the nearest blank pixel, which at a skeleton pixel is half the stroke's
+   width. A few per cent does not matter here because what the rule compares is a RATIO — this arc's
+   thickness against the picture's own median — and both ends of it are measured the same way.
+   ================================================================================================= */
+function skDistIn(m,w,h){
+  const BIG=1e9, d=new Float32Array(w*h);
+  for(let p=0;p<m.length;p++)d[p]=m[p]?BIG:0;
+  const at=(x,y)=>((x<0||y<0||x>=w||y>=h)?0:d[y*w+x]);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const p=y*w+x; if(!d[p])continue;
+    let v=d[p];
+    v=Math.min(v, at(x-1,y)+3, at(x,y-1)+3, at(x-1,y-1)+4, at(x+1,y-1)+4);
+    d[p]=v;
+  }
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){
+    const p=y*w+x; if(!d[p])continue;
+    let v=d[p];
+    v=Math.min(v, at(x+1,y)+3, at(x,y+1)+3, at(x+1,y+1)+4, at(x-1,y+1)+4);
+    d[p]=v;
+  }
+  for(let p=0;p<d.length;p++)d[p]/=3;
+  return d;
+}
+/* =================================================================================================
+   6lg — THE SKELETON, BROKEN AT ITS JUNCTIONS. A thinned picture is a graph; cutting out the pixels
+   with three or more neighbours leaves its ARCS, each a single run of line between two meetings.
+   That is the unit a rule about "a line" has to be written in: a whole stray leader is one arc, and
+   so is one member of a mount between the two places it joins something.
+   Returns a list of arcs, each an array of pixel indices.
+   ================================================================================================= */
+function skArcs(sk,w,h){
+  const nb=(p)=>{ const x=p%w, y=(p/w)|0; let n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dy)continue;
+      const X=x+dx, Y=y+dy;
+      if(X<0||Y<0||X>=w||Y>=h)continue;
+      if(sk[Y*w+X])n++;
+    }
+    return n; };
+  const body=new Uint8Array(w*h);
+  for(let p=0;p<sk.length;p++)if(sk[p]&&nb(p)<3)body[p]=1;
+  const seen=new Uint8Array(w*h), out=[];
+  const stack=[];
+  for(let p0=0;p0<body.length;p0++){
+    if(!body[p0]||seen[p0])continue;
+    const run=[]; stack.length=0; stack.push(p0); seen[p0]=1;
+    while(stack.length){
+      const p=stack.pop(); run.push(p);
+      const x=p%w, y=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue;
+        const X=x+dx, Y=y+dy;
+        if(X<0||Y<0||X>=w||Y>=h)continue;
+        const q=Y*w+X;
+        if(body[q]&&!seen[q]){ seen[q]=1; stack.push(q); }
+      }
+    }
+    out.push(run);
+  }
+  return out;
+}
+/* The biggest 8-connected piece of a mask, on its own. A scanline flood, the same shape as the
+   wand's, so a four-megapixel capture is one pass and a stack of spans rather than of pixels. */
+function skMaskLargest(m,w,h){
+  const seen=new Uint8Array(w*h);
+  let best=null,bestN=0;
+  const stack=[];
+  for(let p0=0;p0<m.length;p0++){
+    if(!m[p0]||seen[p0])continue;
+    const cur=[]; let n=0;
+    stack.length=0; stack.push(p0);
+    seen[p0]=1;
+    while(stack.length){
+      const p=stack.pop(); cur.push(p); n++;
+      const x=p%w, y=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue;
+        const nx=x+dx, ny=y+dy;
+        if(nx<0||ny<0||nx>=w||ny>=h)continue;
+        const q=ny*w+nx;
+        if(m[q]&&!seen[q]){ seen[q]=1; stack.push(q); }
+      }
+    }
+    if(n>bestN){ bestN=n; best=cur; }
+  }
+  const out=new Uint8Array(w*h);
+  if(best)for(let i=0;i<best.length;i++)out[best[i]]=1;
+  return out;
+}
+
+/* A mask plus every region of its complement that the border cannot reach — "select the outside,
+   then inverse", which is exactly how Ced described the fill. */
+function skMaskHoles(m,w,h){
+  const seen=new Uint8Array(w*h);
+  const stack=[];
+  const push=(x,y)=>{ if(x>=0&&x<w&&y>=0&&y<h){ const p=y*w+x; if(!m[p]&&!seen[p]){ seen[p]=1; stack.push(p); } } };
+  for(let x=0;x<w;x++){ push(x,0); push(x,h-1); }
+  for(let y=0;y<h;y++){ push(0,y); push(w-1,y); }
+  while(stack.length){
+    const p=stack.pop(), x=p%w, y=(p/w)|0;
+    push(x-1,y); push(x+1,y); push(x,y-1); push(x,y+1);
+  }
+  const out=new Uint8Array(w*h);
+  for(let p=0;p<out.length;p++)out[p]=seen[p]?0:1;
+  return out;
+}
+
+/* =================================================================================================
+   6la — THINNING, by Zhang and Suen. Every stroke comes down to a line one pixel wide, with its
+   connectivity intact — which is the only reason the next function can talk about "ends" at all.
+   Two sub-iterations per round, each marking a whole generation before deleting any of it, because
+   deleting as you go would let one deletion change its neighbour's answer and break the stroke.
+   ================================================================================================= */
+function skThin(src,w,h){
+  const m=Uint8Array.from(src);
+  const at=(x,y)=>(x<0||y<0||x>=w||y>=h)?0:m[y*w+x];
+  const doomed=[];
+  for(let pass=0;pass<200;pass++){
+    let any=false;
+    for(let step=0;step<2;step++){
+      doomed.length=0;
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        if(!m[y*w+x])continue;
+        /* the eight neighbours, clockwise from north — P2..P9 in the paper */
+        const p2=at(x,y-1), p3=at(x+1,y-1), p4=at(x+1,y), p5=at(x+1,y+1),
+              p6=at(x,y+1), p7=at(x-1,y+1), p8=at(x-1,y), p9=at(x-1,y-1);
+        const B=p2+p3+p4+p5+p6+p7+p8+p9;
+        if(B<2||B>6)continue;
+        const seq=[p2,p3,p4,p5,p6,p7,p8,p9,p2];
+        let A=0; for(let i=0;i<8;i++)if(!seq[i]&&seq[i+1])A++;
+        if(A!==1)continue;                      /* more than one run: deleting would break it */
+        if(step===0){ if(p2*p4*p6||p4*p6*p8)continue; }
+        else        { if(p2*p4*p8||p2*p6*p8)continue; }
+        doomed.push(y*w+x);
+      }
+      if(doomed.length){ any=true; for(let i=0;i<doomed.length;i++)m[doomed[i]]=0; }
+    }
+    if(!any)break;
+  }
+  return m;
+}
+
+/* =================================================================================================
+   6la — AND THE WHOLE POINT OF IT. Ced: "i'd suggest you look for the shape by looking at lines that
+   does not have an end."
+
+   That is the right test and it is better than the one it replaced. A drawn object is made of closed
+   contours — an outline comes back to where it started — while a line arriving from somewhere else
+   in the drawing has two ends, or one end and a frame edge, which is the same thing because the
+   outside of the picture is empty.
+
+   So: delete every thinned pixel with one neighbour or none, and keep deleting. An open line is
+   eaten from its tip inward and disappears entirely; a loop has no pixel with one neighbour and is
+   untouched. What is left is the shape.
+
+   Measured on Ced's own capture: 8,120 thinned pixels, of which 6,855 are closed and 1,265 are ends.
+
+   One concession. A SHORT branch is a detail, not an intruder — the tick on a bracket, the stub of a
+   bolt — and pruning takes those too. Branches under `minLen` are put back, which on the same
+   capture restores 39 of the 50 and leaves the long ones gone.
+   ================================================================================================= */
+function skPruneEnds(sk,w,h,minLen){
+  const m=Uint8Array.from(sk);
+  const deg=(x,y)=>{
+    let n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dy)continue;
+      const nx=x+dx, ny=y+dy;
+      if(nx>=0&&ny>=0&&nx<w&&ny<h&&m[ny*w+nx])n++;
+    }
+    return n;
+  };
+  const doomed=[];
+  for(let round=0;round<4000;round++){
+    doomed.length=0;
+    for(let p=0;p<m.length;p++){
+      if(!m[p])continue;
+      if(deg(p%w,(p/w)|0)<=1)doomed.push(p);
+    }
+    if(!doomed.length)break;
+    for(let i=0;i<doomed.length;i++)m[doomed[i]]=0;
+  }
+  /* what was taken, and which of it was too short to have been an intruder */
+  const spur=new Uint8Array(w*h);
+  for(let p=0;p<spur.length;p++)spur[p]=(sk[p]&&!m[p])?1:0;
+  if(minLen>0){
+    const seen=new Uint8Array(w*h), stack=[];
+    for(let p0=0;p0<spur.length;p0++){
+      if(!spur[p0]||seen[p0])continue;
+      const run=[]; stack.length=0; stack.push(p0); seen[p0]=1;
+      while(stack.length){
+        const p=stack.pop(); run.push(p);
+        const x=p%w, y=(p/w)|0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy)continue;
+          const nx=x+dx, ny=y+dy;
+          if(nx<0||ny<0||nx>=w||ny>=h)continue;
+          const q=ny*w+nx;
+          if(spur[q]&&!seen[q]){ seen[q]=1; stack.push(q); }
+        }
+      }
+      if(run.length<minLen)for(let i=0;i<run.length;i++){ m[run[i]]=1; spur[run[i]]=0; }
+    }
+  }
+  return {closed:m, spur};
+}
+
+/* Every ink pixel goes to whichever thinned line reaches it first — the one that stayed closed, or
+   the one that was pruned away. A plain queue, so "first" means "nearest along the ink". */
+function skInfluence(ink,a,b,w,h){
+  const own=new Uint8Array(w*h);
+  const q=new Int32Array(w*h);
+  let head=0, tail=0;
+  for(let p=0;p<ink.length;p++){
+    if(!ink[p])continue;
+    if(a[p]){ own[p]=1; q[tail++]=p; }
+    else if(b[p]){ own[p]=2; q[tail++]=p; }
+  }
+  while(head<tail){
+    const p=q[head++], o=own[p], x=p%w, y=(p/w)|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dy)continue;
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||ny<0||nx>=w||ny>=h)continue;
+      const r=ny*w+nx;
+      if(ink[r]&&!own[r]){ own[r]=o; q[tail++]=r; }
+    }
+  }
+  return own;
+}
+
+/* Which pixels of the picture are INK: anything that is not see-through. */
+function skInkMask(g,cv,aMin){
+  const w=cv.width,h=cv.height;
+  const d=g.getImageData(0,0,w,h).data;
+  const m=new Uint8Array(w*h), t=(aMin==null?40:aMin);
+  for(let p=0;p<m.length;p++)if(d[p*4+3]>t)m[p]=1;
+  return m;
+}
+
+/* Paint a mask ON TOP, which is what a bucket does — `skMaskFill` paints behind, which is what a
+   ground does. Two different jobs and two different composites; keeping one function for both is
+   how a fill ends up under the thing it was meant to cover. */
+function skMaskPaint(g,cv,mask,hex){
+  const w=cv.width,h=cv.height;
+  const t=document.createElement("canvas"); t.width=w; t.height=h;
+  const tg=t.getContext("2d");
+  const im=tg.createImageData(w,h), d=im.data;
+  const c=skRgb(hex||"#ffffff");
+  for(let p=0;p<mask.length;p++){
+    if(!mask[p])continue;
+    const k=p*4; d[k]=c[0]; d[k+1]=c[1]; d[k+2]=c[2]; d[k+3]=255;
+  }
+  tg.putImageData(im,0,0);
+  g.drawImage(t,0,0);
+  t.width=t.height=0;
+}
+
+/* A rectangle or an ellipse, as a mask — the shaped selection Ced asked the wand's chips to take. */
+function skShapeMask(cv,x0,y0,x1,y1,ell){
+  const w=cv.width,h=cv.height;
+  const m=new Uint8Array(w*h);
+  const X=Math.max(0,Math.floor(Math.min(x0,x1))), Y=Math.max(0,Math.floor(Math.min(y0,y1)));
+  const X1=Math.min(w,Math.ceil(Math.max(x0,x1))),  Y1=Math.min(h,Math.ceil(Math.max(y0,y1)));
+  if(X1<=X||Y1<=Y)return m;
+  if(!ell){
+    for(let y=Y;y<Y1;y++)for(let x=X;x<X1;x++)m[y*w+x]=1;
+    return m;
+  }
+  const cx=(X+X1)/2, cy=(Y+Y1)/2, rx=(X1-X)/2, ry=(Y1-Y)/2;
+  for(let y=Y;y<Y1;y++)for(let x=X;x<X1;x++){
+    const u=(x+0.5-cx)/rx, v=(y+0.5-cy)/ry;
+    if(u*u+v*v<=1)m[y*w+x]=1;
+  }
+  return m;
+}
+
+/* =================================================================================================
+   6la — THE AUTOMATIC PASS. Ced: "dont regenerate the selected shape, just remove the outer lines of
+   the bigger shape and do the fill."
+
+   Three steps, in his words and his order, and the first one is his idea:
+
+     1. FIND THE SHAPE by the lines that have no end (`skThin` then `skPruneEnds`). What survives is
+        the closed contours; every ink pixel then goes to whichever thinned line is nearest, the
+        closed one or a pruned one, so the shape is identified in terms of the ORIGINAL pixels.
+     2. REMOVE THE OUTER LINES: the silhouette is the shape plus everything the outside cannot reach,
+        and ink beyond it goes. Nothing inside is touched.
+     3. FILL, behind the ink, so the drawing still reads on top of its new ground.
+
+   Nothing is redrawn. The subject's pixels at the end of this are the same pixels, bit for bit, as
+   at the start — measured on Ced's capture, 36,073 of 37,867 kept and 1,794 outer-line pixels taken.
+
+   What it does NOT do is chase a line that enters the shape on one side and leaves on the other.
+   Such a line has both ends on the contour, which makes it part of a cycle, which makes it
+   indistinguishable from a real member by the only test we have. `Erase line` takes one in a click,
+   and that is a better answer than a heuristic that can eat a bracket.
+   ================================================================================================= */
+/* 6lg — Auto's two thresholds, and both are measurements rather than taste: see `skAutoPass`.
+   DENS — above 0.20 the mount's own outer rails started going grey; 0.17 leaves them and takes the
+   leaders.  THIN — a leader is the lightest line on the sheet. Measured per arc against the
+   picture's median stroke: on Ced's capture the leaders came out at 2.0-2.2 against a median of 4,
+   and on the test picture at 2.48 against 4.0, while everything belonging to either subject was at
+   the median or above. 0.70 of the median sits in the gap on both. */
+const AUTO_LONE_DENS=0.17, AUTO_LONE_THIN=0.70;
+function skAutoSolid(g,cv,minLen,rounds){
+  const w=cv.width,h=cv.height;
+  const ink0=skInkMask(g,cv,40);
+  let total=0; for(let p=0;p<ink0.length;p++)total+=ink0[p];
+  if(!total)return null;
+  /* =================================================================================================
+     AND IT GOES ROUND MORE THAN ONCE, which is what makes it work on a real capture.
+
+     A stray that crosses another stray, or that enters the shape and comes out again, is part of a
+     cycle in the thinned picture — both of its ends are attached to something — so the free-end test
+     cannot see it on the first look. Take away the part that IS outside the shape and those ends
+     come loose, and the next look finds them. Measured on a capture with three lines drawn corner to
+     corner through the subject: one pass leaves 576 of 1,061 outside pixels, and each further pass
+     takes most of what the one before it freed.
+
+     It stops when a pass finds nothing, so a clean picture costs one pass and nothing else.
+     ================================================================================================= */
+  const ink=Uint8Array.from(ink0);
+  const strayAll=new Uint8Array(w*h);
+  let solid=null, nClosed=0, nEnds=0, R=1;
+  const L=minLen>0?minLen:Math.max(12,Math.round(Math.min(w,h)/12));
+  const N=Math.max(1,Math.min(6,rounds>0?rounds:3));
+  for(let pass=0;pass<N;pass++){
+    const got=skAutoPass(ink,w,h,L);
+    if(!got)break;
+    solid=got.solid; nClosed=got.nClosed; nEnds=got.nEnds; R=got.stroke;
+    let took=0;
+    for(let p=0;p<ink.length;p++){
+      if(ink[p]&&!got.solid[p]){ ink[p]=0; strayAll[p]=1; took++; }
+    }
+    if(!took)break;
+  }
+  if(!solid)return null;
+  let nStray=0; for(let p=0;p<strayAll.length;p++)nStray+=strayAll[p];
+  let nFill=0;
+  for(let p=0;p<solid.length;p++)if(solid[p]&&!ink[p])nFill++;
+  return {stray:strayAll, solid, nStray, nFill, nInk:total, minLen:L, stroke:R, nClosed, nEnds};
+}
+
+/* One look: find the shape by the lines with no end, and return the region it encloses. */
+function skAutoPass(ink,w,h,L){
+  let total=0; for(let p=0;p<ink.length;p++)total+=ink[p];
+  if(!total)return null;
+  let sk=skThin(ink,w,h);
+  /* =================================================================================================
+     6lg — A LINE WITH NO END, THAT IS STILL NOT PART OF THE SHAPE.
+     Ced: "improve the auto mode in edit picture."
+
+     The no-end rule is his and it is right, and this is where it runs out. A leader that crosses the
+     subject — in one side and out the other — has both of its ends attached to the contour, so it is
+     part of a cycle and the free-end test cannot see it. Worse than that: it makes the contour and
+     the leader ONE closed thing, so `skMaskLargest` hands back the leader as part of the shape and
+     the region it encloses swells to cover the leader's whole run. Measured on Ced's own capture
+     (388x535, 37,867 ink pixels): the largest closed component was 7,504 skeleton pixels of 7,541 —
+     effectively the entire picture — and the pass removed 1,148 pixels, 3.0%, while the leaders ran
+     visibly across the drawing.
+
+     Three candidate rules were measured on that capture before this one was written:
+       · CONTINUITY — is this chord the same line as a stump left outside? It is exact, but it needs
+         the outside to have been removed first and here it had not: 2 chords, 195 pixels, 0.5%.
+       · THE PICTURE'S EDGE as a line end — a leader runs off the capture, the subject does not.
+         No change at all: no skeleton pixel sits on the border row, so nothing seeds.
+       · STRAIGHTNESS — a leader is straight. It does not separate: every arc in this drawing is
+         0.98-0.99 straight, because a mount is drawn out of straight lines too.
+
+     Two things do separate, and an arc has to fail BOTH before it is dropped.
+
+     WHERE IT IS. A leader crosses empty paper; a member of a mount has the rest of the mount around
+     it. Measured per arc, ink within a window of 14px: the long arcs ran 0.075 to 0.149 and
+     everything belonging to the mount ran 0.18 to 0.92 — two populations with a clear gap. At 0.20
+     and 0.24 the lower assembly's own outer rails went grey, which is the bracket this was warned
+     against eating; 0.17 leaves them.
+
+     HOW HEAVY IT IS. Density alone was not enough, and `behave.py` said so before this shipped: on
+     its Auto picture — a nest of rectangles with a small bracket floating above it and three lines
+     ruled across — the sparse rule took the bracket, because a bracket on its own IS alone. What the
+     bracket is not is THIN. A leader is the lightest line on the sheet; the thing it points at is
+     drawn heavier. Measured per arc against the picture's own median stroke: Ced's leaders 2.0-2.2
+     against a median of 4, the test picture's 2.48 against 4.0, and every part of either subject at
+     the median or above. Both pictures have the same gap in the same place, so the test is a ratio
+     and not a number of pixels.
+
+     Together: 1,148 pixels removed became 1,557 on Ced's capture, and the test picture's bracket and
+     its 12px pipe come through whole. A smaller gain than density alone was reporting — that version
+     took 2,394 — and the difference is the part that was eating subjects.
+
+     Both lengths are in units of the stroke the picture is drawn with rather than in pixels, so the
+     same rule holds on a capture of the same drawing at twice the resolution.
+
+     It does not get everything, and the picture says which: a leader that STOPS at the subject rather
+     than crossing it, and one that runs alongside other ink, are both still there. `Erase line` takes
+     either in one click. This is one measured step, not a solution.
+     ================================================================================================= */
+  {
+    let nThin0=0; for(let p=0;p<sk.length;p++)nThin0+=sk[p];
+    const R0=Math.max(1,Math.min(24,Math.round(total/Math.max(1,nThin0)/2)+1));
+    const rad=Math.max(6,Math.round(R0*4.7));      /* 14px at the stroke this capture is drawn with */
+    const minArc=Math.max(16,Math.round(R0*10));   /* 30px there; a leader is many times a stroke */
+    const dens=skDensity(ink,w,h,rad);
+    const dist=skDistIn(ink,w,h);
+    /* the picture's own stroke, as the middle of what its skeleton sits on */
+    const th=[];
+    for(let p=0;p<sk.length;p++)if(sk[p])th.push(dist[p]*2);
+    th.sort((a,b)=>a-b);
+    const med=th.length?th[th.length>>1]:0;
+    const arcs=skArcs(sk,w,h);
+    const lone=new Uint8Array(w*h);
+    let nLone=0;
+    for(let i=0;i<arcs.length;i++){
+      const run=arcs[i];
+      if(run.length<minArc)continue;
+      let s=0,t=0;
+      for(let k=0;k<run.length;k++){ s+=dens[run[k]]; t+=dist[run[k]]*2; }
+      if(s/run.length>AUTO_LONE_DENS)continue;
+      if(med>0&&t/run.length>med*AUTO_LONE_THIN)continue;
+      nLone++;
+      for(let k=0;k<run.length;k++)lone[run[k]]=1;
+    }
+    if(nLone){
+      const cut=Uint8Array.from(sk);
+      for(let p=0;p<cut.length;p++)if(lone[p])cut[p]=0;
+      sk=cut;
+    }
+  }
+  const {closed,spur}=skPruneEnds(sk,w,h,L);
+  let nClosed=0; for(let p=0;p<closed.length;p++)nClosed+=closed[p];
+  if(!nClosed)return null;                       /* nothing in the picture closes: leave it alone */
+  /* the biggest closed thing is the subject; a stray loop somewhere else is not */
+  const main=skMaskLargest(closed,w,h);
+  /* =================================================================================================
+     THE SHAPE IS ITS CONTOUR, FILLED — not everything the contour can be walked to.
+     The first attempt asked which thinned line each ink pixel was nearest, the closed one or a
+     pruned one, and gave the pixel to the winner. Measured on Ced's capture that handed 36,423 of
+     37,867 to the subject: a stray whose thinned line survived — and some do, because where two
+     lines cross the thinning leaves a little ladder with no free end on it — drags all of its ink
+     in with it, and then nothing is outside the shape and nothing is removed.
+
+     The contour does not need walking to. It is a closed loop, so the region it encloses is simply
+     the part of the picture the outside cannot reach, and the strokes that drew it straddle it by
+     half their own width. Grown by that much, it covers the subject exactly and reaches nothing
+     else. `R` is measured from the picture rather than assumed: the ink divided by the length of
+     its own skeleton is the mean stroke width, which on this capture is 4.5 pixels.
+     ================================================================================================= */
+  let nThin=0; for(let p=0;p<sk.length;p++)nThin+=sk[p];
+  const R=Math.max(1,Math.min(24,Math.round(total/Math.max(1,nThin)/2)+1));
+  const body=skMaskGrow(skMaskHoles(main,w,h),w,h,R);
+  const solid=skMaskHoles((function(){
+    const k=new Uint8Array(w*h);
+    for(let p=0;p<ink.length;p++)k[p]=(ink[p]&&body[p])?1:0;
+    return k;
+  })(),w,h);
+  return {solid, stroke:R, nClosed,
+          nEnds:(function(){ let n=0; for(let p=0;p<spur.length;p++)n+=spur[p]; return n; })()};
+}
+
 function skMaskCount(mask){
   if(!mask)return 0;
   let n=0; for(let p=0;p<mask.length;p++)if(mask[p])n++;

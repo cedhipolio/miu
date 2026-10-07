@@ -595,14 +595,16 @@ async def t_picture(T):
         return False, {"why": "no Edit picture button on the selection bar"}
     await T.page.mouse.click(b["cx"], b["cy"])
     await T.page.wait_for_timeout(2500)
+    # `.sk-edb` is a TOOL; `.sk-edm` is a chip, and the two share the bar. Matching on the text
+    # alone counted the shape-select chip "◯ Ellipse" as a sixth drawing tool.
     names = await T.page.evaluate(
-        """()=>[...document.querySelectorAll(".sk-edbar button")].map(b=>b.textContent.trim())""")
+        """()=>[...document.querySelectorAll(".sk-edbar .sk-edb")].map(b=>b.textContent.trim())""")
     out = {"tools": [n for n in names if any(n.endswith(w) for w in
                      ("Pen", "Line", "Arrow", "Box", "Ellipse"))]}
 
     async def ed_btn(label):
         return await T.page.evaluate(
-            """(t)=>{const b=[...document.querySelectorAll(".sk-edbar button")]
+            """(t)=>{const b=[...document.querySelectorAll(".sk-edbar .sk-edb")]
                        .find(z=>z.textContent.trim().endsWith(t));
                      if(!b)return null; const r=b.getBoundingClientRect();
                      return {cx:r.x+r.width/2, cy:r.y+r.height/2};}""", label)
@@ -650,6 +652,198 @@ async def t_picture(T):
     return ok, out
 
 
+async def _open_editor(T, draw):
+    """Place a snapshot whose pixels `draw` paints, and open the picture editor on it.
+
+    `draw` is JS run against a 2d context, so a case can state the picture it needs in the terms the
+    picture is made of rather than by dragging the snapshot tool over whatever the sheet happens to
+    have at that spot.
+    """
+    await T.reset()
+    await T.page.evaluate(
+        """(src)=>new Promise(async res=>{
+             S.annos=[]; S.lines=[]; layoutAnnos();
+             const c=document.createElement("canvas"); c.width=560; c.height=760;
+             const q=c.getContext("2d");
+             (new Function("q","w","h",src))(q,c.width,c.height);
+             const id=skPlaceSnapshot(0,[0.10,0.10,0.60,0.62],c.toDataURL("image/png"));
+             layoutAnnos();
+             setTimeout(()=>{ skEditor(S.annos.find(z=>z.id===id)); res(1); },300);
+           })""", draw)
+    ok = False
+    for _ in range(60):
+        await T.page.wait_for_timeout(200)
+        if await T.page.evaluate(
+                """()=>document.querySelectorAll(".sk-edbar .sk-edb").length>8"""):
+            ok = True
+            break
+    return ok
+
+
+async def _ed_click(T, label):
+    r = await T.page.evaluate(
+        """(t)=>{const b=[...document.querySelectorAll(".sk-edbar .sk-edb")]
+                   .find(z=>z.textContent.trim().endsWith(t));
+                 if(!b)return null; const q=b.getBoundingClientRect();
+                 return {cx:q.x+q.width/2, cy:q.y+q.height/2};}""", label)
+    if not r:
+        return False
+    await T.page.mouse.click(r["cx"], r["cy"])
+    await T.page.wait_for_timeout(250)
+    return True
+
+
+@case("The bucket fills a space on click")
+async def t_bucket(T):
+    """Ced: "add fill option (like bucket)". `Fill selection` paints behind the ink, which is what a
+    ground wants. A bucket paints what you clicked, on top, with no selection step."""
+    if not await _open_editor(T, """
+        q.strokeStyle='#e31e24'; q.lineWidth=6;
+        q.strokeRect(80,80,400,300); q.strokeRect(80,440,400,240);"""):
+        return False, {"why": "the picture editor did not open"}
+    if not await _ed_click(T, "Fill"):
+        return False, {"why": "no bucket on the editor's bar"}
+    # give it a colour that is in neither the ink nor the ground
+    await T.page.evaluate(
+        """()=>{const r=[...document.querySelectorAll(".sk-edsize")].find(z=>z.textContent.startsWith("Ink"));
+                const c=r&&r.querySelector("input[type=color]");
+                if(c){ c.value="#1e90ff"; c.dispatchEvent(new Event("input",{bubbles:true})); }}""")
+    cv = await T.rect(".sk-edcanvas")
+    before = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true})
+                          .getImageData(0,0,c.width,c.height).data;
+                let blue=0,clear=0;
+                for(let i=0;i<d.length;i+=4){ if(d[i+3]<20)clear++;
+                  else if(d[i+2]>180&&d[i]<120)blue++; }
+                return {blue,clear};}""")
+    # click inside the top rectangle — a space, not a line
+    await T.page.mouse.click(cv["x"] + cv["w"] * 0.5, cv["y"] + cv["h"] * 0.25)
+    await T.page.wait_for_timeout(500)
+    after = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true})
+                          .getImageData(0,0,c.width,c.height).data;
+                let blue=0,clear=0;
+                for(let i=0;i<d.length;i+=4){ if(d[i+3]<20)clear++;
+                  else if(d[i+2]>180&&d[i]<120)blue++; }
+                return {blue,clear};}""")
+    out = {"before": before, "after": after,
+           "blue added": after["blue"] - before["blue"],
+           "clear lost": before["clear"] - after["clear"]}
+    # the one rectangle it was clicked in, and not the other, and not the whole canvas
+    ok = (after["blue"] > 20000 and before["blue"] == 0
+          and out["clear lost"] > 20000
+          and after["clear"] > 100000)          # the second rectangle and the outside are untouched
+    await T.page.keyboard.press("Escape")
+    return ok, out
+
+
+@case("Shape select builds a selection")
+async def t_shapesel(T):
+    """Ced: "shaped select - within magic wand type tool"."""
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
+        return False, {"why": "the picture editor did not open"}
+    if not await _ed_click(T, "Shape select"):
+        return False, {"why": "no Shape select on the editor's bar"}
+    chips = await T.page.evaluate(
+        """()=>{const r=[...document.querySelectorAll(".sk-edsize")]
+                   .find(z=>z.textContent.startsWith("Shape"));
+                return r?{shown:getComputedStyle(r).display!=="none",
+                          chips:[...r.querySelectorAll("button")].map(b=>b.textContent.trim())}:null;}""")
+    cv = await T.rect(".sk-edcanvas")
+    await T.drag((cv["x"] + cv["w"] * 0.25, cv["y"] + cv["h"] * 0.25),
+                 (cv["x"] + cv["w"] * 0.75, cv["y"] + cv["h"] * 0.60))
+    rect = await T.page.evaluate(
+        """()=>{const t=document.querySelector(".sk-edcount");
+                return t?parseInt(t.textContent.replace(/[^0-9]/g,""),10)||0:0;}""")
+    # and the three chips reach it: subtract a smaller shape from what is selected
+    await T.page.evaluate(
+        """()=>{const b=[...document.querySelectorAll(".sk-edmodes .sk-edm")]
+                   .find(z=>/subtract/i.test(z.textContent)); if(b)b.click();}""")
+    await T.page.wait_for_timeout(200)
+    await T.drag((cv["x"] + cv["w"] * 0.35, cv["y"] + cv["h"] * 0.35),
+                 (cv["x"] + cv["w"] * 0.60, cv["y"] + cv["h"] * 0.50))
+    after = await T.page.evaluate(
+        """()=>{const t=document.querySelector(".sk-edcount");
+                return t?parseInt(t.textContent.replace(/[^0-9]/g,""),10)||0:0;}""")
+    out = {"chips": chips, "after the rectangle": rect, "after subtracting": after}
+    ok = (chips and chips["shown"] and len(chips["chips"]) == 2
+          and rect > 10000 and 0 < after < rect)
+    await T.page.keyboard.press("Escape")
+    return ok, out
+
+
+@case("Auto finds the subject, drops the strays and fills behind")
+async def t_auto(T):
+    """Ced: "have a automatic mode that will read the photo and will do what it should do. basically
+    it will capture the shape and then erase the lines, and the make the fill ... this is not ai
+    assisted tool, it should be aware without ai."
+
+    The picture is the shape of the problem: a crowd of strokes with long thin lines from the rest of
+    the drawing running across the space around it.
+    """
+    if not await _open_editor(T, """
+        q.strokeStyle='#e31e24'; q.lineWidth=4;
+        for(let i=0;i<8;i++) q.strokeRect(150+i*12, 240+i*8, 260-i*24, 380-i*16);
+        q.strokeRect(210,70,150,140);
+        q.lineWidth=12; q.beginPath(); q.moveTo(280,210); q.lineTo(280,650); q.stroke();
+        q.lineWidth=2;
+        [[0,40,560,150],[0,500,560,280],[30,0,480,760]].forEach(function(L){
+          q.beginPath(); q.moveTo(L[0],L[1]); q.lineTo(L[2],L[3]); q.stroke(); });"""):
+        return False, {"why": "the picture editor did not open"}
+
+    async def census():
+        return await T.page.evaluate(
+            """()=>{const c=document.querySelector(".sk-edcanvas");
+                    const d=c.getContext("2d",{willReadFrequently:true})
+                              .getImageData(0,0,c.width,c.height).data;
+                    const w=c.width,h=c.height;
+                    let red=0,white=0,clear=0,outerRed=0;
+                    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+                      const k=(y*w+x)*4;
+                      const out=(x<w*0.12||x>w*0.92||y<h*0.06||y>h*0.92);
+                      if(d[k+3]<20){ clear++; continue; }
+                      if(d[k]>150&&d[k+1]<120){ red++; if(out)outerRed++; }
+                      else if(d[k]>200&&d[k+1]>200&&d[k+2]>200)white++;
+                    }
+                    return {red,white,clear,outerRed};}""")
+
+    before = await census()
+    t0 = await T.page.evaluate("()=>performance.now()")
+    if not await _ed_click(T, "Auto"):
+        return False, {"why": "no Auto on the editor's bar"}
+    await T.page.wait_for_timeout(900)
+    ms = round(await T.page.evaluate("()=>performance.now()") - t0)
+    after = await census()
+    out = {"before": before, "after": after, "ms": ms,
+           "ink kept": round(100 * after["red"] / max(1, before["red"])),
+           "outer line left": after["outerRed"]}
+    # undo must put the whole pass back in one step
+    await T.page.evaluate(
+        """()=>{const b=[...document.querySelectorAll(".sk-edbar .sk-edb")]
+                  .find(z=>/undo/i.test(z.textContent)); if(b)b.click();}""")
+    await T.page.wait_for_timeout(600)
+    back = await census()
+    out["after one undo"] = back
+    # What is asserted is what the method can actually promise, and no more. The picture this runs
+    # on is deliberately the hard case — three lines drawn corner to corner straight THROUGH the
+    # subject — so a good half of every stray lies inside the shape, where both of its ends are on
+    # the contour and the free-end test cannot tell it from a real member. Measured: the outside
+    # halves, the subject keeps 95% of its ink, the fill lands, and one undo returns every pixel.
+    # Asserting "the strays all go" here would be asserting something untrue of the algorithm, and
+    # a test that demands what the code cannot do gets relaxed later by whoever is in a hurry.
+    ok = (before["outerRed"] > 400                     # there really were lines out there
+          and after["outerRed"] <= before["outerRed"] * 0.65   # and Auto took a good part of them
+          and out["ink kept"] >= 90                    # without eating the subject
+          and after["white"] > 20000                   # and it filled behind the drawing
+          and abs(back["red"] - before["red"]) < before["red"] * 0.01   # one undo, all of it
+          and ms < 4000)
+    await T.page.keyboard.press("Escape")
+    return ok, out
+
+
 @case("The picture editor keeps up with the hand")
 async def t_picture_speed(T):
     """Ced: "delay in edit picture is bad." Frame times during a real sweep of the brush."""
@@ -689,6 +883,143 @@ async def t_picture_speed(T):
     # 33ms is 30fps. Below that a brush feels like it is keeping up; above it, it drags.
     ok = bool(fr) and fr["median"] <= 33
     return ok, fr
+
+
+@case("The sheet sits in the middle of the room the chrome leaves")
+async def t_centred(T):
+    """Ced: "make sure the pdf is in the middle of the ui", with a capture of an 11x17 sheet jammed
+    against the right edge and 476px of empty white to the left of it (6lb).
+
+    The reading column is NOT the thing to measure against — it was the cause. What the eye measures
+    is the window minus whatever fixed chrome is in it, so that is what this asks about, at the
+    column widths that used to move the sheet and at a zoom where the sheet is wider than the column.
+    """
+    await T.reset()
+    out = {}
+    worst = 0.0
+    for col in ("fill", "1200px", "951px", "700px"):
+        if col == "fill":
+            await T.page.evaluate("()=>{document.documentElement.style.removeProperty('--col-w');}")
+        else:
+            await T.page.evaluate(
+                "(v)=>{document.documentElement.style.setProperty('--col-w',v);"
+                "      document.body.classList.remove('colmax');}", col)
+        await T.page.wait_for_timeout(700)
+        g = await T.page.evaluate(
+            """()=>{const vis=e=>{if(!e)return false;const s=getComputedStyle(e);
+                      return s.display!=='none'&&s.visibility!=='hidden'&&e.getBoundingClientRect().width>0;};
+                    const W=window.innerWidth;
+                    const rail=document.querySelector('aside#rail');
+                    const L=vis(rail)?rail.getBoundingClientRect().right:0;
+                    const mp=document.querySelector('#marksPanel');
+                    const R=(vis(mp)&&getComputedStyle(mp).position==='fixed')
+                            ?mp.getBoundingClientRect().left:W;
+                    const p=document.querySelector('#pages .page');
+                    const b=p.getBoundingClientRect();
+                    return {off:+(((b.left+b.right)/2)-((L+R)/2)).toFixed(1),
+                            gapL:+(b.left-L).toFixed(1), gapR:+(R-b.right).toFixed(1),
+                            sheetW:+b.width.toFixed(0), freeW:+(R-L).toFixed(0)};}""")
+        out[col] = g
+        if g["sheetW"] <= g["freeW"]:            # only meaningful while there IS room to centre in
+            worst = max(worst, abs(g["off"]))
+    # 12px of the free width is the slack the chrome measurement itself carries; 224 was the fault.
+    ok = worst <= 12
+    out["worst off-centre"] = round(worst, 1)
+    return ok, out
+
+
+@case("Only a corner handle changes the point size")
+async def t_corner_only(T):
+    """Ced: "resizing using the top and bottom handles should not make the font smaller in texts. it
+    should only work when the corner handles were used." (6lc)"""
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.14, 0.16), T.at(0.46, 0.22))
+    await T.type("SIZE RULE")
+    await T.click(T.at(0.86, 0.80))
+    mid = (await T.annos())[0]["id"]
+    out = {}
+
+    async def pull(pos, dx, dy):
+        await T.select(mid)
+        h = await T.handle(pos)
+        if not h:
+            return None
+        before = next(a for a in await T.annos() if a["id"] == mid)
+        await T.drag((h["cx"], h["cy"]), (h["cx"] + dx, h["cy"] + dy))
+        after = next(a for a in await T.annos() if a["id"] == mid)
+        return {"size": [before["size"], after["size"]],
+                "nh": [before["nh"], after["nh"]]}
+
+    out["s (down)"] = await pull("s", 0, 70)
+    out["n (up)"] = await pull("n", 0, -40)
+    out["se (corner)"] = await pull("se", 60, 40)
+    if any(v is None for v in out.values()):
+        return False, dict(out, why="a grip was missing")
+    edge_held = all(abs(out[k]["size"][0] - out[k]["size"][1]) < 0.01 for k in ("s (down)", "n (up)"))
+    edge_grew = abs(out["s (down)"]["nh"][0] - out["s (down)"]["nh"][1]) > 0.004
+    corner_moved = abs(out["se (corner)"]["size"][0] - out["se (corner)"]["size"][1]) > 0.1
+    return (edge_held and edge_grew and corner_moved), out
+
+
+@case("Ctrl on a side grip widens a text box and nothing else")
+async def t_ctrl_width(T):
+    """Ced: "expanding a text using ctrl should only make the textbox longer in width not in height
+    if dragged with the left or right handle." (6lc)"""
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.16, 0.18), T.at(0.42, 0.24))
+    await T.type("CTRL WIDTH")
+    await T.click(T.at(0.86, 0.82))
+    mid = (await T.annos())[0]["id"]
+    await T.select(mid)
+    h = await T.handle("e")
+    if not h:
+        return False, {"why": "no east grip"}
+    before = next(a for a in await T.annos() if a["id"] == mid)
+    await T.drag((h["cx"], h["cy"]), (h["cx"] + 110, h["cy"]), mods=["Control"])
+    after = next(a for a in await T.annos() if a["id"] == mid)
+    out = {"nw": [before["nw"], after["nw"]], "nh": [before["nh"], after["nh"]],
+           "size": [before["size"], after["size"]]}
+    wider = after["nw"] - before["nw"] > 0.02
+    same_h = abs(after["nh"] - before["nh"]) < 0.002
+    same_pt = abs(after["size"] - before["size"]) < 0.01
+    return (wider and same_h and same_pt), out
+
+
+@case("A pasted mark arrives selected, in Select, with its grips")
+async def t_paste_selected(T):
+    """Ced: "pasting should select the pasted item where you can already drag it immediately." (6ld)"""
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.12, 0.16), T.at(0.36, 0.22))
+    await T.type("COPY ME")
+    await T.click(T.at(0.86, 0.84))
+    mid = (await T.annos())[0]["id"]
+    await T.select(mid)
+    await T.page.keyboard.press("Control+c")
+    await T.page.wait_for_timeout(260)
+    # paste with a TOOL still in hand — the case that used to leave the mode on that tool
+    await T.pick("box")
+    await T.page.mouse.move(*T.at(0.55, 0.30))
+    await T.page.wait_for_timeout(150)
+    await T.page.keyboard.press("Control+v")
+    await T.page.wait_for_timeout(600)
+    st = await T.page.evaluate(
+        """()=>({mode:S.mode, sel:S.sel, multi:[...S.selMulti].length, n:S.annos.length,
+                 grips:!!document.querySelector('.anno.selui .rz.se')})""")
+    if st["sel"] is None:
+        return False, st
+    before = next(a for a in await T.annos() if a["id"] == st["sel"])
+    r = await T.mark_rect(st["sel"])
+    await T.drag((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2),
+                 (r["x"] + r["w"] / 2 + 90, r["y"] + r["h"] / 2 + 50))
+    after = next((a for a in await T.annos() if a["id"] == st["sel"]), None)
+    moved = bool(after) and (abs(after["nx"] - before["nx"]) > 0.01)
+    st["dragged straight away"] = moved
+    ok = (st["mode"] == "select" and st["grips"] and st["n"] == 2 and moved)
+    return ok, st
+
 
 
 async def main():

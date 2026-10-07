@@ -2626,7 +2626,10 @@ async def main():
                    cv.dispatchEvent(new PointerEvent("pointerdown",
                      {clientX:b.left+b.width*(x/cv.width),clientY:b.top+b.height*(y/cv.height),
                       bubbles:true,pointerId:73,button:0})); };
-                 out.wandDefault=[...m.querySelectorAll(".sk-edm")]
+                 /* 6la — the WAND's own row. `.sk-edm` is the chip class and more than one row
+                    uses it now: Shape select brought a Rectangle/Ellipse pair into the same bar,
+                    and an unscoped query counted its default as a wand mode. */
+                 out.wandDefault=[...m.querySelectorAll(".sk-edmodes .sk-edm")]
                    .filter(b=>b.classList.contains("on")).map(b=>b.textContent.trim());
                  out.hasWipe=!!btn(m,"Erase line");
                  let cv=m.querySelector(".sk-edcanvas");
@@ -4349,7 +4352,18 @@ async def main():
                  const x0=a0.nx; K("ArrowRight"); await nap(150);
                  out.nudged=(a0.nx>x0);
                  /* 6jt \u2014 the ladder: the first Escape drops the selection a0 still carries,
-                    the second puts the tool down. */
+                    the second puts the tool down.
+                    6ld \u2014 AND WHICH RUNG THE FIRST PRESS LANDS ON DEPENDS ON WHERE THE SELECTION
+                    CAME FROM. 6l1: a selection the TOOL just drew keeps the tool in hand for one
+                    more press; a selection made by picking up an existing mark means the drawing is
+                    over, so one press reaches Select. The selection here is the second kind \u2014
+                    `maAddShape` put the mark there and `selectAnno` picked it up \u2014 so `select` is
+                    the right answer and this line used to read `box` only because `maAddShape`
+                    happened to leave `_selFromDraw` set from an earlier call. A paste now clears that
+                    flag (it is an edit, not a draw), which is what exposed it.
+                    The ladder as a HAND meets it is tested where it can be: `behave.py`'s Escape case
+                    and `keys.py`, both of which draw with the tool first and both of which still get
+                    `box` then `select`. */
                  setMode("box"); await nap(80); K("Escape"); await nap(200);
                  out.esc1=S.mode;
                  K("Escape"); await nap(200);
@@ -4375,7 +4389,7 @@ async def main():
         ok = (not keys["tools"] and keys["dup"] == 2 and keys["paste"] == 3 and keys["del"] == 2
               and keys["undo"] == 3 and keys["redo"] == 2 and keys["all"] == 2
               and keys["grouped"] == 2 and keys["ungrouped"] == 0 and keys["nudged"]
-              and keys["esc1"] == "box" and keys["esc"] == "select"
+              and keys["esc1"] == "select" and keys["esc"] == "select"
               and keys["help"] and keys["helpShut"]
               and keys["find"] == "findInput" and keys["marks"] and keys["assist"]
               and keys["snap"] == "snapshot" and keys["laser"] == "laser")
