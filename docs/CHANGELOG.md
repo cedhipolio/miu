@@ -4,7 +4,241 @@ Per-version working notes — what was asked for, what was measured, why each fi
 is — live alongside this repo in the **MIU (Mark It Up)** Claude project as `claude/vNN-notes.md`,
 back to v11. This file is the summary.
 
-Versions are numbered by release, not semver: v44 is the forty-fourth published build.
+Versions are numbered by release, not semver: v47 is the forty-seventh published build.
+
+---
+
+## v47
+
+**One language for every selection, and a picture editor that stops growing.** Twelve items, six of
+which arrived mid-turn.
+
+**The three grips read left to right: edit, turn, drag** (`6lw`). Ced: *"it makes more sense to put
+the rotate in the middle, edit on left and drag on right."* Rotate is the one of the three that acts
+on the box as a whole and about its own centre, so the middle is where it belongs — it sits under the
+point it turns about.
+
+**Every control stays the right way up** (`6lz`). Ced: *"when a redline is rotated, always make the
+arrows of up and down layer retain the up and down orientation … retain this principle to all icons."*
+A mark is turned by a `rotate()` on its element and everything inside turns with it. Measured at 30°:
+the mark's transform was `matrix(0.866, 0.5, -0.5, 0.866, 0, 0)` and `.lup`'s was `none` — the
+up-arrow was wearing the mark's angle, and past 90° it pointed down. The mark carries the turn and
+each control cancels it, so the two matrices now multiply to the identity at every angle. The
+controls still orbit the box; that is what says which box they belong to.
+
+**The rotation cross hugs the shape** (`6lx`). Ced: *"make the grey lines only stretch up to the shape
+… just a little extended."* Measured before: on a 734 × 950 page the two dashed axes ran `0 → 734` and
+`0 → 950` — full rules cutting the drawing in half over a mark two inches across. Each axis is the
+mark's own half-extent plus 16px now, recomputed from the angle each frame, because a rectangle's
+extent changes as it turns.
+
+**The angle reading lies down** (`6ly`). Ced: *"the input for the angle should be just a small prompt
+… just always make it horizontal."* 46.1 × 44 stacked becomes 82 × 23.5 side by side, with
+`white-space:nowrap` and an explicit `writing-mode` so nothing outside it can stand it back up, and a
+clamp that keeps it inside the window.
+
+**The picture editor's tools fit two rows** (`6m2`). Ced: *"make the tools at least just two rows …
+separated by the same separator on the ribbon. make sure neumorphism is also in tach."* Measured in
+his own 1471px window: four rows, each bar needing ~1720px of content against 1393px of room. Twenty
+per cent came off in four places — the group plates become the ribbon's 1px dotted rule, the buttons
+tighten, the type drops to 11px, the sliders shorten — and five labels were shortened. Nothing was
+removed, nothing moved, and the emboss is untouched because it lives on the button, not the group.
+
+**A free turn takes the smallest room it can** (`6m0`). Ced: *"do not make the selection or canvass
+bigger every rotate."* Measured, sweeping ±10° four times on a 749 × 912 capture: 896×1029 → 1062×1169
+→ 1249×1336 → 1463×1533. Nearly double, for nothing. Two causes: each turn resampled the *result* of
+the last one, and nothing trimmed the empty corners. A run of free turns now resamples the pixels the
+run began with by the accumulated angle, and the result is trimmed to its own ink. Measured after:
+885×1029 → **749×912** → 885×1029 → **749×912**.
+
+**The chequer stays square to the screen** (`6m0`). Ced: *"make the transparent background be still so
+the user have visual cues if the shape is straight."* It was the turning element's own background, so
+the one reference that could tell you whether an edge had come square was turning too. It is a
+clipped, counter-rotated child now.
+
+**Crop opens on the picture's edges** (`6m1`). Ced: *"crop should also come from the edges of the
+photo, not dragged by the user."* Measured on entering the tool: zero painted pixels on the overlay —
+nothing at all until the hand moved. The box now starts as the whole picture with a grip on every
+corner and edge, nothing is cut until Apply, Escape leaves the picture alone, and dragging a fresh box
+out of empty space still works.
+
+**The selection bar's names sit level, and the band under it is gone** (`6m3`). Ced: *"make the texts
+align middle, also what is up with the bottom part of the tool."* Every label began at the same y, so
+a one-line name sat at the top of the two-line block its neighbours fill; the label block is a fixed
+two lines and centres in it. The band is the horizontal scrollbar, painted with square corners inside
+a 999px radius — the track is gone on all three engines and the bar still scrolls.
+
+**A narrowed text box covers its own text** (`6m4`). Ced: *"text wrapping issue not yet solved. make
+the default break inside a line. but the text should be all covered"*, and *"make sure the size of the
+textbox the user puts is granted."* `growTextBox` was called from typing and pasting and nowhere else,
+so narrowing a box with a side handle re-wrapped the text in the same height and the extra lines hung
+out of the bottom. A text box also breaks inside the word again by default. Measured: width kept at
+0.03542 exactly, height 0.06 → 0.0926, overflow −0.8px.
+
+**The text tool previews a box, not a slab** (`6m5`). The text tool shares the box tool's drag, so the
+shape ghost was painting the ribbon's fill over a mark that will never have one.
+
+**One design for every box** (`6m6`). Ced: *"apply the updated colors of icons (grey) in all
+redlines"*, and *"also be consistent on all designs of the boxs."* v46 greyed a single mark's five
+controls and left the group's trio and the stroke's in selection blue — three sets of the same three
+buttons, and which you got depended on what you had clicked. All three now read from the same
+`--ctl-*` tokens at the same size.
+
+**Verified.** `tools.py` 0 failing · `wysiwyg` 0/19 · `textparity` 0/10 · `stampparity` 0/4 ·
+`behave` **0 of 45** (twelve new) · `keys` all · `reopen` photos survive. Every new case was confirmed
+to fail with its fix reverted — and the chequer's case caught a real one: the counter-rotation was
+written inside a `try` in the wrong function and had never run. Seven `tools.py` cases were corrected
+rather than relaxed, and every editor button now carries a `data-k` handle so a label may be reworded
+without breaking a test again.
+
+---
+
+## v46
+
+**One stack for marks and strokes — which turns out to be three of the nine things asked for.**
+
+**A line can rest on top of a photo** (`6ln`). Ced, twice: *"the lines still don't have layers"* and
+*"they should also be able to rest on top of photos and other redlines"* — and separately *"the blue
+dragger of the line is not visible as it rests below the redline."* All three were one fault, and it
+was structural. A stroke was drawn into `svg.draw` and a mark into `.annolayer`, two sibling layers at
+z-index 7 and 8, so a stroke was below every mark **by construction**, however many times you pressed
+⤒. Worse, the two kinds kept separate z sequences, each renumbered 1..n inside its own array, so a
+mark's z and a stroke's z were two scales that could not be compared at all.
+
+One band, one sequence. `bandList` is every mark and every stroke in a band, `bandRenumber` gives them
+one gapless order, and front / back / step all work on that list. On screen a stroke is drawn into a
+**run layer** inside the mark layer — one SVG per unbroken run of strokes in the order, so a stroke
+can sit between two marks; measured on the fixture that is 1–2 SVGs for a band of 25 items. The export
+follows: two bands rather than four, each sorted by the one z.
+
+**One press steps past what it overlaps** (`6lo`). Ced: *"if a page has 100 redlines, and two are
+overlapping … the user clicking the up layer should not take 9 to ten clicks to swap with the item on
+top."* The step was already "past the nearest neighbour" — but nearest **by z**, over everything in
+the band, and most of what sits between you and the thing covering you is somewhere else on the sheet.
+The neighbour to step past is now the nearest one above that actually **touches** the block's own
+rectangle, falling back to nearest-by-z when nothing overlaps. Measured — line at the bottom, photo at
+the top, twenty marks between that it does not touch: **21 presses became 1.**
+
+**A selected stroke's handles are always on top** (`6lp`). They were drawn in the stroke's own layer,
+so a stroke deliberately under a mark had its controls under that mark too. A mark's furniture has
+lived in `.annoui` since 6is; a stroke's belongs there for the same reason. Where a stroke sits in the
+stack is a decision about the drawing; where its handles sit is not.
+
+**A box that wraps grows down to cover its text** (`6lv`). Ced: *"if the text wraps, the text box
+should extend below to still cover the text"* — which pulls against his earlier *"do not change its
+text box size after the fact."* They only conflict if height is read as fixed. **Width is the
+decision** — it chooses where the words break and may never move. **Height is a floor** — the box will
+not shrink below what the hand gave it and will grow below to cover the words. Measured on a
+hand-narrowed box: the text overflowed by 11.9px before and is inside the box after, with the width
+unchanged to five decimal places.
+
+**A photo is never flattened** (`6lq`). Ced: *"do not flatten the photos so it can be editable on
+other editors."* Flattening paints a mark into the sheet, which is right for a redline nobody should
+be able to drag and wrong for a photo: exported as a Stamp annotation it can still be moved or deleted
+in Bluebeam or Acrobat. Pictures are kept out of the flatten rather than the button being removed — a
+selection of a note and a photo flattens the note and says so.
+
+**The selection bar** (`6ls`): equal columns rather than natural widths, so the row reads as a row of
+controls and not a ragged line of words — the spread across twelve buttons went from tens of pixels to
+**4px** — with long names breaking to two lines, and the bar rounded to a pill.
+
+**The controls round the box** (`6lt`): a hairline grey ring and a grey glyph instead of five blue
+discs competing with the blue frame they hang off, filling light grey under the pointer. The resize
+grips stay blue: they are the selection itself.
+
+**The rotation** (`6lu`). Ced sent a picture and said *"apply this animation when rotating"*: the mark
+on a pale ground, a dashed cross through the point it turns about, an arm out to the hand, and the
+angle read twice — where it is now, and how far it has come. One number cannot answer both questions a
+hand asks while turning something. None of it exists at rest.
+
+**Seven new `behave.py` cases**, each confirmed to fail with its fix reverted — thirty-three
+behaviours. Two older cases were reconciled rather than relaxed: `tools.py`'s stroke-stacking case
+asserted the four-layer DOM that 6ln replaced (every behaviour in it still passes; the structural half
+now asks whether the run layers are inside the mark layers and carry a z-index), and `behave.py`'s
+"keeps the size the hand gave it" asserted a fixed height where 6lv makes it a floor.
+
+**Not reproduced**: *"text wrapping is not working well in newly added texts."* Measured six ways —
+drawn wide, drawn narrow, click-made, a tall box, while the caret is in it and after committing — and
+in every one the screen's line breaks match the exporter's exactly and the block is vertically centred
+as the export places it. The later message about the box covering wrapped text was the fault, and that
+is fixed above; if something else remains, it needs the specific text.
+
+---
+
+## v45
+
+**A zoom that does not throw the document away, a selection you can see and grab, and a bar that says
+what its buttons do.**
+
+**Zoom** (`6lh`). Ced: *"zoom in and out are again very slow … i am experiencing lags."* Every notch
+was calling `setupVirtualization()`, which disconnects the IntersectionObserver and builds a new one
+over every page — and a fresh observer delivers an entry for **every** element it is given, whether
+or not anything changed. So each notch produced one record per page and unloaded every page off
+screen, throwing away canvases the next notch had to draw again. Measured on the 32-page fixture:
+
+| ten-notch wheel zoom | before | after |
+|---|---|---|
+| `unloadPage` calls | 300 | **0** |
+| observers rebuilt | 10 | **0** |
+| frames rendered in the gesture | 102 | **545** |
+| 95th-percentile frame | 94.6 ms | **16.8 ms** |
+| long tasks over 50 ms | — | **none** |
+
+None of that work was ever needed: an observer watches ELEMENTS, and 6ep made a zoom keep every page
+div. Rebuilding is only right after `renderAll`, which is where the other two calls already are.
+Scroll, drag and idle were measured too and were already clean (p95 17 ms, worst 38 ms), so this one
+cause was the whole of both complaints.
+
+**The selection frame** (`6lj`). Ced: *"make the blue lines in display all even."* Measured on his
+own capture, the 2px ring painted **2, 2, 2 and 3** pixels across and **2, 2, 1 and 2** down. Two
+causes. The frame took `left`/`top` from the mark — a fraction — while taking width and height from
+`offsetWidth`, which is rounded, so opposite edges fell on different sides of a half pixel. And THREE
+rings were being drawn: `.anno.sel` carries one, the frame is itself an `.anno.sel`, and a picture's
+`.ed.imgwrap` has an outline of its own. The frame now rounds and then nudges itself by whatever
+fraction the page's own position leaves (rounding inside the page is not enough — the page is centred
+in the free space and rarely lands on a whole number), and the mark under it stops drawing its ring
+while the frame is up. Measured after: every scan line through the box reads **2, 2**.
+
+**A press inside the selection moves the selection** (`6ll`). Ced: *"all dragger or tool drag should
+be shown above the redlines and you should be moving the selected redline."* The handles were already
+right — `elementsFromPoint` at the move grip answers the grip, and dragging it moved the selected
+mark. The BODY was not: at the centre of the selected mark the topmost element was the OTHER mark's
+`.ed`, so a drag that began inside the box you were working on picked up whatever lay over it.
+Overlap is the normal state of a marked-up drawing. A click is still a click: `dragBody` does nothing
+until the pointer passes the slop, so a press that never moves selects the mark actually under the
+hand — drag what you are holding, click to pick up something else.
+
+**The selection bar says what it is** (`6li`). Ced listed the names he wanted and asked for *"names on
+the icons … small and all caps, kind of similar to the headers on the ribbon."* 6jf had left nine of
+these wordless on the argument that hover says what they are; hover is not a label, and it does not
+exist on a tablet. The word goes UNDER the glyph instead of beside it, so a button is as wide as its
+own word and the bar stays one row. The type is the ribbon's own group header — 8px, 800, .1em,
+uppercase. The lock's glyph and word turn red while it is on, which is the one state worth reading
+across the room.
+
+**An edit grip on every picture** (`6lk`). Ced wanted the picture editor *"beside the drag for easy
+access"*, and *"if the photo was from a snapshot markup on tool, not only on added image photos."* It
+is a round control next to the move grip, and the row of three re-centres under the box. On the
+second half: measured first — the bar and the right-click menu already offered it for a snapshot, so
+the grip is the thing that was missing, and it appears on any `kind:"img"` mark, photo or snapshot or
+placed markup alike.
+
+**A line's first point shows** (`6lm`). Ced: *"show the first point of a line if only inserted by
+click and not dragging."* `clickRunArm` built a ghost from (x,y) to (x,y) — a stroke of zero length,
+which draws nothing — so until the hand moved, a click that landed and a click that missed looked
+identical. A dot in the stroke's colour inside a white ring, cleared by Escape with the run.
+
+**Layers on lines** — Ced asked for these; measured before changing anything, a stroke already carries
+`lay`, `maLayerStamp` assigns it, the bar shows its layer and moves it, `maLayerCount` counts it, and
+hiding the layer takes the line off the screen and out of the export. Nothing to add, so nothing was
+added; `behave.py` now has a case so it stays that way.
+
+**Seven new `behave.py` cases**, each confirmed to fail with its fix reverted: the even ring, the
+named bar, the edit grip, the overlap press, the line layers, the first point, and the zoom's cost.
+Twenty-six behaviours. Three `tools.py` cases were corrected rather than relaxed: one matched the
+properties button by its visible text (now by title, which is the stable handle), one asserted the
+frame's `left` string equalled the mark's (now within a pixel, which is what the pixel snap allows),
+and one expected the lock's old bare title.
 
 ---
 

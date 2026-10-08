@@ -574,18 +574,24 @@ async def main():
         barOff = await page.evaluate(
             '()=>document.getElementById("selbar").hasAttribute("hidden")')
         # 6jf — Ced asked for Lock, Flatten, Add to markup, Apply to pages and Copy properties BACK on
-        # the bar, and for Flip to join them. Five of them keep a word; the rest are icons, so the bar
-        # is no wider than v32's five-words-and-an-overflow. The ⋯ keeps what is about several marks at
-        # once: aligning, distributing, the subject.
-        words = ["Edit properties", "Duplicate", "Group", "Copy"]
+        # the bar, and for Flip to join them. The ⋯ keeps what is about several marks at once:
+        # aligning, distributing, the subject.
+        # 6li — AND NOW EVERY ONE OF THEM WEARS ITS NAME. Ced: "apply names on the icons." So the
+        # split this case used to assert — four words and eight icons, with a cap of six labels to
+        # keep the bar narrow — is the thing that was asked to go. What is asserted instead is that
+        # NOTHING on the bar is wordless except the two controls that are not actions on the mark:
+        # the ⋯ overflow and Delete, which is a red disc by design.
+        words = ["Properties", "Duplicate", "Group", "Copy", "Flip (H)", "Flip (V)",
+                 "Lock", "Flatten", "Add markup", "Apply to pages", "Copy properties"]
         # 6kz — Flip is two buttons rather than a button and a menu
-        icons = ["Flip left to right", "Flip top to bottom", "Lock", "Flatten",
-                 "Add to markup library", "Apply to pages", "Copy properties", "Delete"]
+        titles = ["Flip left to right", "Flip top to bottom", "Lock these marks", "Flatten",
+                  "Add to markup library", "Apply to pages", "Copy properties", "Delete"]
         ok = (barOn["shown"] and barOff
               and all(w in barOn["acts"] for w in words)
               and any(a.startswith("Layer") for a in barOn["all"])
-              and all(i in barOn["all"] for i in icons)
-              and len(barOn["acts"]) <= 6)
+              and all(i in barOn["all"] for i in titles)
+              # every button but the overflow and Delete carries a word
+              and len(barOn["acts"]) >= len(barOn["all"]) - 2)
         results.append({"tool": "Selection bar", "ok": ok,
                         "why": f'{barOn["n"]} selected · {len(barOn["all"])} buttons · '
                                f'{len(barOn["acts"])} labelled · hides: {barOff} · {barOn["all"]}'})
@@ -632,7 +638,10 @@ async def main():
         await drag(*at(0.20, 0.30), *at(0.40, 0.40))
         await page.mouse.click(*at(0.30, 0.35))
         await page.wait_for_timeout(250)
-        await page.locator('#selbar .sb-b', has_text="Edit properties").click()
+        # 6li — found by its TITLE, not by the words on it. The bar's buttons wear their names now
+        # (Ced: "apply names on the icons"), so matching the visible text ties this case to a label
+        # that is allowed to change; the title is the stable handle.
+        await page.locator('#selbar .sb-b[title="Edit properties"]').click()
         await page.wait_for_timeout(350)
         rng = page.locator("#toolpop .tp-range").first
         rb = await rng.bounding_box()
@@ -1742,13 +1751,17 @@ async def main():
             """()=>{ const out=window.__snapf||{};
                      const m=document.querySelector(".sk-edit");
                      out.editor=!!m;
-                     out.buttons=m?[...m.querySelectorAll("button")].map(b=>b.textContent.trim()):[];
+                     /* 6m2 — the KEYS, not the words. This case is about the editor opening on a
+                        snapshot with its tools in it; which word is printed under each glyph is a
+                        different question, and reading it here is what made a label change break a
+                        test that had nothing to do with labels. */
+                     out.buttons=m?[...m.querySelectorAll(".sk-edb")].map(b=>b.dataset.k||""):[];
                      if(m){ const c=[...m.querySelectorAll("button")].find(b=>/Cancel/i.test(b.textContent));
                             if(c)c.dispatchEvent(new MouseEvent("click",{bubbles:true})); }
                      out.closed=!document.querySelector(".sk-edit");
                      return out; }""")
         joined = " ".join(snapf["buttons"]).lower()
-        want = all(w in joined for w in ("erase", "wand", "inverse", "fill"))
+        want = all(w in joined for w in ("erase", "wand", "invert", "fillsel"))
         ok = (snapf["frame"] in (0, None) and snapf["tool"] in (0, None)
               and snapf["editor"] and want and snapf["closed"])
         results.append({"tool": "Snapshot: no frame, editable", "ok": ok, "why": json.dumps(snapf)})
@@ -1776,8 +1789,14 @@ async def main():
                        return {clientX:b.left+b.width*(x/cv.width),
                                clientY:b.top+b.height*(y/cv.height),
                                bubbles:true,pointerId:31,button:0}; };
-                     const press=t=>[...m.querySelectorAll(".sk-edb")]
-                       .find(z=>new RegExp(t,"i").test(z.textContent))
+                     /* 6m2 — BY KEY, NOT BY WORDS. These presses matched a regex against the button's visible
+                        text, so shortening five labels to fit the bar into two rows broke four cases that were
+                        testing something else entirely. Every editor button now carries `data-k`, a handle that
+                        names what it does and is not allowed to change; the text match is kept only as a fallback
+                        for the handful of presses still written that way. */
+                     const press=t=>(m.querySelector('.sk-edb[data-k="'+t+'"]')
+                       ||[...m.querySelectorAll(".sk-edb")]
+                           .find(z=>new RegExp(t,"i").test(z.textContent)))
                        .dispatchEvent(new MouseEvent("click",{bubbles:true}));
                      const out={};
                      /* ONE pointermove across the whole picture: a dab-per-event brush would leave a
@@ -1792,16 +1811,16 @@ async def main():
                      let gaps=0; for(let x=5;x<55;x++)if(px(x,57)[3]>20)gaps++;
                      out.gaps=gaps;
                      /* the wand takes the space inside the ring, bounded by the ink */
-                     press("Magic wand");
+                     press("wand");
                      cv.dispatchEvent(new PointerEvent("pointerdown",CP(30,30)));
                      out.inside=m.querySelector(".sk-edcount").textContent;
                      out.shown=[...ov.getContext("2d").getImageData(30,30,1,1).data][3]>0;
-                     press("Fill selection");
+                     press("fillsel");
                      out.filled={centre:px(30,30), ink:px(30,10), outside:px(2,2)};
                      /* invert, and the fill lands everywhere else — still under the ink */
-                     press("Undo"); press("Select inverse");
+                     press("undo"); press("invert");
                      out.inverted=m.querySelector(".sk-edcount").textContent;
-                     press("Fill selection");
+                     press("fillsel");
                      out.flipped={outside:px(2,2), ink:px(30,10), centre:px(30,30)};
                      [...m.querySelectorAll(".sk-edfb")].find(b=>/Save/.test(b.textContent))
                        .dispatchEvent(new MouseEvent("click",{bubbles:true}));
@@ -1836,7 +1855,8 @@ async def main():
                      const cv=m.querySelector(".sk-edcanvas");
                      const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                        const btn=t=>{ const r=new RegExp(t,"i");
-                         return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                         return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                           ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                      /* 6kq — the WAND's three modes, scoped to their own row: the drawing tools added a
                         chip of their own ("Filled") that wears the same class and is not one of them */
                      const mode=k=>[...m.querySelectorAll(".sk-edmodes .sk-edm")]
@@ -1849,7 +1869,7 @@ async def main():
                      const n=()=>parseInt(m.querySelector(".sk-edcount").textContent
                                            .replace(/[^0-9]/g,""),10)||0;
                      const out={chips:[...m.querySelectorAll(".sk-edmodes .sk-edm")].map(b=>b.textContent.trim())};
-                     btn("Magic wand").click();
+                     btn("wand").click();
                      out.shown=getComputedStyle(m.querySelector(".sk-edmodes")).display!=="none";
                      out.deflt=[...m.querySelectorAll(".sk-edmodes .sk-edm")]
                        .filter(z=>z.classList.contains("on")).map(z=>z.textContent.trim());
@@ -2038,7 +2058,8 @@ async def main():
                      const px=(x,y)=>[...g.getImageData(x,y,1,1).data];
                      const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                         const btn=t=>{ const r=new RegExp(t,"i");
-                          return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                          return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                            ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                      const out={groups:m.querySelectorAll(".sk-edgrp").length,
                                 tools:[...m.querySelectorAll(".sk-edb")].map(b=>b.textContent.trim()),
                                 zoomStart:m.querySelector(".sk-edzoom").textContent};
@@ -2050,7 +2071,7 @@ async def main():
                      out.sideBySide=gs.some(gr=>{
                        const t=[...gr.querySelectorAll(".sk-edb")].map(b=>b.textContent);
                        return t.some(x=>/wand/i.test(x))&&t.some(x=>/lasso/i.test(x))
-                              &&t.some(x=>/inverse/i.test(x)); });
+                              &&t.some(x=>/invert/i.test(x)); });   /* 6m2 — "Select inverse" is "Invert" now */
                      /* zoom in, out, 1:1 */
                      btn("Zoom in").click(); const zin=m.querySelector(".sk-edzoom").textContent;
                      btn("one for one").click(); out.oneToOne=m.querySelector(".sk-edzoom").textContent;
@@ -2077,17 +2098,17 @@ async def main():
                      cv.dispatchEvent(new PointerEvent("pointermove",CP(cv.width*0.9,cv.height*0.5)));
                      cv.dispatchEvent(new PointerEvent("pointerup",CP(cv.width*0.9,cv.height*0.5)));
                      out.erased=px(mid[0],mid[1]);
-                     btn("Restore").click();
+                     btn("restore").click();
                      cv.dispatchEvent(new PointerEvent("pointerdown",CP(cv.width*0.1,cv.height*0.5)));
                      window.dispatchEvent(new PointerEvent("pointermove",CP(cv.width*0.9,cv.height*0.5)));
                      cv.dispatchEvent(new PointerEvent("pointermove",CP(cv.width*0.9,cv.height*0.5)));
                      cv.dispatchEvent(new PointerEvent("pointerup",CP(cv.width*0.9,cv.height*0.5)));
                      out.restored=px(mid[0],mid[1]);
-                     out.undoOn=!btn("Undo").disabled;
-                     btn("Undo").click();
+                     out.undoOn=!btn("undo").disabled;
+                     btn("undo").click();
                      out.afterUndo=px(mid[0],mid[1]);
                      out.redoOn=!btn("Redo").disabled;
-                     btn("Redo").click();
+                     btn("redo").click();
                      out.afterRedo=px(mid[0],mid[1]);
                      [...m.querySelectorAll(".sk-edfb")].find(b=>/Cancel/.test(b.textContent)).click();
                      out.closed=!document.querySelector(".sk-edit");
@@ -2317,7 +2338,8 @@ async def main():
                      const px=(x,y)=>[...g.getImageData(x,y,1,1).data];
                      const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                        const btn=t=>{ const r=new RegExp(t,"i");
-                         return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                         return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                           ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                      const B=()=>cv.getBoundingClientRect();
                      const hit=(x,y)=>cv.dispatchEvent(new PointerEvent("pointerdown",
                        {clientX:B().left+B().width*(x/cv.width),
@@ -2337,15 +2359,15 @@ async def main():
                                want:Math.round(30*zoom),
                                at:Math.round(parseFloat(ring.style.left)),
                                cursor:cv.style.cursor};
-                     btn("Magic wand").click();
+                     btn("wand").click();
                      out.hiddenForWand=ring.hidden;
                      hit(40,40);                       /* the hole in the middle */
                      out.sel=m.querySelector(".sk-edcount").textContent;
-                     btn("Select inverse").click();    /* now the red frame */
+                     btn("invert").click();    /* now the red frame */
                      out.before=px(4,4);
-                     btn("Erase selection").click();
+                     btn("clearsel").click();
                      out.after=px(4,4);
-                     btn("Undo").click();
+                     btn("undo").click();
                      out.undone=px(4,4);
                      [...m.querySelectorAll(".sk-edfb")].find(b=>/Cancel/.test(b.textContent)).click();
                      return out; }""")
@@ -2452,7 +2474,8 @@ async def main():
                      const card=m.querySelector(".sk-edcard"), cv=m.querySelector(".sk-edcanvas");
                      const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                        const btn=t=>{ const r=new RegExp(t,"i");
-                         return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                         return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                           ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                      const box=()=>{ const r=card.getBoundingClientRect();
                        return [Math.round(r.width),Math.round(r.height)]; };
                      const a0=box();
@@ -2619,7 +2642,8 @@ async def main():
                  const out={};
                  let m=document.querySelector(".sk-edit");
                  const btn=(mm,t)=>{ const r=new RegExp(t,"i"), L=[...mm.querySelectorAll(".sk-edb")];
-                   return L.find(z=>r.test(z.textContent))||L.find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                   return mm.querySelector('.sk-edb[data-k="'+t+'"]')            /* 6m2 */
+                     ||L.find(z=>r.test(z.textContent))||L.find(z=>r.test(z.textContent+" "+(z.title||""))); };
                  const px=(cv,x,y)=>[...cv.getContext("2d",{willReadFrequently:true})
                                         .getImageData(x,y,1,1).data];
                  const hit=(cv,x,y)=>{ const b=cv.getBoundingClientRect();
@@ -2958,7 +2982,8 @@ async def main():
                  const px=(x,y)=>[...g.getImageData(x,y,1,1).data];
                  const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                    const btn=t=>{ const r=new RegExp(t,"i");
-                     return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                     return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                       ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                  const B=()=>cv.getBoundingClientRect();
                  const P=(x,y)=>({clientX:B().left+B().width*(x/cv.width),
                                   clientY:B().top+B().height*(y/cv.height),
@@ -2972,16 +2997,16 @@ async def main():
                  cv.dispatchEvent(new PointerEvent("pointerup",P(5,5)));
                  await nap(250);
                  out.selected=m.querySelector(".sk-edcount").textContent;
-                 btn("Erase selection").click(); await nap(250);
+                 btn("clearsel").click(); await nap(250);
                  out.tookRed=(px(20,20)[3]===0);
                  out.keptBlue=(px(90,40)[3]>200);
-                 btn("Undo").click(); await nap(250);
+                 btn("undo").click(); await nap(250);
                  out.undone=(px(20,20)[3]>200);
                  const was=[cv.width,cv.height];
                  btn("Rotate right").click(); await nap(300);
                  out.turned=(cv.width===was[1]&&cv.height===was[0]);
                  out.topRight=(px(cv.width-25,20)[0]>200&&px(cv.width-25,20)[1]<90);
-                 btn("Undo").click(); await nap(300);
+                 btn("undo").click(); await nap(300);
                  out.turnUndone=(cv.width===was[0]&&cv.height===was[1]&&px(20,20)[3]>200);
                  btn("Rotate left").click(); await nap(300);
                  const nw0=a.nw, nh0=a.nh, want=[cv.width,cv.height];
@@ -3177,32 +3202,44 @@ async def main():
                  const px=(x,y)=>[...g.getImageData(x,y,1,1).data];
                  const _bl=()=>[...m.querySelectorAll(".sk-edb")];
                    const btn=t=>{ const r=new RegExp(t,"i");
-                     return _bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                     return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                       ||_bl().find(z=>r.test(z.textContent))||_bl().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                  const B=()=>cv.getBoundingClientRect();
                  const P=(x,y)=>({clientX:B().left+B().width*(x/cv.width),
                                   clientY:B().top+B().height*(y/cv.height),
                                   bubbles:true,pointerId:96,button:0});
                  const was=[cv.width,cv.height], nw0=a.nw, nh0=a.nh;
-                 const out={ hasCrop:!!btn("Crop") };
-                 btn("Crop").click(); await nap(100);
-                 cv.dispatchEvent(new PointerEvent("pointerdown",P(5,5)));
+                 const out={ hasCrop:!!btn("crop") };
+                 /* 6m1 — CROP IS TWO HALVES NOW. Ced: "crop should also come from the edges of the
+                    photo, not dragged by the user." Picking the tool up puts the box on the picture's
+                    own edges; a drag pushes an edge in; nothing is cut until Apply. So the gesture
+                    this case drives is the new one — drag the box smaller, check nothing has been cut
+                    yet, then press Apply — and the cut it asserts afterwards is unchanged. */
+                 btn("crop").click(); await nap(140);
+                 out.boxOnOpen=(()=>{ const ov=m.querySelector(".sk-edov");
+                   try{ const d=ov.getContext("2d").getImageData(0,0,ov.width,ov.height).data;
+                        let n=0; for(let i=3;i<d.length;i+=4) if(d[i])n++; return n; }catch(e){ return 0; } })();
+                 /* take hold of the SE corner of the full-size box and pull it in */
+                 cv.dispatchEvent(new PointerEvent("pointerdown",P(cv.width-1,cv.height-1)));
                  cv.dispatchEvent(new PointerEvent("pointermove",P(60,40)));
                  cv.dispatchEvent(new PointerEvent("pointerup",P(60,40)));
-                 await nap(350);
+                 await nap(250);
+                 out.uncutWhileDragging=(cv.width===was[0]&&cv.height===was[1]);
+                 btn("cropapply").click(); await nap(400);
                  out.size=[cv.width,cv.height];
                  out.shrank=(cv.width<was[0]&&cv.height<was[1]);
                  out.keptRed=(px(10,10)[0]>200&&px(10,10)[3]>200);
                  /* the ORIGINAL came down with it, so Restore still lines up */
-                 btn("Restore").click(); await nap(80);
+                 btn("restore").click(); await nap(80);
                  cv.dispatchEvent(new PointerEvent("pointerdown",P(20,20)));
                  cv.dispatchEvent(new PointerEvent("pointerup",P(20,20)));
                  await nap(200);
                  out.restores=(px(20,20)[0]>200&&px(20,20)[3]>200);
                  /* undo the restore dab, then the crop itself: the margin comes back */
-                 btn("Undo").click(); await nap(250);
-                 btn("Undo").click(); await nap(350);
+                 btn("undo").click(); await nap(250);
+                 btn("undo").click(); await nap(350);
                  out.undone=(cv.width===was[0]&&cv.height===was[1]&&px(90,40)[2]>200);
-                 btn("Redo").click(); await nap(350);
+                 btn("redo").click(); await nap(350);
                  out.redone=(cv.width<was[0]);
                  const want=[cv.width,cv.height];
                  [...m.querySelectorAll(".sk-edfb")].find(b=>/Save/.test(b.textContent))
@@ -3219,7 +3256,8 @@ async def main():
                  out.orig=await dims(a.srcOrig);
                  out.origCut=(String(out.orig)===String(want));
                  res(out); })""")
-        ok = (crop["hasCrop"] and crop["shrank"] and crop["keptRed"] and crop["restores"]
+        ok = (crop["hasCrop"] and crop["boxOnOpen"] > 1000 and crop["uncutWhileDragging"]
+              and crop["shrank"] and crop["keptRed"] and crop["restores"]
               and crop["undone"] and crop["redone"] and crop["closed"]
               and crop["markShrank"] and crop["scaleKept"] and crop["origCut"])
         results.append({"tool": "Crop cuts the picture down", "ok": ok, "why": json.dumps(crop)})
@@ -3411,8 +3449,17 @@ async def main():
                  const g=cv.getContext("2d",{willReadFrequently:true});
                  const cs=getComputedStyle(box);
                  const sr=stage.getBoundingClientRect(), br=box.getBoundingClientRect();
+                 /* 6m0 — the chequer moved OFF this element. It used to be `.sk-edwrap`'s own
+                    background, and `.sk-edwrap` is the element the free-turn preview rotates, so the
+                    squares turned with the picture and could not say whether an edge had come square.
+                    It is a clipped, counter-rotated child now, so the test reads it there — and asks
+                    the thing that actually matters, which is that the picture carries a chequer and
+                    the element that turns does not. */
+                 const bgp=m.querySelector(".sk-edbg");
                  const out={ edge:((cs.boxShadow||"").indexOf("rgb")>=0&&cs.outlineStyle==="dashed"),
-                             chequer:(cs.backgroundImage||"").indexOf("gradient")>=0,
+                             chequer:(!!bgp
+                               &&(getComputedStyle(bgp).backgroundImage||"").indexOf("gradient")>=0
+                               &&(cs.backgroundImage||"none")==="none"),
                              centred:(Math.abs((br.left+br.width/2)-(sr.left+sr.width/2))<6
                                     &&Math.abs((br.top+br.height/2)-(sr.top+sr.height/2))<6) };
                  const frng=m.querySelector(".sk-edfree input[type=range]");
@@ -3424,12 +3471,19 @@ async def main():
                              &&cv.width===was[0]);
                  frng.dispatchEvent(new Event("change",{bubbles:true}));
                  await nap(500);
-                 out.turned=(cv.width>was[0]&&cv.height>was[1]);
+                 /* 6m0 — a free turn no longer GROWS unconditionally. Ced: "do not make the
+                    selection or canvass bigger every rotate, always take the smallest space it can
+                    get." The canvas is resampled to hold the turned rectangle and then trimmed back
+                    to its own ink, so what the turn guarantees is a DIFFERENT shape that still holds
+                    everything — not a bigger one. On this fixture (a 40x20 bar in a 120x60 field)
+                    the trim takes the empty margin with it, which is the point. */
+                 out.turned=(cv.width!==was[0]||cv.height!==was[1]);
+                 out.noBigger=(cv.width<=Math.ceil(was[0]*Math.cos(Math.PI/6)+was[1]*Math.sin(Math.PI/6))
+                             &&cv.height<=Math.ceil(was[0]*Math.sin(Math.PI/6)+was[1]*Math.cos(Math.PI/6)));
                  out.cleared=!(box.style.transform||"").length;
                  out.ink=(()=>{ let n=0; const d=g.getImageData(0,0,cv.width,cv.height).data;
                    for(let p=3;p<d.length;p+=4)if(d[p]>40)n++; return n>500; })();
-                 [...m.querySelectorAll(".sk-edb")]
-                   .find(z=>/Undo/i.test(z.textContent)).click();
+                 m.querySelector('.sk-edb[data-k="undo"]').click();
                  await nap(400);
                  out.undone=(cv.width===was[0]&&cv.height===was[1]);
                  const nw0=a.nw;
@@ -3438,10 +3492,13 @@ async def main():
                  [...m.querySelectorAll(".sk-edfb")].find(b=>/Save/.test(b.textContent))
                    .dispatchEvent(new MouseEvent("click",{bubbles:true}));
                  await nap(500);
-                 out.saved=(!document.querySelector(".sk-edit")&&a.nw>nw0);
+                 /* 6m0 — likewise: the mark takes the picture's NEW SHAPE, which after a trim may
+                    be narrower rather than wider. What is asserted is that it moved with the picture
+                    and kept the picture's scale. */
+                 out.saved=(!document.querySelector(".sk-edit")&&Math.abs(a.nw-nw0)>1e-4);
                  res(out); })""")
         ok = all(ed2.get(k) for k in ("edge", "chequer", "centred", "hasFree", "previews",
-                                      "turned", "cleared", "ink", "undone", "saved"))
+                                      "turned", "noBigger", "cleared", "ink", "undone", "saved"))
         results.append({"tool": "Editor: edge, centring, free rotate", "ok": ok,
                         "why": json.dumps(ed2)})
 
@@ -3472,11 +3529,16 @@ async def main():
                  const P=(x,y)=>({clientX:B().left+B().width*(x/cv.width),
                                   clientY:B().top+B().height*(y/cv.height),
                                   bubbles:true,pointerId:57,button:0});
-                 [...m.querySelectorAll(".sk-edb")].find(z=>/Crop/i.test(z.textContent)).click();
-                 await nap(120);
-                 cv.dispatchEvent(new PointerEvent("pointerdown",P(5,5)));
+                 /* 6m1 — the crop box opens on the picture's edges and is applied by a button; this
+                    case only needs the markup to come back changed, so it pulls the SE corner in and
+                    presses Apply. */
+                 m.querySelector('.sk-edb[data-k="crop"]').click();
+                 await nap(140);
+                 cv.dispatchEvent(new PointerEvent("pointerdown",P(cv.width-1,cv.height-1)));
                  cv.dispatchEvent(new PointerEvent("pointermove",P(50,40)));
                  cv.dispatchEvent(new PointerEvent("pointerup",P(50,40)));
+                 await nap(200);
+                 m.querySelector('.sk-edb[data-k="cropapply"]').click();
                  await nap(350);
                  [...m.querySelectorAll(".sk-edfb")].find(b=>/Save/.test(b.textContent))
                    .dispatchEvent(new MouseEvent("click",{bubbles:true}));
@@ -4578,8 +4640,16 @@ async def main():
                  document.querySelector('#linebar [data-llay="under"]').click(); await nap(300);
                  out.under=!!L(l1).under;
                  const pgEl=document.querySelector('.page[data-idx="0"]');
-                 out.layers={ under:pgEl.querySelector("svg.draw.under").childElementCount,
-                              over:pgEl.querySelector("svg.draw:not(.under)").childElementCount };
+                 /* 6ln — A STROKE IS NO LONGER CONFINED TO A BAND SVG. It is drawn into a run layer
+                    INSIDE the mark layer, with a z-index of its own, which is the whole point: the two
+                    kinds share one stack and a stroke can sit between two marks. So what is checked
+                    here is that the run layers exist where the marks are and carry the strokes — the
+                    band SVGs are now only the ghost's and the start point's, and are empty at rest. */
+                 out.runs={ under:pgEl.querySelectorAll(".annolayer-under svg.draw.run").length,
+                            over: pgEl.querySelectorAll(".annolayer svg.draw.run").length };
+                 out.inRuns=pgEl.querySelectorAll("svg.draw.run polyline").length;
+                 out.runZ=[...pgEl.querySelectorAll("svg.draw.run")]
+                            .map(n=>+(n.style.zIndex||0)).filter(z=>z>0).length;
                  /* the page's own order, top to bottom */
                  out.order=[...pgEl.children].map(n=>n.getAttribute("class")||n.tagName);
                  /* a mark sent to the back crosses below the strokes and comes back */
@@ -4591,10 +4661,17 @@ async def main():
                  document.querySelector('#annobar [data-lay="front"]').click(); await nap(250);
                  out.markFront=!(S.annos.find(z=>z.id===a1)||{}).under;
                  res(out); })""")
+        # 6ln — the BEHAVIOUR is unchanged and still asserted: a new stroke lands on top, one press
+        # steps it past its neighbour, it crosses to the band below, and a mark crosses both ways.
+        # What changed is where a stroke is DRAWN, so the structural half asks the new question: are
+        # the run layers inside the mark layers, do they carry the strokes, and do they have a
+        # z-index to be compared with a mark's?
         ok = (stack["bar"] and stack["newOnTop"] == [1, 2] and stack["stepped"] == [2, 1]
-              and stack["under"] and stack["layers"]["under"] > 0
-              and stack["order"].index("draw under") < stack["order"].index("annolayer-under")
-              < stack["order"].index("draw") < stack["order"].index("annolayer")
+              and stack["under"]
+              and (stack["runs"]["under"] + stack["runs"]["over"]) > 0
+              and stack["inRuns"] > 0 and stack["runZ"] > 0
+              and stack["order"].index("annolayer-under") < stack["order"].index("annolayer")
+              < stack["order"].index("annoui")
               and stack["markBack"] and stack["markFront"])
         results.append({"tool": "A stroke has a place in the stack", "ok": ok,
                         "why": json.dumps(stack)})
@@ -4702,8 +4779,16 @@ async def main():
                            mov:!!(f&&f.querySelector(".mov")),
                            lay:f?f.querySelectorAll(".lup,.ldn").length:0,
                            uiZ:+getComputedStyle(pgEl.querySelector(".annoui")).zIndex,
-                           aligned:!!(f&&f.style.left===document.querySelector(
-                             `.annolayer-under .anno[data-id="${t1}"]`).style.left) };
+                           /* 6lj — WITHIN A PIXEL, not the same string. The frame is deliberately
+                              snapped to whole SCREEN pixels so its 2px ring paints evenly on all four
+                              sides (Ced: "make the blue lines in display all even"), which means its
+                              `left` is the mark's rounded and then nudged by the page's own fraction —
+                              never the same text, and never more than a pixel away. */
+                           aligned:(function(){ const m=document.querySelector(
+                               `.annolayer-under .anno[data-id="${t1}"]`);
+                             if(!f||!m)return false;
+                             const a=f.getBoundingClientRect(), b=m.getBoundingClientRect();
+                             return Math.abs(a.left-b.left)<=1 && Math.abs(a.top-b.top)<=1; })() };
                  selectAnno(null); await nap(250);
                  out.cleared=!pgEl.querySelector(".annoui > .anno.selui");
                  out.zAfter=zNow();
@@ -5109,7 +5194,8 @@ async def main():
                  const px=(x,y)=>[...g.getImageData(x,y,1,1).data];
                  const L=()=>[...m.querySelectorAll(".sk-edb")];
                  const btn=t=>{ const r=new RegExp(t,"i");
-                   return L().find(z=>r.test(z.textContent))||L().find(z=>r.test(z.textContent+" "+(z.title||""))); };
+                   return m.querySelector('.sk-edb[data-k="'+t+'"]')      /* 6m2 — the stable handle */
+                     ||L().find(z=>r.test(z.textContent))||L().find(z=>r.test(z.textContent+" "+(z.title||""))); };
                  const CP=(x,y)=>{ const b=cv.getBoundingClientRect();
                    return {clientX:b.left+b.width*(x/cv.width),
                            clientY:b.top+b.height*(y/cv.height),
@@ -5143,21 +5229,19 @@ async def main():
                  window.dispatchEvent(new PointerEvent("pointerup",CP(cv.width*0.95,cv.height*0.5)));
                  out.offEdge=px(mid[0],mid[1]);
                  /* --- 6j3: Restore all puts the whole picture back, in one undoable step --- */
-                 btn("Restore all").click();
+                 btn("restoreall").click();
                  await nap(120);
                  out.restoredAll=px(mid[0],mid[1]);
-                 out.undoOn=!btn("Undo").disabled;
-                 btn("Undo").click(); await nap(120);
+                 out.undoOn=!btn("undo").disabled;
+                 btn("undo").click(); await nap(120);
                  out.afterUndo=px(mid[0],mid[1]);
-                 btn("Redo").click(); await nap(120);
+                 btn("redo").click(); await nap(120);
                  out.afterRedo=px(mid[0],mid[1]);
-                 /* --- 6j2: the crop box and its marks are actually drawn --- */
-                 btn("Crop").click(); await nap(80);
-                 cv.dispatchEvent(new PointerEvent("pointerdown",CP(cv.width*0.2,cv.height*0.2)));
-                 cv.dispatchEvent(new PointerEvent("pointermove",CP(cv.width*0.8,cv.height*0.8)));
-                 await nap(120);
-                 /* measured MID-DRAG: the box and its marks live on the overlay while the hand is
-                    down, and the overlay goes again the moment the crop is taken */
+                 /* --- 6j2/6m1: the crop box and its marks are actually drawn --- */
+                 /* 6m1 — the box is up BEFORE the hand moves now: picking the tool up puts it on the
+                    picture's own edges, and the cut waits for Apply. So the overlay is measured on
+                    opening rather than mid-drag, which is a stronger version of the same check. */
+                 btn("crop").click(); await nap(140);
                  out.ovShown=getComputedStyle(ov).display!=="none";
                  const og=ov.getContext("2d",{willReadFrequently:true});
                  let ink=0;
@@ -5165,8 +5249,13 @@ async def main():
                  for(let i=3;i<d.length;i+=4*97) if(d[i]>10) ink++;
                  out.ovInk=ink;
                  const befW=cv.width;
+                 /* pull the SE corner in, then Apply */
+                 cv.dispatchEvent(new PointerEvent("pointerdown",CP(cv.width-1,cv.height-1)));
+                 cv.dispatchEvent(new PointerEvent("pointermove",CP(cv.width*0.8,cv.height*0.8)));
                  cv.dispatchEvent(new PointerEvent("pointerup",CP(cv.width*0.8,cv.height*0.8)));
                  await nap(200);
+                 out.uncutUntilApply=(cv.width===befW);
+                 btn("cropapply").click(); await nap(300);
                  out.cropped=cv.width<befW;
                  [...m.querySelectorAll(".sk-edfb")].find(b=>/Cancel/.test(b.textContent)).click();
                  out.closed=!document.querySelector(".sk-edit");
@@ -5178,7 +5267,8 @@ async def main():
               and same32(ed32["restoredAll"], ed32["was"])
               and ed32["undoOn"] and same32(ed32["afterUndo"], ed32["offEdge"])
               and same32(ed32["afterRedo"], ed32["was"])
-              and ed32["ovShown"] and ed32["ovInk"] > 0 and ed32["cropped"] and ed32["closed"])
+              and ed32["ovShown"] and ed32["ovInk"] > 0
+              and ed32["uncutUntilApply"] and ed32["cropped"] and ed32["closed"])
         results.append({"tool": "Editor: border, restore all, crop", "ok": ok,
                         "why": json.dumps(ed32)})
 
@@ -5627,8 +5717,11 @@ async def main():
                      /* Edit picture only appears when the selection IS a picture, so it is
                         checked on its own below rather than expected on a shape's bar */
                      /* 6kz — the two flips carry the same drawing, the second turned a quarter */
+                     /* 6li — the lock's title says what the press will DO to these marks now that
+                        the button also wears the word, so it is "Lock these marks" rather than the
+                        bare "Lock" the label carries. */
                      const want=["Duplicate","Group","Copy","Flip left to right",
-                                 "Flip top to bottom","Lock","Flatten",
+                                 "Flip top to bottom","Lock these marks","Flatten",
                                  "Add to markup library","Apply to pages","Copy properties"];
                      out.drawn={};
                      [...bar.querySelectorAll(".sb-b")].forEach(b=>{
@@ -6267,7 +6360,13 @@ async def main():
               and ins["text"]["box"] == "border-box"
               and abs(ins["text"]["inner"] - ins["text"]["w"]) < 0.6   # the box IS the text's room
               and ins["shape"]["l"] > 0 and ins["shape"]["t"] > 0      # a shape keeps its inset
-              and ins["wordsOnScreen"] == "normal"                     # 6kn — words, both sides
+              # 6m4 — a TEXT BOX breaks inside the word again, which is the third time this switch
+              # has moved and the second time Ced has asked for this side of it: "make the default
+              # break inside a line." The guarantee 6kn was actually defending is the line BELOW —
+              # that the screen and the file break in the same places, because both read
+              # `wrapsWords`. That is what stays asserted; which way the default falls is a design
+              # decision and is asserted as the decision currently in force, not as a law.
+              and ins["wordsOnScreen"] == "break-all"
               and ins["screen"] == ins["file"] and len(ins["file"]) > 1)
         results.append({"tool": "A text box is all box", "ok": ok, "why": json.dumps(ins)})
 

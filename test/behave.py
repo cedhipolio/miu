@@ -189,11 +189,17 @@ async def t_usersized(T):
     a = (await T.annos())[0]
     after = {"nw": a["nw"], "nh": a["nh"], "size": a["size"]}
 
+    # 6lv — WIDTH IS THE DECISION; HEIGHT IS A FLOOR. Ced asked for both of these, months apart:
+    # "do not change its properties and text box size after the fact" and then "if the text wraps,
+    # the text box should extend below to still cover the text." They only conflict if height is read
+    # as fixed. The width a hand gave a box decides where the words break and may never move; the
+    # height it gave is a minimum the box will not go below and may grow past to cover its own text.
+    # So this asserts the width exactly, the point size exactly, and the height as a floor.
     ok = (sized["userSized"]
           and abs(sized["nw"] - drawn["nw"]) > 0.004          # the drag really did something
           and abs(after["nw"] - sized["nw"]) < 0.0015         # and typing did not undo it
-          and abs(after["nh"] - sized["nh"]) < 0.0015
-          and abs(after["size"] - sized["size"]) < 0.01)      # nor change the point size
+          and after["nh"] >= sized["nh"] - 0.0015             # never shrinks below the hand's height
+          and abs(after["size"] - sized["size"]) < 0.01)      # nor changes the point size
     return ok, {"drawn": drawn, "after the drag": sized, "after typing": after}
 
 
@@ -680,12 +686,20 @@ async def _open_editor(T, draw):
     return ok
 
 
-async def _ed_click(T, label):
+async def _ed_click(T, key):
+    """Press an editor button BY ITS KEY (`data-k`), not by the word printed under it.
+
+    6m2 — this used to match the visible text, and shortening five labels to get the bar into the
+    two rows Ced asked for broke four cases that were testing something else entirely. The key says
+    what the button does and is not allowed to change; the text match stays only as a fallback for a
+    button whose key has not been written yet.
+    """
     r = await T.page.evaluate(
-        """(t)=>{const b=[...document.querySelectorAll(".sk-edbar .sk-edb")]
-                   .find(z=>z.textContent.trim().endsWith(t));
+        """(t)=>{const b=document.querySelector('.sk-edbar .sk-edb[data-k="'+t+'"]')
+                   ||[...document.querySelectorAll(".sk-edbar .sk-edb")]
+                       .find(z=>z.textContent.trim().endsWith(t));
                  if(!b)return null; const q=b.getBoundingClientRect();
-                 return {cx:q.x+q.width/2, cy:q.y+q.height/2};}""", label)
+                 return {cx:q.x+q.width/2, cy:q.y+q.height/2};}""", key)
     if not r:
         return False
     await T.page.mouse.click(r["cx"], r["cy"])
@@ -701,7 +715,7 @@ async def t_bucket(T):
         q.strokeStyle='#e31e24'; q.lineWidth=6;
         q.strokeRect(80,80,400,300); q.strokeRect(80,440,400,240);"""):
         return False, {"why": "the picture editor did not open"}
-    if not await _ed_click(T, "Fill"):
+    if not await _ed_click(T, "bucket"):
         return False, {"why": "no bucket on the editor's bar"}
     # give it a colour that is in neither the ink nor the ground
     await T.page.evaluate(
@@ -745,7 +759,7 @@ async def t_shapesel(T):
     if not await _open_editor(T, """
         q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
         return False, {"why": "the picture editor did not open"}
-    if not await _ed_click(T, "Shape select"):
+    if not await _ed_click(T, "shapesel"):
         return False, {"why": "no Shape select on the editor's bar"}
     chips = await T.page.evaluate(
         """()=>{const r=[...document.querySelectorAll(".sk-edsize")]
@@ -812,7 +826,7 @@ async def t_auto(T):
 
     before = await census()
     t0 = await T.page.evaluate("()=>performance.now()")
-    if not await _ed_click(T, "Auto"):
+    if not await _ed_click(T, "auto"):
         return False, {"why": "no Auto on the editor's bar"}
     await T.page.wait_for_timeout(900)
     ms = round(await T.page.evaluate("()=>performance.now()") - t0)
@@ -1020,6 +1034,989 @@ async def t_paste_selected(T):
     ok = (st["mode"] == "select" and st["grips"] and st["n"] == 2 and moved)
     return ok, st
 
+
+
+@case("The selection frame is one even ring on whole pixels")
+async def t_ring(T):
+    """Ced: "make the blue lines in display all even." Measured on his capture, the 2px ring painted
+    2, 2, 2 and 3 pixels across and 2, 2, 1 and 2 down (6lj).
+
+    Two causes, and this asserts both mechanisms rather than counting pixels: the frame has to sit on
+    whole SCREEN pixels (rounding inside the page is not enough — the page itself is at a fraction),
+    and exactly one element may draw the ring.
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.18, 0.18), T.at(0.44, 0.30))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    # a deliberately awkward position, so nothing lands on a whole number by luck
+    await T.page.evaluate("(id)=>{const z=S.annos.find(x=>x.id===id); z.nx=0.2137; z.ny=0.1731;"
+                          " layoutAnnos(); selectAnno(id);}", a["id"])
+    await T.page.wait_for_timeout(500)
+    g = await T.page.evaluate(
+        """()=>{const f=document.querySelector('.annoui > .anno.selui');
+                if(!f)return null;
+                const m=[...document.querySelectorAll('.anno[data-id="'+S.sel+'"]')]
+                          .find(n=>!n.classList.contains('selui'));
+                const r=f.getBoundingClientRect();
+                const cs=e=>getComputedStyle(e).boxShadow;
+                return {left:+r.left.toFixed(2), top:+r.top.toFixed(2),
+                        w:+r.width.toFixed(2), h:+r.height.toFixed(2),
+                        markHasSelui:!!(m&&m.classList.contains('hasselui')),
+                        frameHasSelui:f.classList.contains('hasselui'),
+                        markRing:cs(m)!=='none', frameRing:cs(f)!=='none'};}""")
+    if not g:
+        return False, {"why": "no selection frame"}
+    whole = (g["left"] == round(g["left"]) and g["top"] == round(g["top"])
+             and g["w"] == round(g["w"]) and g["h"] == round(g["h"]))
+    one_ring = (g["frameRing"] and not g["markRing"]
+                and g["markHasSelui"] and not g["frameHasSelui"])
+    return (whole and one_ring), dict(g, **{"on whole pixels": whole, "exactly one ring": one_ring})
+
+
+@case("Every button on the selection bar says what it is")
+async def t_bar_names(T):
+    """Ced: "apply names on the icons … make sure the labels are small and all caps" and "on the lock
+    and unlock, make the icon red when it is locked." (6li)"""
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.18, 0.20), T.at(0.42, 0.32))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    got = await T.page.evaluate(
+        """()=>{const bs=[...document.querySelectorAll('#selbar .sb-b')];
+                const lab=b=>{const l=b.querySelector('.sb-l'); return l?l.textContent.trim():null;};
+                const named=bs.filter(b=>!b.classList.contains('sb-more')&&!b.classList.contains('sb-del'));
+                const st=named.length?getComputedStyle(named[0].querySelector('.sb-l')):null;
+                return {labels:named.map(lab), unnamed:named.filter(b=>!lab(b)).length,
+                        caps:st?st.textTransform:null, size:st?st.fontSize:null};}""")
+    want = ["Properties", "Duplicate", "Copy", "Flip (H)", "Flip (V)", "Lock",
+            "Flatten", "Add markup", "Apply to pages", "Copy properties"]
+    have = got["labels"]
+    missing = [w for w in want if w not in have]
+    # and the lock goes red when it is on
+    await T.page.evaluate(
+        """()=>{const b=[...document.querySelectorAll('#selbar .sb-b')]
+                  .find(x=>/Lock these/.test(x.title||'')); if(b)b.click();}""")
+    await T.page.wait_for_timeout(450)
+    lock = await T.page.evaluate(
+        """()=>{const b=document.querySelector('#selbar .sb-b.sb-locked');
+                if(!b)return null; const i=b.querySelector('.sb-i');
+                return {label:(b.querySelector('.sb-l')||{}).textContent,
+                        ink:getComputedStyle(i).color};}""")
+    red = bool(lock) and lock["ink"].startswith("rgb(255")
+    ok = (not missing and got["unnamed"] == 0 and got["caps"] == "uppercase"
+          and float((got["size"] or "99px")[:-2]) <= 9 and red)
+    return ok, {"labels": have, "missing": missing, "unnamed": got["unnamed"],
+                "caps": got["caps"], "size": got["size"], "locked": lock}
+
+
+@case("A picture carries an edit grip, snapshot or photo")
+async def t_edit_grip(T):
+    """Ced: "add an edit picture button in here as well beside the drag for easy access", and "add an
+    edit as well if the photo was from a snapshot markup on tool, not only on added image photos."
+    (6lk)"""
+    await T.reset()
+    await T.pick("snapshot")
+    await T.drag(T.at(0.10, 0.12), T.at(0.48, 0.38))
+    await T.page.wait_for_timeout(1800)
+    pic = next((a for a in await T.annos() if a["maKind"] == "snapshot"), None)
+    if not pic:
+        return False, {"why": "no snapshot was taken"}
+    await T.select(pic["id"])
+    st = await T.page.evaluate(
+        """()=>({grip:!!document.querySelector('.annoui .anno.selui .edp'),
+                 row:!!document.querySelector('.annoui .anno.selui.haspic'),
+                 bar:[...document.querySelectorAll('#selbar .sb-b')]
+                       .some(b=>/edit picture/i.test(b.title||''))})""")
+    if not st["grip"]:
+        return False, dict(st, why="no edit grip on a selected snapshot")
+    # and it opens the editor
+    g = await T.rect(".annoui .anno.selui .edp")
+    await T.page.mouse.click(g["cx"], g["cy"])
+    await T.page.wait_for_timeout(2200)
+    st["editor opened"] = await T.page.evaluate("()=>!!document.querySelector('.sk-edcanvas')")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(500)
+    return bool(st["editor opened"]), st
+
+
+@case("A drag inside the selection moves the selection; a click picks up what is under it")
+async def t_overlap(T):
+    """Ced: "when editing a redline, all dragger or tool drag should be shown above the redlines and
+    you should be moving the selected redline." (6ll)"""
+    await T.reset()
+    ids = await T.page.evaluate(
+        """()=>{const a=maAddShape(0,"rect",0.20,0.18,0.22,0.12,{fill:"#ffd43b",fillOp:1});
+                const b=maAddShape(0,"rect",0.16,0.14,0.34,0.26,{fill:"#74c0fc",fillOp:1});
+                layoutAnnos(); return [a,b];}""")
+    lower, upper = ids
+    await T.page.evaluate("(id)=>selectAnno(id)", lower)
+    await T.page.wait_for_timeout(500)
+    r = await T.mark_rect(lower)
+    before = await T.page.evaluate("(id)=>+S.annos.find(z=>z.id===id).nx.toFixed(5)", lower)
+    await T.drag((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2),
+                 (r["x"] + r["w"] / 2 + 80, r["y"] + r["h"] / 2 + 40))
+    after = await T.page.evaluate(
+        """(ids)=>({lower:+S.annos.find(z=>z.id===ids[0]).nx.toFixed(5),
+                    upper:+S.annos.find(z=>z.id===ids[1]).nx.toFixed(5)})""", ids)
+    dragged_selected = (after["lower"] - before > 0.01) and abs(after["upper"] - 0.16) < 0.002
+    # put them back, then CLICK the same place: the mark actually there is picked up
+    await T.page.evaluate(
+        """(ids)=>{S.annos.find(z=>z.id===ids[0]).nx=0.20;
+                   S.annos.find(z=>z.id===ids[1]).nx=0.16;
+                   layoutAnnos(); selectAnno(ids[0]);}""", ids)
+    await T.page.wait_for_timeout(450)
+    await T.click((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2))
+    picked = await T.page.evaluate("()=>S.sel")
+    return (dragged_selected and picked == upper), {
+        "nx of the selected mark": [before, after["lower"]],
+        "nx of the one on top": after["upper"],
+        "drag moved the selected one": dragged_selected,
+        "click picked up": picked, "the one on top is": upper}
+
+
+@case("A line belongs to a layer, and hiding it takes the line off the sheet")
+async def t_line_layers(T):
+    """Ced: "add layers to lines as well." Measured before changing anything: a stroke already
+    carries `lay`, the bar offers its layer, and hiding that layer drops it from the screen and from
+    the export. This case is here so that stays true."""
+    await T.reset()
+    await T.pick("line")
+    await T.drag(T.at(0.18, 0.20), T.at(0.52, 0.40))
+    await T.key("Escape")
+    n = await T.page.evaluate("()=>S.lines.length")
+    if not n:
+        return False, {"why": "the line tool drew nothing"}
+    await T.page.evaluate("()=>selectLine(S.lines[0].id)")
+    await T.page.wait_for_timeout(500)
+    bar = await T.page.evaluate(
+        """()=>{const b=[...document.querySelectorAll('#selbar .sb-b')]
+                  .find(x=>/^Layer/.test(x.title||''));
+                return {hasLayerButton:!!b, says:b?(b.querySelector('.sb-l')||{}).textContent:null,
+                        inSel:(typeof sbSel==='function')?sbSel().lines.length:null};}""")
+    moved = await T.page.evaluate(
+        """()=>{const id=maLayerAdd('Dimensions'); sbLayerMove(id);
+                const drawn=()=>document.querySelectorAll(
+                   '#pages svg.draw polyline, #pages svg.draw line, #pages svg.draw path').length;
+                const shown=drawn();
+                maLayer(id).vis=false; layoutAnnos(); drawAllLines();
+                const hidden=drawn();
+                maLayer(id).vis=true;  layoutAnnos(); drawAllLines();
+                return {layer:id, lineLay:S.lines[0].lay, counts:maLayerCount(id),
+                        drawnShown:shown, drawnHidden:hidden, drawnBack:drawn()};}""")
+    ok = (bar["hasLayerButton"] and bar["inSel"] == 1
+          and moved["lineLay"] == moved["layer"] and moved["counts"] >= 1
+          and moved["drawnShown"] > 0 and moved["drawnHidden"] == 0
+          and moved["drawnBack"] == moved["drawnShown"])
+    return ok, {"bar": bar, "layer": moved}
+
+
+@case("A line's first point shows as soon as it is clicked")
+async def t_first_point(T):
+    """Ced: "show the first point of a line if only inserted by click and not dragging." The ghost
+    was built from (x,y) to (x,y), which draws nothing at all (6lm)."""
+    await T.reset()
+    out = {}
+    for mode in ("line", "arrow"):
+        await T.pick(mode)
+        await T.click(T.at(0.30, 0.25))
+        out[mode] = await T.page.evaluate(
+            """()=>({armed:clickRunActive(),
+                     circles:document.querySelectorAll('#pages svg.draw circle').length})""")
+        await T.key("Escape")
+        out[mode]["after Escape"] = await T.page.evaluate(
+            "()=>document.querySelectorAll('#pages svg.draw circle').length")
+    ok = all(v["armed"] and v["circles"] >= 2 and v["after Escape"] == 0 for v in out.values())
+    return ok, out
+
+
+@case("A zoom does not tear the document down and build it again")
+async def t_zoom_cost(T):
+    """Ced: "zoom in and out are again very slow." Every notch was rebuilding the IntersectionObserver,
+    which delivers an entry per page and unloaded every page off screen — 30 of them per notch on a
+    32-page package, each one a canvas the next notch had to draw again (6lh)."""
+    await T.reset()
+    await T.page.evaluate(
+        """()=>{ window.__n={unload:0,observe:0};
+                 const u=window.unloadPage, v=window.setupVirtualization;
+                 window.unloadPage=function(){ window.__n.unload++; return u.apply(this,arguments); };
+                 window.setupVirtualization=function(){ window.__n.observe++; return v.apply(this,arguments); };
+                 window.__pages=S.pages.length; }""")
+    await T.show_ribbon()
+    for _ in range(6):
+        await T.page.evaluate("()=>{const b=document.querySelector('#zoomIn'); if(b)b.click();}")
+        await T.page.wait_for_timeout(240)
+    await T.page.wait_for_timeout(1500)
+    n = await T.page.evaluate("()=>({...window.__n, pages:window.__pages})")
+    # six notches on a 32-page document used to mean ~180 unloads and 6 fresh observers
+    ok = (n["observe"] == 0 and n["unload"] <= n["pages"] / 2)
+    return ok, dict(n, note="six zoom notches")
+
+
+@case("A line can rest on top of a photo, in one press")
+async def t_line_above(T):
+    """Ced: "the lines still don't have layers. they should also be able to rest on top of photos and
+    other redlines" and "the user clicking the up layer should not take 9 to ten clicks to swap with
+    the item on top" (6ln, 6lo).
+
+    The sheet is the case he describes in miniature: the line at the bottom of the stack, the photo at
+    the top, and twenty marks between them that the line does not touch.
+    """
+    await T.reset()
+    ids = await T.page.evaluate(
+        """()=>{ const img=maAddShape(0,"rect",0.14,0.14,0.46,0.34,{fill:"#74c0fc",fillOp:1});
+                 S.lines.push({id:(typeof seq!=='undefined'?seq++:8200),page:0,
+                               x1:0.20,y1:0.22,x2:0.50,y2:0.30,col:'#1b6ec2',sw:3});
+                 for(let k=0;k<20;k++) maAddShape(0,"rect",0.72,0.05+k*0.02,0.06,0.015,{});
+                 const l=S.lines[S.lines.length-1];
+                 const im=S.annos.find(a=>a.id===img);
+                 maLayerStamp(); l.z=1; im.z=99; bandRenumber(0,false);
+                 layoutAnnos(); drawAllLines();
+                 return {line:l.id, mark:im.id}; }""")
+    async def on_top():
+        return await T.page.evaluate(
+            """(ids)=>{ const L=S.lines.find(x=>x.id===ids.line);
+                        const pgEl=document.querySelector('.page[data-idx="0"]');
+                        const r=pgEl.getBoundingClientRect();
+                        const x=(L.x1+L.x2)/2, y=(L.y1+L.y2)/2;
+                        const el=document.elementFromPoint(r.left+x*pgEl.offsetWidth,
+                                                           r.top +y*pgEl.offsetHeight);
+                        /* SVG keeps its tag name lower case; a div's is upper */
+                        return el?String(el.tagName).toLowerCase():null; }""", ids)
+    before = await on_top()
+    presses = await T.page.evaluate(
+        """(ids)=>{ const L=S.lines.find(x=>x.id===ids.line);
+                    const M=S.annos.find(a=>a.id===ids.mark);
+                    selectLine(L.id);
+                    let n=0;
+                    for(let k=0;k<40;k++){ n++; stepLayer(layerFamilyL(L),1);
+                                           if((L.z||0)>(M.z||0))break; }
+                    layoutAnnos(); drawAllLines(); return n; }""", ids)
+    await T.page.wait_for_timeout(400)
+    after = await on_top()
+    ok = (before != "polyline" and after == "polyline" and presses == 1)
+    return ok, {"on top before": before, "on top after": after, "presses": presses}
+
+
+@case("A selected line's handles are above every mark")
+async def t_line_handles(T):
+    """Ced: "the blue dragger of the line is not visible as it rests below the redline." (6lp)"""
+    await T.reset()
+    ids = await T.page.evaluate(
+        """()=>{ const img=maAddShape(0,"rect",0.14,0.14,0.46,0.34,{fill:"#74c0fc",fillOp:1});
+                 S.lines.push({id:(typeof seq!=='undefined'?seq++:8300),page:0,
+                               x1:0.20,y1:0.22,x2:0.50,y2:0.30,col:'#1b6ec2',sw:3,z:1});
+                 const im=S.annos.find(a=>a.id===img); im.z=99;
+                 maLayerStamp(); bandRenumber(0,false); layoutAnnos(); drawAllLines();
+                 selectLine(S.lines[0].id);
+                 return {line:S.lines[0].id, mark:img}; }""")
+    await T.page.wait_for_timeout(500)
+    st = await T.page.evaluate(
+        """()=>{ const ui=document.querySelector('.annoui > svg.draw.selui');
+                 if(!ui)return {layer:false};
+                 const gs=[...ui.querySelectorAll('g')];
+                 const g=gs[1];                       /* rotate, move, delete */
+                 if(!g)return {layer:true, grips:gs.length};
+                 const r=g.getBoundingClientRect();
+                 const top=document.elementFromPoint(r.x+r.width/2, r.y+r.height/2);
+                 return {layer:true, grips:gs.length,
+                         points:ui.querySelectorAll('circle').length,
+                         topTag:top?top.tagName:null,
+                         inUi:!!(top&&top.closest&&top.closest('svg.draw.selui'))}; }""")
+    if not st.get("layer") or not st.get("inUi"):
+        return False, st
+    # and the grip still moves the line
+    before = await T.page.evaluate("()=>+S.lines[0].x1.toFixed(5)")
+    g = await T.rect(".annoui > svg.draw.selui g:nth-of-type(2)")
+    if g:
+        await T.drag((g["cx"], g["cy"]), (g["cx"] + 70, g["cy"] + 20))
+    after = await T.page.evaluate("()=>+S.lines[0].x1.toFixed(5)")
+    st["moved"] = (after - before) > 0.01
+    return bool(st["moved"]), st
+
+
+@case("The selection bar is an even, rounded row")
+async def t_bar_even(T):
+    """Ced: "make the bottom tool bar icons evenly distributed, make some names two lines if needed.
+    also, make the toolbar rounded." (6ls)"""
+    await T.reset()
+    mid = await T.page.evaluate(
+        """()=>{ const id=maAddShape(0,"rect",0.20,0.16,0.26,0.12,{fill:"#ffd43b",fillOp:1});
+                 layoutAnnos(); selectAnno(id); return id; }""")
+    await T.page.wait_for_timeout(600)
+    got = await T.page.evaluate(
+        """()=>{ const b=document.getElementById('selbar');
+                 const cs=getComputedStyle(b);
+                 const named=[...b.querySelectorAll('.sb-b')]
+                   .filter(x=>!x.classList.contains('sb-more')&&!x.classList.contains('sb-del'));
+                 const w=named.map(x=>+x.getBoundingClientRect().width.toFixed(1));
+                 const lines=named.map(x=>{ const l=x.querySelector('.sb-l'); if(!l)return 0;
+                   const lh=parseFloat(getComputedStyle(l).lineHeight)||10;
+                   return Math.round(l.getBoundingClientRect().height/lh); });
+                 return {radius:parseFloat(cs.borderRadius), widths:w,
+                         spread:+(Math.max(...w)-Math.min(...w)).toFixed(1),
+                         twoLine:lines.filter(n=>n>=2).length, n:named.length}; }""")
+    ok = (got["radius"] >= 20 and got["spread"] <= 8
+          and got["twoLine"] >= 1 and got["n"] >= 10)
+    return ok, got
+
+
+@case("The box controls are grey, and fill under the pointer")
+async def t_controls(T):
+    """Ced: "make the icons around the box (rotate, layer, drag) have thin grey outlines and when the
+    cursor hovers thos, it will change the fill with light grey." (6lt)"""
+    await T.reset()
+    mid = await T.page.evaluate(
+        """()=>{ const id=maAddShape(0,"rect",0.22,0.18,0.24,0.12,{fill:"#ffd43b",fillOp:1});
+                 layoutAnnos(); selectAnno(id); return id; }""")
+    await T.page.wait_for_timeout(600)
+    rest = await T.page.evaluate(
+        """()=>{ const f=document.querySelector('.annoui > .anno.selui'); const o={};
+                 ['rot','mov','lup','ldn'].forEach(k=>{ const e=f&&f.querySelector('.'+k);
+                   if(!e){o[k]=null;return;}
+                   const c=getComputedStyle(e);
+                   o[k]={bw:parseFloat(c.borderTopWidth), bc:c.borderTopColor,
+                         ink:c.color, bg:c.backgroundColor}; });
+                 return o; }""")
+    if any(v is None for v in rest.values()):
+        return False, dict(rest, why="a control was missing")
+    grey = lambda c: c.startswith("rgb(") and len(set(
+        [int(n) for n in c[4:-1].split(",")[:3]])) <= 3
+    thin_grey = all(v["bw"] <= 1.5 and grey(v["bc"]) and grey(v["ink"]) for v in rest.values())
+    mv = await T.rect(".annoui .anno.selui .mov")
+    await T.page.mouse.move(mv["cx"], mv["cy"])
+    await T.page.wait_for_timeout(350)
+    hov = await T.page.evaluate(
+        "()=>getComputedStyle(document.querySelector('.annoui .anno.selui .mov')).backgroundColor")
+    # light grey: all three channels close together and well above mid
+    ch = [int(n) for n in hov[4:-1].split(",")[:3]]
+    light = (max(ch) - min(ch) <= 12 and 200 <= sum(ch) / 3 <= 250)
+    return (thin_grey and light), {"at rest": rest, "hover fill": hov,
+                                   "thin grey": thin_grey, "light grey on hover": light}
+
+
+@case("A turn shows where it is turning and how far")
+async def t_rotate_guide(T):
+    """Ced sent a picture of a mark mid-rotation: "apply this animation when rotating" (6lu)."""
+    await T.reset()
+    mid = await T.page.evaluate(
+        """()=>{ const id=maAddShape(0,"rect",0.24,0.18,0.22,0.12,{fill:"#ffd43b",fillOp:1});
+                 layoutAnnos(); selectAnno(id); return id; }""")
+    await T.page.wait_for_timeout(600)
+    before = await T.page.evaluate("()=>!!document.querySelector('.annoui > svg.rotguide')")
+    g = await T.rect(".annoui .anno.selui .rot")
+    if not g:
+        return False, {"why": "no rotate grip"}
+    await T.page.mouse.move(g["cx"], g["cy"])
+    await T.page.mouse.down()
+    for i in range(1, 12):
+        await T.page.mouse.move(g["cx"] + i * 9, g["cy"] - i * 7)
+        await T.page.wait_for_timeout(18)
+    during = await T.page.evaluate(
+        """()=>{ const s=document.querySelector('.annoui > svg.rotguide');
+                 const h=document.getElementById('degHUD');
+                 return {guide:!!s, axes:s?s.querySelectorAll('.rg-ax').length:0,
+                         arm:!!(s&&s.querySelector('.rg-arm')),
+                         hub:!!(s&&s.querySelector('.rg-hub')),
+                         lift:!!(s&&s.querySelector('.rg-lift')),
+                         shown:!!(h&&h.classList.contains('show')),
+                         abs:((h&&h.querySelector('.dh-abs'))||{}).textContent||null,
+                         dlt:((h&&h.querySelector('.dh-dlt'))||{}).textContent||null}; }""")
+    await T.page.mouse.up()
+    await T.page.wait_for_timeout(400)
+    after = await T.page.evaluate(
+        """()=>({guide:!!document.querySelector('.annoui > svg.rotguide'),
+                 hud:!!(document.getElementById('degHUD')||{classList:{contains:()=>false}})
+                        .classList.contains('show')})""")
+    ok = (not before and during["guide"] and during["axes"] == 2 and during["arm"]
+          and during["hub"] and during["lift"] and during["shown"]
+          and during["abs"] and during["dlt"]
+          and not after["guide"] and not after["hud"])
+    return ok, {"before": before, "during": during, "after": after}
+
+
+@case("A photo is never flattened into the sheet")
+async def t_no_flatten_photo(T):
+    """Ced: "do not flatten the photos so it can be editable on other editors." (6lq)"""
+    await T.reset()
+    ids = await T.page.evaluate(
+        """()=>{ const note=maAddShape(0,"rect",0.60,0.20,0.14,0.08,{fill:"#ffd43b",fillOp:1});
+                 const a={id:(typeof seq!=='undefined'?seq++:8400),page:0,kind:"img",
+                          src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                          nx:0.20,ny:0.20,nw:0.20,nh:0.14,text:"",orig:"",align:"center",size:8,
+                          onCell:false,nowrap:false,fullcell:false,manualW:true};
+                 topZ(a); S.annos.push(a); layoutAnnos();
+                 clearMulti(); S.selMulti.add(a.id); S.selMulti.add(note); paintMulti();
+                 return {img:a.id, note:note}; }""")
+    await T.page.wait_for_timeout(500)
+    # press Flatten on the bar and accept the confirmation
+    await T.page.evaluate(
+        """()=>{ const b=[...document.querySelectorAll('#selbar .sb-b')]
+                   .find(x=>/^Flatten$/.test(x.title||'')); if(b)b.click(); }""")
+    await T.page.wait_for_timeout(500)
+    # the confirmation card: `sbConfirm` builds `.sb-ask > .sb-askcard` with `.sb-askb.primary`
+    asked = await T.page.evaluate("()=>!!document.querySelector('.sb-ask .sb-askb.primary')")
+    if asked:
+        await T.page.evaluate(
+            "()=>{ document.querySelector('.sb-ask .sb-askb.primary').click(); }")
+    await T.page.wait_for_timeout(700)
+    st = await T.page.evaluate(
+        """(ids)=>({photoFlat:!!(S.annos.find(a=>a.id===ids.img)||{}).flat,
+                    noteFlat:!!(S.annos.find(a=>a.id===ids.note)||{}).flat})""", ids)
+    st["was asked"] = asked
+    # the note HAS to have flattened, or this case proves nothing about the photo
+    ok = (asked and st["noteFlat"] and not st["photoFlat"])
+    return ok, st
+
+
+@case("A box that wraps grows down to cover its own text")
+async def t_cover(T):
+    """Ced: "if the text wraps, the text box should extend below to still cover the text." (6lv)
+
+    The hard case is a box the hand has already sized, because 6ke stopped those re-deriving their own
+    size at all. Width is still untouchable; height is a floor.
+    """
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.12, 0.10), T.at(0.46, 0.15))
+    await T.type("SHORT")
+    await T.click(T.at(0.88, 0.74))
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    h = await T.handle("e")
+    if not h:
+        return False, {"why": "no east grip"}
+    await T.drag((h["cx"], h["cy"]), (h["cx"] - 120, h["cy"]))      # narrow it by hand
+    sized = next(x for x in await T.annos() if x["id"] == a["id"])
+
+    async def fit():
+        return await T.page.evaluate(
+            """(id)=>{ const ed=document.querySelector('.anno[data-id="'+id+'"] .ed');
+                       const eb=ed.getBoundingClientRect();
+                       const tns=[]; const walk=n=>{for(const c of n.childNodes){
+                         if(c.nodeType===3)tns.push(c); else if(c.nodeType===1)walk(c);}};
+                       walk(ed);
+                       const rg=document.createRange(); let bot=null; const rows=new Set();
+                       for(const tn of tns)for(let i=0;i<tn.length;i++){
+                         rg.setStart(tn,i); rg.setEnd(tn,i+1);
+                         const q=rg.getBoundingClientRect(); if(!(q.width||q.height))continue;
+                         rows.add(Math.round(q.top));
+                         bot=Math.max(bot==null?-1e9:bot,q.bottom); }
+                       return {lines:rows.size,
+                               overflow:bot==null?null:+(bot-eb.bottom).toFixed(1)}; }""", a["id"])
+
+    r = await T.mark_rect(a["id"])
+    await T.dblclick((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2))
+    await T.type(" AND A GOOD DEAL MORE TEXT AFTER IT SO THE WORDS WRAP SEVERAL TIMES")
+    await T.key("Escape")
+    after = next(x for x in await T.annos() if x["id"] == a["id"])
+    f = await fit()
+    ok = (sized["userSized"]
+          and f["lines"] >= 3                                   # it really did wrap
+          and f["overflow"] is not None and f["overflow"] <= 1   # and the box covers it
+          and after["nh"] > sized["nh"] + 0.005                  # by growing DOWN
+          and abs(after["nw"] - sized["nw"]) < 0.0015)           # with the width left alone
+    return ok, {"after the hand resize": {"nw": sized["nw"], "nh": sized["nh"]},
+                "after typing": {"nw": after["nw"], "nh": after["nh"]}, "fit": f}
+
+
+
+# =========================================================================================
+#  v47
+# =========================================================================================
+
+@case("Every control round a turned mark is drawn upright")
+async def t_upright(T):
+    """Ced: "when a redline is rotated, always make the arrows of up and down layer retain the up and
+    down orientation ... retain this principle to all icons of the redlines so its not confusing."
+
+    A mark is turned by a `rotate()` on its element and everything inside turns with it, so the
+    up-arrow wore the mark's angle. Measured at 30 degrees before the fix: the mark's transform was
+    `matrix(0.866, 0.5, -0.5, 0.866, 0, 0)` and `.lup`'s was `none`. Each control cancels the turn it
+    inherits now, so the pair of matrices multiply to the identity. (6lz)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.25), T.at(0.40, 0.38))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    r = await T.rect(".anno.selui") or await T.mark_rect(a["id"])
+    g = await T.rect(".anno.selui .rot") or await T.rect(".anno.sel .rot")
+    if not g:
+        return False, {"why": "no rotate grip on a selected box"}
+    # swing it round the centre by hand
+    import math
+    await T.page.mouse.move(g["cx"], g["cy"])
+    await T.page.mouse.down()
+    for i in range(1, 13):
+        th = math.radians(90 + i * 40 / 12)
+        await T.page.mouse.move(r["cx"] + 130 * math.cos(th), r["cy"] + 130 * math.sin(th))
+        await T.page.wait_for_timeout(22)
+    await T.page.mouse.up()
+    await T.page.wait_for_timeout(420)
+    got = await T.page.evaluate(
+        """()=>{ const d=document.querySelector('.anno.selui')||document.querySelector('.anno.sel');
+                 if(!d)return null;
+                 const m=new DOMMatrix(getComputedStyle(d).transform);
+                 const of=s=>{ const e=d.querySelector(s); if(!e)return null;
+                   const k=new DOMMatrix(getComputedStyle(e).transform);
+                   /* the control's own turn, composed with the mark's: 0 means drawn upright */
+                   const p=m.multiply(k);
+                   return +(Math.atan2(p.b,p.a)*180/Math.PI).toFixed(2); };
+                 return {rot:+(S.annos[0].rot||0).toFixed(1),
+                         markDeg:+(Math.atan2(m.b,m.a)*180/Math.PI).toFixed(2),
+                         lup:of('.lup'), ldn:of('.ldn'), rotg:of('.rot'), mov:of('.mov')}; }""")
+    if not got:
+        return False, {"why": "no selection furniture after the turn"}
+    turned = abs(got["markDeg"]) > 5                        # the mark really is at an angle
+    upright = all(got[k] is not None and abs(got[k]) < 0.6
+                  for k in ("lup", "ldn", "rotg", "mov"))
+    return (turned and upright), got
+
+
+@case("The rotation guide reaches the shape, not the page")
+async def t_guide_extent(T):
+    """Ced: "make the grey lines only stretch up to the shape or redline or photo's shape, just a
+    little extended."
+
+    Measured before: on a 734 x 950 page the two dashed axes ran `0 -> 734` and `0 -> 950` — full
+    rules cutting the drawing in half, over a mark a couple of inches across. (6lx)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.25), T.at(0.38, 0.36))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    r = await T.rect(".anno.selui") or await T.mark_rect(a["id"])
+    g = await T.rect(".anno.selui .rot") or await T.rect(".anno.sel .rot")
+    if not g:
+        return False, {"why": "no rotate grip"}
+    await T.page.mouse.move(g["cx"], g["cy"])
+    await T.page.mouse.down()
+    for i in range(1, 7):
+        await T.page.mouse.move(g["cx"] + i * 9, g["cy"] - i * 7)
+        await T.page.wait_for_timeout(26)
+    got = await T.page.evaluate(
+        """()=>{ const sv=document.querySelector('svg.rotguide');
+                 const pg=document.querySelector('.page[data-idx="0"]');
+                 const d=document.querySelector('.anno.selui')||document.querySelector('.anno.sel');
+                 if(!sv||!d)return null;
+                 const ax=[...sv.querySelectorAll('.rg-ax')].map(l=>({
+                   len:Math.round(Math.hypot(l.getAttribute('x2')-l.getAttribute('x1'),
+                                             l.getAttribute('y2')-l.getAttribute('y1')))}));
+                 return {axes:ax.map(z=>z.len), pageW:pg.offsetWidth, pageH:pg.offsetHeight,
+                         markW:d.offsetWidth, markH:d.offsetHeight}; }""")
+    await T.page.mouse.up()
+    await T.page.wait_for_timeout(260)
+    if not got or len(got["axes"]) != 2:
+        return False, {"why": "no guide axes while turning", "got": got}
+    big = max(got["markW"], got["markH"])
+    # each axis reaches the mark's turning extent plus a short overhang, and nowhere near the page
+    ok = (all(L <= big * 1.5 + 40 for L in got["axes"])
+          and all(L >= 40 for L in got["axes"])
+          and max(got["axes"]) < min(got["pageW"], got["pageH"]) * 0.7)
+    return ok, got
+
+
+@case("The angle reading is one short horizontal pill")
+async def t_hud_flat(T):
+    """Ced: "the input for the angle should be just a small prompt like the photo earlier, just always
+    make it horizontal", with a capture of the chip standing on end.
+
+    Measured before: 46.1 x 44 — two lines stacked, barely wider than one number. (6ly)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.25), T.at(0.38, 0.36))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    g = await T.rect(".anno.selui .rot") or await T.rect(".anno.sel .rot")
+    if not g:
+        return False, {"why": "no rotate grip"}
+    await T.page.mouse.move(g["cx"], g["cy"])
+    await T.page.mouse.down()
+    for i in range(1, 7):
+        await T.page.mouse.move(g["cx"] + i * 11, g["cy"] - i * 8)
+        await T.page.wait_for_timeout(26)
+    got = await T.page.evaluate(
+        """()=>{ const h=document.getElementById('degHUD');
+                 if(!h||!h.classList.contains('show'))return null;
+                 const r=h.getBoundingClientRect(); const cs=getComputedStyle(h);
+                 const ab=h.querySelector('.dh-abs'), dl=h.querySelector('.dh-dlt');
+                 const ar=ab&&ab.getBoundingClientRect(), dr=dl&&dl.getBoundingClientRect();
+                 return {w:+r.width.toFixed(1), h:+r.height.toFixed(1),
+                         whiteSpace:cs.whiteSpace, writingMode:cs.writingMode,
+                         sideBySide:!!(ar&&dr&&dr.left>=ar.right-1&&
+                                       Math.abs((ar.top+ar.height/2)-(dr.top+dr.height/2))<4),
+                         inWindow:(r.left>=0&&r.top>=0&&r.right<=window.innerWidth
+                                   &&r.bottom<=window.innerHeight)}; }""")
+    await T.page.mouse.up()
+    await T.page.wait_for_timeout(260)
+    if not got:
+        return False, {"why": "no angle reading while turning"}
+    ok = (got["w"] > got["h"] * 1.8            # lying down, not standing up
+          and got["h"] < 30                    # one line, not two
+          and got["sideBySide"]
+          and got["whiteSpace"] == "nowrap"
+          and got["writingMode"] in ("horizontal-tb",)
+          and got["inWindow"])
+    return ok, got
+
+
+@case("Edit on the left, the turn in the middle, drag on the right")
+async def t_grip_order(T):
+    """Ced: "it makes more sense to put the rotate in the middle, edit on left and drag on right."
+    (6lw) — the three only appear together on a picture."""
+    await T.reset()
+    ok_open = await T.page.evaluate(
+        """()=>new Promise(res=>{
+             const c=document.createElement("canvas"); c.width=300; c.height=220;
+             const q=c.getContext("2d"); q.fillStyle="#e31e24"; q.fillRect(40,40,220,140);
+             const id=skPlaceSnapshot(0,[0.18,0.18,0.52,0.46],c.toDataURL("image/png"));
+             layoutAnnos();
+             setTimeout(()=>{ selectAnno(id); layoutAnnos(); res(id); },400); })""")
+    await T.page.wait_for_timeout(500)
+    got = await T.page.evaluate(
+        """()=>{ const d=document.querySelector('.anno.selui')||document.querySelector('.anno.sel');
+                 if(!d)return null;
+                 const c=s=>{ const e=d.querySelector(s); if(!e)return null;
+                   const r=e.getBoundingClientRect(); return +(r.x+r.width/2).toFixed(1); };
+                 return {edp:c('.edp'), rot:c('.rot'), mov:c('.mov'),
+                         haspic:d.classList.contains('haspic')}; }""")
+    if not got or got["edp"] is None:
+        return False, {"why": "no picture controls on a selected snapshot", "got": got, "id": ok_open}
+    ok = (got["haspic"] and got["edp"] < got["rot"] < got["mov"])
+    return ok, got
+
+
+@case("A free turn and a turn back leave the picture its own size")
+async def t_spin_back(T):
+    """Ced: "do not make the selection or canvass bigger every rotate, always take the smallest space
+    it can get."
+
+    Measured before, sweeping +10 / -10 / +10 / -10 on a 749 x 912 capture:
+    896x1029 -> 1062x1169 -> 1249x1336 -> 1463x1533. Nearly double, for nothing. (6m0)
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(120,160,320,420);"""):
+        return False, {"why": "the picture editor did not open"}
+    sizes = []
+    start = await T.page.evaluate(
+        """()=>{const c=document.querySelector('.sk-edcanvas');return [c.width,c.height];}""")
+    for d in (10, -10, 10, -10):
+        await T.page.evaluate(
+            """(d)=>{ const i=document.querySelector('.sk-edfree input');
+                      i.value=String(d); i.dispatchEvent(new Event('input',{bubbles:true}));
+                      i.dispatchEvent(new Event('change',{bubbles:true})); }""", d)
+        await T.page.wait_for_timeout(700)
+        sizes.append(await T.page.evaluate(
+            """()=>{const c=document.querySelector('.sk-edcanvas');return [c.width,c.height];}"""))
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    # back where it started after each pair, and never runaway
+    ok = (sizes[1] == sizes[3]
+          and sizes[0] == sizes[2]
+          and sizes[1][0] <= sizes[0][0] and sizes[1][1] <= sizes[0][1]
+          and sizes[3][0] < sizes[0][0] * 1.02)
+    return ok, {"start": start, "after +10/-10/+10/-10": sizes}
+
+
+@case("The chequer stays square to the screen while the picture turns")
+async def t_still_chequer(T):
+    """Ced: "make the transparent background be still so the user have visual cues if the shape is
+    straight." The chequer used to be the turning element's own background. (6m0)"""
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(120,160,320,420);"""):
+        return False, {"why": "the picture editor did not open"}
+    await T.page.evaluate(
+        """()=>{ const i=document.querySelector('.sk-edfree input');
+                 i.value='20'; i.dispatchEvent(new Event('input',{bubbles:true})); }""")
+    await T.page.wait_for_timeout(350)
+    got = await T.page.evaluate(
+        """()=>{ const w=document.querySelector('.sk-edwrap');
+                 const bg=document.querySelector('.sk-edbg');
+                 const clip=document.querySelector('.sk-edbgclip');
+                 if(!w||!bg||!clip)return null;
+                 const deg=m=>+(Math.atan2(m.b,m.a)*180/Math.PI).toFixed(2);
+                 const wm=new DOMMatrix(getComputedStyle(w).transform);
+                 const bm=new DOMMatrix(getComputedStyle(bg).transform);
+                 const net=wm.multiply(bm);
+                 const cr=clip.getBoundingClientRect(), wr=w.getBoundingClientRect();
+                 return {wrapDeg:deg(wm), patternDeg:deg(net),
+                         hasPattern:getComputedStyle(bg).backgroundImage!=='none',
+                         wrapHasNoPattern:getComputedStyle(w).backgroundImage==='none',
+                         clipped:(cr.width<=wr.width+2&&cr.height<=wr.height+2)}; }""")
+    await T.page.evaluate(
+        """()=>{ const i=document.querySelector('.sk-edfree input');
+                 i.value='0'; i.dispatchEvent(new Event('input',{bubbles:true})); }""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    if not got:
+        return False, {"why": "no chequer layer in the editor"}
+    ok = (abs(got["wrapDeg"]) > 5            # the picture really is turning
+          and abs(got["patternDeg"]) < 0.6   # and the squares are not
+          and got["hasPattern"] and got["wrapHasNoPattern"] and got["clipped"])
+    return ok, got
+
+
+@case("Crop opens on the picture's own edges")
+async def t_crop_edges(T):
+    """Ced: "crop should also come from the edges of the photo, not dragged by the user."
+
+    Measured before: on entering the tool the overlay carried zero painted pixels — nothing at all
+    until the hand moved. (6m1)
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
+        return False, {"why": "the picture editor did not open"}
+    if not await _ed_click(T, "crop"):
+        return False, {"why": "no Crop on the editor's bar"}
+    opened = await T.page.evaluate(
+        """()=>{ const ov=document.querySelector('.sk-edov');
+                 const cv=document.querySelector('.sk-edcanvas');
+                 let ink=0;
+                 try{ const d=ov.getContext('2d').getImageData(0,0,ov.width,ov.height).data;
+                      for(let i=3;i<d.length;i+=4) if(d[i]) ink++; }catch(e){}
+                 const ap=document.querySelector('.sk-edb[data-k="cropapply"]');
+                 return {ink, applyShown:!!(ap&&ap.offsetParent),
+                         w:cv.width, h:cv.height}; }""")
+    # push the west edge in by hand, then Apply
+    wrap = await T.rect(".sk-edwrap")
+    await T.drag((wrap["x"] + 2, wrap["y"] + wrap["h"] / 2),
+                 (wrap["x"] + wrap["w"] * 0.3, wrap["y"] + wrap["h"] / 2))
+    mid = await T.page.evaluate(
+        """()=>{const cv=document.querySelector('.sk-edcanvas');
+                return {w:cv.width, h:cv.height,
+                        says:((document.getElementById('status')||{}).textContent||'').slice(0,20)};}""")
+    if not await _ed_click(T, "cropapply"):
+        return False, {"why": "no Apply while the crop box is up"}
+    after = await T.page.evaluate(
+        """()=>{const cv=document.querySelector('.sk-edcanvas'); return {w:cv.width,h:cv.height};}""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    ok = (opened["ink"] > 1000                      # the box is drawn the moment the tool is picked up
+          and opened["applyShown"]
+          and mid["w"] == opened["w"]               # nothing is cut until Apply
+          and after["w"] < opened["w"] * 0.85       # and then it is
+          and after["h"] == opened["h"])            # only where the edge was pushed
+    return ok, {"on opening": opened, "after dragging the west edge": mid, "after Apply": after}
+
+
+@case("The picture editor's tools fit two rows")
+async def t_editor_rows(T):
+    """Ced: "make the tools at least just two rows, and make sure all items are aligned. separated by
+    the same separator on the ribbon. make sure neumorphism is also in tach."
+
+    Measured before in his own 1471px window: four rows, because each bar needed about 1720px of
+    content against 1393px of room. (6m2)
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
+        return False, {"why": "the picture editor did not open"}
+    got = await T.page.evaluate(
+        """()=>{ const bars=[...document.querySelectorAll('.sk-edbar')];
+                 const rows=bars.map(bar=>{ const ys=new Set();
+                   [...bar.children].forEach(c=>ys.add(Math.round(c.getBoundingClientRect().top)));
+                   return ys.size; });
+                 const grp=document.querySelector('.sk-edgrp');
+                 const gs=getComputedStyle(grp);
+                 const last=bars[0].lastElementChild;
+                 const btn=document.querySelector('.sk-edb');
+                 const bs=getComputedStyle(btn);
+                 return {rows, bars:bars.length,
+                         sep:gs.borderRightStyle, sepW:gs.borderRightWidth,
+                         lastSep:getComputedStyle(last).borderRightStyle,
+                         groupPlate:gs.backgroundColor,
+                         emboss:/inset/.test(bs.boxShadow)}; }""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    ok = (sum(got["rows"]) == 2                       # two rows in all, one per bar
+          and got["sep"] == "dotted" and got["sepW"] == "1px"   # the ribbon's own divider
+          and got["lastSep"] == "none"
+          and got["groupPlate"] in ("rgba(0, 0, 0, 0)", "transparent")
+          and got["emboss"])                          # 6gm's neumorphism is still on the buttons
+    return ok, got
+
+
+@case("The bar's names sit level, and nothing square hangs under it")
+async def t_selbar_level(T):
+    """Ced: "make the texts align middle, also what is up with the bottom part of the tool", with a
+    capture of a dark square-ended band cutting the bottom off the rounded bar.
+
+    That band is the horizontal scrollbar, painted inside a 999px radius. Measured before: every
+    label began at the same y, so a one-line name sat at the TOP of the two-line block its neighbours
+    fill. (6m3)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.25), T.at(0.40, 0.38))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    await T.page.wait_for_timeout(400)
+    got = await T.page.evaluate(
+        """()=>{ const bar=document.getElementById('selbar'); if(!bar)return null;
+                 const cs=getComputedStyle(bar);
+                 const ls=[...bar.querySelectorAll('.sb-l')].map(l=>{
+                   const r=l.getBoundingClientRect();
+                   return {mid:+(r.top+r.height/2).toFixed(1), h:+r.height.toFixed(1),
+                           lines:l.textContent.trim().length}; });
+                 if(!ls.length)return null;
+                 const mids=ls.map(z=>z.mid);
+                 return {spread:+(Math.max(...mids)-Math.min(...mids)).toFixed(1),
+                         heights:[...new Set(ls.map(z=>z.h))],
+                         n:ls.length,
+                         scrollbarWidth:cs.scrollbarWidth,
+                         radius:cs.borderRadius,
+                         twoLineNames:ls.filter(z=>z.lines>10).length}; }""")
+    if not got:
+        return False, {"why": "no selection bar"}
+    ok = (got["spread"] <= 1.5                      # every name on one optical line
+          and len(got["heights"]) == 1              # one-line and two-line names share a block
+          and got["scrollbarWidth"] == "none"       # and no square track across the pill
+          and got["radius"].startswith("999px")
+          and got["twoLineNames"] >= 1)             # the two-line names are still there
+    return ok, got
+
+
+@case("A narrowed text box covers every line it wraps to")
+async def t_narrow_covers(T):
+    """Ced: "text wrapping issue not yet solved. make the default break inside a line. but the text
+    should be all covered", and then "make sure the size of the textbox the user puts is granted".
+
+    `growTextBox` was called from typing and from pasting and nowhere else, so narrowing a box with a
+    side handle re-wrapped the text in the same height and the extra lines hung out of the bottom.
+    (6m4)
+    """
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.14, 0.18), T.at(0.50, 0.23))
+    # enough words that a narrow box cannot hold them in the height it was drawn with
+    await T.type("ASDAA BBBBBB CCCC DDDDDD EEEE FFFFFF GGGG HHHHHH")
+    await T.click(T.at(0.86, 0.80))
+    a = (await T.annos())[-1]
+    await T.select(a["id"])
+    h = await T.handle("e")
+    if not h:
+        return False, {"why": "no east grip on a selected text box"}
+    await T.drag((h["cx"], h["cy"]), (h["cx"] - 200, h["cy"]))
+    after = await T.page.evaluate(
+        """(id)=>{ const a=S.annos.find(z=>z.id===id);
+                   const d=document.querySelector('.anno[data-id="'+id+'"]');
+                   const ed=d.querySelector('.ed'); const dr=d.getBoundingClientRect();
+                   const rg=document.createRange(); rg.selectNodeContents(ed);
+                   const rs=[...rg.getClientRects()];
+                   const bot=rs.length?Math.max(...rs.map(x=>x.bottom)):null;
+                   const cs=getComputedStyle(ed);
+                   return {nw:+a.nw.toFixed(5), nh:+a.nh.toFixed(5), lines:a.lines,
+                           userSized:!!a.userSized,
+                           wordBreak:cs.wordBreak, overflowWrap:cs.overflowWrap,
+                           visualLines:rs.length,
+                           spill:bot==null?null:+(bot-dr.bottom).toFixed(1)}; }""", a["id"])
+    before = {"nw": a["nw"], "nh": a["nh"]}
+    ok = (after["userSized"]
+          and after["nw"] < before["nw"] * 0.5            # the hand really narrowed it
+          and after["wordBreak"] == "break-all"           # and it breaks inside the word
+          and after["visualLines"] >= 4                   # which made several lines
+          and after["nh"] > before["nh"] + 0.005          # the box grew down
+          and after["spill"] is not None and after["spill"] <= 1)   # and covers them
+    return ok, {"as drawn": before, "after narrowing by hand": after}
+
+
+@case("The text tool previews a box, not a slab")
+async def t_text_preview(T):
+    """Ced: "the preview for it as well is weird. make it look like the textbox", with a capture of a
+    solid red rectangle the size of the box being dragged. The text tool shares the box tool's drag,
+    so `ghostShape` was painting the ribbon's fill over a mark that will have none. (6m5)
+    """
+    await T.reset()
+    await T.pick("text")
+    a, c = T.at(0.18, 0.20), T.at(0.40, 0.30)
+    await T.page.mouse.move(*a)
+    await T.page.mouse.down()
+    for i in range(1, 7):
+        await T.page.mouse.move(a[0] + (c[0] - a[0]) * i / 6, a[1] + (c[1] - a[1]) * i / 6)
+        await T.page.wait_for_timeout(22)
+    got = await T.page.evaluate(
+        """()=>{ const m=document.querySelector('.marquee');
+                 if(!m)return null; const cs=getComputedStyle(m);
+                 const filled=[...document.querySelectorAll('#pages svg.draw rect,#pages svg.draw ellipse')]
+                   .filter(e=>{const f=e.getAttribute('fill');
+                               return f&&f!=='none'&&!/rgba\\(.*,\\s*0\\)/.test(f);}).length;
+                 return {bg:cs.backgroundColor, border:cs.borderStyle,
+                         textbox:m.classList.contains('textbox'),
+                         ghosting:m.classList.contains('ghosting'),
+                         filledGhosts:filled}; }""")
+    await T.page.mouse.up()
+    await T.page.wait_for_timeout(400)
+    await T.key("Escape", 2)
+    if not got:
+        return False, {"why": "no preview while the text tool is dragged"}
+    clear = got["bg"] in ("rgba(0, 0, 0, 0)", "transparent")
+    ok = (got["textbox"] and clear and got["border"] == "dashed"
+          and not got["ghosting"] and got["filledGhosts"] == 0)
+    return ok, got
+
+
+@case("A mark, a group and a stroke wear the same grey controls")
+async def t_grey_everywhere(T):
+    """Ced: "apply the updated colors of icons (grey) in all redlines", and "also be consistent on all
+    designs of the boxs". 6lt greyed a single mark's five controls and left the group's trio and the
+    stroke's in selection blue. (6m6)
+    """
+    await T.reset()
+    # a mark
+    await T.pick("box")
+    await T.drag(T.at(0.18, 0.20), T.at(0.34, 0.30))
+    await T.key("Escape")
+    a = (await T.annos())[0]
+    await T.select(a["id"])
+    mark = await T.page.evaluate(
+        """()=>{ const d=document.querySelector('.anno.selui')||document.querySelector('.anno.sel');
+                 const b=d&&d.querySelector('.rot'); if(!b)return null;
+                 const cs=getComputedStyle(b);
+                 return {border:cs.borderTopColor, ink:cs.color, w:cs.width}; }""")
+    # a stroke
+    await T.key("Escape")
+    await T.pick("line")
+    await T.drag(T.at(0.22, 0.52), T.at(0.48, 0.60))
+    await T.key("Escape")
+    lid = await T.page.evaluate("()=>S.lines.length?S.lines[S.lines.length-1].id:null")
+    if lid is None:
+        return False, {"why": "the line tool drew no stroke"}
+    await T.page.evaluate("(id)=>{selectLine(id); drawAllLines();}", lid)
+    await T.page.wait_for_timeout(400)
+    stroke = await T.page.evaluate(
+        """()=>{ const r=document.querySelector('svg.draw.selui .lgrip:not(.danger) .lg-ring');
+                 const t=document.querySelector('svg.draw.selui .lgrip:not(.danger) .lg-ink');
+                 if(!r)return null;
+                 return {ring:getComputedStyle(r).stroke, ink:getComputedStyle(t).fill,
+                         n:document.querySelectorAll('svg.draw.selui .lgrip').length}; }""")
+    # a group: marquee everything
+    await T.key("Escape")
+    await T.pick("select")
+    await T.drag(T.at(0.10, 0.12), T.at(0.60, 0.70))
+    await T.page.wait_for_timeout(500)
+    group = await T.page.evaluate(
+        """()=>{ const g=document.querySelector('.gframe .ggrip:not(.danger)'); if(!g)return null;
+                 const cs=getComputedStyle(g);
+                 return {border:cs.borderTopColor, ink:cs.color, w:cs.width}; }""")
+    out = {"mark": mark, "stroke": stroke, "group": group}
+    if not (mark and stroke and group):
+        return False, out
+    GREY_RING, GREY_INK = "rgb(185, 191, 201)", "rgb(107, 114, 128)"
+    ok = (mark["border"] == GREY_RING and mark["ink"] == GREY_INK
+          and group["border"] == GREY_RING and group["ink"] == GREY_INK
+          and group["w"] == mark["w"]                         # and the same size
+          and stroke["ring"] == GREY_RING and stroke["ink"] == GREY_INK
+          and stroke["n"] == 3)
+    return ok, out
 
 
 async def main():

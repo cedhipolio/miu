@@ -275,16 +275,36 @@ function sbLayer(where){
    in the page's own right-click menu. */
 async function sbFlatten(){
   const sel=sbSel(); if(!sbCount())return;
-  const n=sel.annos.length+sel.lines.length;
+  /* ==================================================================================================
+     6lq — A PICTURE IS NEVER FLATTENED.
+     Ced: "do not flatten the photos so it can be editable on other editors."
+     Flattening paints a mark into the sheet, which is the right answer for a redline somebody must not
+     be able to drag — and the wrong one for a photo. A photo exported as a Stamp annotation can be
+     moved, resized and deleted in Bluebeam or Acrobat by whoever receives the package; painted into
+     the page it is pixels on a drawing and nobody can do anything with it, here or anywhere else.
+     So pictures are kept out of the flatten, rather than the button being taken away: a selection of
+     a note and a photo flattens the note and says so.
+     ================================================================================================== */
+  const pics=sel.annos.filter(a=>a&&a.kind==="img");
+  const flatA=sel.annos.filter(a=>!(a&&a.kind==="img"));
+  const n=flatA.length+sel.lines.length;
+  if(!n){
+    toast(pics.length===1?"A photo is left editable rather than flattened"
+                         :"Photos are left editable rather than flattened");
+    return;
+  }
   const yes=await sbConfirm({
     title:"Flatten "+n+" redline"+(n===1?"":"s")+"?",
     hint:"They become part of the page: still drawn, but no longer selectable or editable, and on "+
          "export they are painted into the sheet rather than added as annotations. Ctrl+Z undoes it, "+
-         "and right-clicking the page offers to unflatten everything on it.",
+         "and right-clicking the page offers to unflatten everything on it."+
+         (pics.length?("  The "+(pics.length===1?"photo stays":"photos stay")+
+                       " editable — a picture is exported as an annotation so it can still be moved "+
+                       "or removed in another PDF editor."):""),
     ok:"Flatten", danger:true});
   if(!yes)return;
   pushHistory();
-  sel.annos.forEach(a=>{ a.flat=true; });
+  flatA.forEach(a=>{ a.flat=true; });
   sel.lines.forEach(l=>{ l.flat=true; });
   try{ clearMulti&&clearMulti(); }catch(e){}
   S.sel=null; S.selLine=null;
@@ -820,9 +840,11 @@ function selbarSync(){
 
   /* 6fe — bound to the SELECTION: the panel shows what these marks carry and every change lands on
      them as it is made, leaving every tool's own remembered style alone. */
-  bar.appendChild(sbBtn("✎","Edit properties",b=>{
+  /* 6li — every button on this bar carries its name under its glyph; see `.sb-b` in selbar.css for
+     why hover was not a label. The words are Ced's own, in his order. */
+  bar.appendChild(sbBtn("✎","Properties",b=>{
     try{ tpOpen(sbToolFor(sel),b,true); }catch(e){ toast("No properties for this"); }
-  }));
+  },null,"Edit properties"));
   bar.appendChild(sbBtn("@duplicate","Duplicate",()=>{
     if(locked){ toast("Unlock these first"); return; }
     if(!duplicateSelected())toast("Nothing to duplicate"); selbarSync();
@@ -854,15 +876,17 @@ function selbarSync(){
      across the upright reads as a mirror across the level — so the second button is the first with
      `rotate(90deg)` on its glyph and nothing else to learn.
      ================================================================================================= */
-  bar.appendChild(sbBtn("@flip","",()=>sbFlip("h"),"sb-ico","Flip left to right"));
-  bar.appendChild(sbBtn("@flip","",()=>sbFlip("v"),"sb-ico sb-flipv","Flip top to bottom"));
-  bar.appendChild(sbBtn(locked?"@unlock":"@lock","",()=>sbSetLock(!locked),"sb-ico",
-                        locked?"Unlock":"Lock"));
-  bar.appendChild(sbBtn("@flatten","",()=>flat?sbUnflatten():sbFlatten(),"sb-ico"+(flat?" on":""),
-                        flat?"Unflatten":"Flatten"));
-  bar.appendChild(sbBtn("@library","",()=>sbToLibrary(),"sb-ico","Add to markup library"));
-  bar.appendChild(sbBtn("@applypages","",()=>sbApplyToPages(),"sb-ico","Apply to pages"));
-  bar.appendChild(sbBtn("@props","",()=>{ if(SB_PAINT)sbStopPaint(); else sbCopyProps(); },
+  bar.appendChild(sbBtn("@flip","Flip (H)",()=>sbFlip("h"),"sb-ico","Flip left to right"));
+  bar.appendChild(sbBtn("@flip","Flip (V)",()=>sbFlip("v"),"sb-ico sb-flipv","Flip top to bottom"));
+  /* 6li — and this one goes red while it is on, which is the state worth reading at a glance */
+  bar.appendChild(sbBtn(locked?"@unlock":"@lock",locked?"Unlock":"Lock",()=>sbSetLock(!locked),
+                        "sb-ico"+(locked?" sb-locked":""),
+                        locked?"Unlock these marks":"Lock these marks"));
+  bar.appendChild(sbBtn("@flatten","Flatten",()=>flat?sbUnflatten():sbFlatten(),
+                        "sb-ico"+(flat?" on":""), flat?"Unflatten":"Flatten"));
+  bar.appendChild(sbBtn("@library","Add markup",()=>sbToLibrary(),"sb-ico","Add to markup library"));
+  bar.appendChild(sbBtn("@applypages","Apply to pages",()=>sbApplyToPages(),"sb-ico","Apply to pages"));
+  bar.appendChild(sbBtn("@props","Copy properties",()=>{ if(SB_PAINT)sbStopPaint(); else sbCopyProps(); },
                         "sb-ico"+(SB_PAINT?" on":""),
                         SB_PAINT?"Stop copying properties":"Copy properties"));
   /* 6g1 — Ced: "have center and middle alignment and other in the same realm." Left/centre/right and

@@ -186,19 +186,48 @@ body.ribbonright #toolbar .grp-style .stylegrid select{width:100%;min-width:0}
 body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
 
 /* a text box being dragged out reads as a text frame, not as a shape */
-.marquee.shape.textbox{border-style:solid;border-width:1px;background:rgba(58,139,213,.06)}
+/* 6m5 — and it is the WHOLE preview now. Ced, of the text tool's drag: "the preview for it as well
+   is weird. make it look like the textbox", with a capture of a solid red slab the size of the box.
+   This rule was already drawing the right thing — a hairline blue frame — and `ghostShape` was
+   painting the ribbon's fill and stroke on top of it, because the text tool shares the box tool's
+   drag. A box and an ellipse SHOULD preview in their own colours; a text box has no fill and no
+   outline, so the ghost showed something the mark will never be and hid the drawing underneath it.
+   The ghost is skipped for text (see the move handler in app.js), and the interior goes fully
+   see-through here, so what is under the box is readable while you place it. */
+.marquee.shape.textbox{border-style:dashed;border-width:1px;background:transparent}
 
 /* =================================================================================================
    6fa — THE ANGLE READOUT
    A rotate handle used to turn a mark silently, which is no way to line a callout up with a member.
    The reading sits on the mark's own centre and goes green the moment Snap has caught an angle.
    ================================================================================================= */
+/* 6ly — and it LIES DOWN, always. `white-space:nowrap` and `writing-mode` are the two ways a chip can
+   be made to stand on end by something outside it; both are nailed shut here, so however narrow the
+   room gets the reading stays a short wide pill. See `degHUDShow` in app.js for the clamp that keeps
+   it inside the window. */
 .deghud{position:fixed;z-index:4300;transform:translate(-50%,-50%);pointer-events:none;
   background:rgba(17,20,26,.92);color:#fff;border:1px solid rgba(255,255,255,.18);
-  border-radius:8px;padding:4px 9px;font:700 12px/1 var(--sans);
-  letter-spacing:.02em;opacity:0;transition:opacity .1s}
+  border-radius:999px;padding:3px 9px;font:700 11.5px/1 var(--sans);
+  letter-spacing:.02em;opacity:0;transition:opacity .1s;
+  white-space:nowrap;writing-mode:horizontal-tb;text-orientation:mixed;direction:ltr;
+  display:flex;align-items:center;gap:7px}
 .deghud.show{opacity:1}
 .deghud.caught{background:#0b7a4b;border-color:#13a866}
+/* 6lu/6ly — TWO READINGS WHILE TURNING: where it is, and how far it has come, side by side. The change
+   keeps its own darker chip so the two never read as one number; `tabular-nums` so neither jitters as
+   the digits run. */
+.deghud .dh-abs,.deghud .dh-dlt{display:inline-block;white-space:nowrap;
+  font-variant-numeric:tabular-nums;line-height:1}
+.deghud .dh-dlt{padding:2px 6px;border-radius:999px;
+  background:rgba(0,0,0,.42);color:#cfd6e2;font-weight:700}
+.deghud.caught .dh-dlt{background:rgba(0,0,0,.28);color:#d6ffe9}
+
+/* 6lu — the cross, the arm and the pale ground, over the page for the length of the turn */
+.annoui > svg.rotguide{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:1}
+svg.rotguide .rg-ax{stroke:#9aa2ae;stroke-width:1;stroke-dasharray:5 5;opacity:.75}
+svg.rotguide .rg-arm{stroke:#12b5c9;stroke-width:1.5;opacity:.95}
+svg.rotguide .rg-hub{fill:#12b5c9;opacity:.95}
+svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stroke-width:1}
 
 /* 6g1 — the measurement readout: the same chip as the angle, following the pointer */
 .deghud.lenhud{transform:none;font-variant-numeric:tabular-nums}

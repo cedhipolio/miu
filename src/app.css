@@ -14,6 +14,11 @@
      ================================================================================================ */
   :root{
     --selink:#1268d1; --selink-a:rgba(18,104,209,.12); --selw:2px; --selbw:2px;
+    /* 6lt — the furniture round a selected mark: a hairline grey ring, a grey glyph, a light grey
+       fill under the pointer. Named here so a theme can move them and the five controls stay one
+       family. The RESIZE grips are not in this set: they are the selection itself. */
+    --ctl-line:#b9bfc9; --ctl-ink:#6b7280;
+    --ctl-hov:#e8eaee; --ctl-line-h:#9aa2ae; --ctl-ink-h:#3f4654; --ctl-act:#dcdfe5;
     --bg:#0B0306; --panel:#101725; --panel2:#162033; --line:#24345a;
     --ink:#e6edf7; --muted:#8fa2c4; --faint:#5f7196;
     --accent:#3A8BD5; --accent2:#2DD4BF; --accent-deep:#1e486f; --accent-alt:#68a7e0;
@@ -1110,6 +1115,24 @@
      handles, because the ✥ and the resize grips are 8px targets and a line lying across them would make
      them unclickable (6eq already notes they are fiddly). Nothing you are not touching moves. */
   svg.draw{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:visible}
+  /* 6ln — a run layer lives INSIDE the mark layer, so its z-index is compared against the marks'.
+     It takes no pointer events of its own; the hit polylines inside it switch them back on, which
+     works through any number of `none` ancestors. */
+  svg.draw.run{position:absolute;inset:0;pointer-events:none;overflow:visible}
+  /* 6lp — a selected stroke's handles, in the furniture layer with the marks' */
+  .annoui > svg.draw.selui{position:absolute;inset:0;pointer-events:none;overflow:visible}
+  /* 6m6 — a STROKE's three controls, in the same grey as a mark's and a group's. Drawn in SVG because
+     a stroke's furniture lives on the UI layer rather than on an element, so the tokens are read here
+     rather than from `.anno .rot`; the values are the same ones. */
+  svg.draw.selui .lgrip .lg-hit{fill:transparent}
+  svg.draw.selui .lgrip .lg-ring{fill:#fff;stroke:var(--ctl-line,#b9bfc9);stroke-width:1.5}
+  svg.draw.selui .lgrip .lg-ink{fill:var(--ctl-ink,#6b7280)}
+  svg.draw.selui .lgrip:hover .lg-ring{fill:var(--ctl-hov,#e8eaee);stroke:var(--ctl-line-h,#9aa2ae)}
+  svg.draw.selui .lgrip:hover .lg-ink{fill:var(--ctl-ink-h,#3f4654)}
+  svg.draw.selui .lgrip.danger .lg-ring{stroke:#ff5e62}
+  svg.draw.selui .lgrip.danger .lg-ink{fill:#ff5e62}
+  svg.draw.selui .lgrip.danger:hover .lg-ring{fill:#ffecec;stroke:#ff5e62}
+  svg.draw.selui .lgrip.danger:hover .lg-ink{fill:#ff3b40}
   /* 6ia — the second stroke layer, below the lower band of marks: the stack is strokes-below (3),
      marks-below (4), strokes-above (7), marks-above (8). */
   svg.draw.under{z-index:3}
@@ -1233,12 +1256,20 @@
      `redlineWrapLines` — the one function the stamp, the screen and the export all wrap with — computes. */
   .anno .ed{font-family:Arial,Helvetica,'Liberation Sans',sans-serif;line-height:1.15;color:inherit;outline:none;white-space:pre-wrap;overflow-wrap:normal;word-break:break-all;min-width:14px;resize:horizontal;overflow:hidden;padding:0;margin:0}
   .anno.sel{box-shadow:0 0 0 var(--selw) var(--selink)}
+  /* 6lj — while the pixel-aligned frame in `.annoui` is up, the mark under it draws no ring of its
+     own and a picture draws no outline: three rings at three fractional positions is what "the blue
+     lines are not even" looked like. See `syncSelUI`. */
+  .anno.sel.hasselui{box-shadow:none}
+  .anno.sel.hasselui .ed.imgwrap{outline:none}
   .anno.multi{box-shadow:0 0 0 calc(var(--selw) + 1px) #ffb02e}
   .marquee{position:absolute;z-index:9;border:var(--selw) dashed var(--selink);background:var(--selink-a);pointer-events:none}
   /* 6ha — while a SHAPE is being dragged the shape itself is drawn underneath (see `ghostShape`), so
      the marquee steps back to a bare guide: the fill would otherwise tint the very thing it is meant to
      be showing you. */
   .marquee.ghosting{background:transparent;border-style:dotted;opacity:.55}
+  /* 6m5 — the text marquee has had its own rule since the text tool was built; it is in ma.css,
+     which loads after this sheet, and that is where it stays. Two copies of one rule is the fault
+     6eg exists to kill, and the first draft of this change added a second here. */
   /* 6gt — THE ✕ HAS ITS OWN CORNER NOW. Ced: "change the position of x button on items/redlines to
      make it clickable." It sat at top:-11px / right:-9px, which is exactly where the `ne` corner handle
      and the `e` side handle live — and those carry a higher z-index, so on a selected mark most of the
@@ -2772,18 +2803,68 @@
   .anno .rz.ne{top:-6px;right:-6px;cursor:nesw-resize}
   .anno .rz.se{bottom:-6px;right:-6px;cursor:nwse-resize}
   .anno .rz.sw{bottom:-6px;left:-6px;cursor:nesw-resize}
-  .anno .rot,.anno .mov{position:absolute;bottom:-32px;width:20px;height:20px;border-radius:50%;background:#fff;border:var(--selbw) solid var(--selink);color:var(--selink);font-size:12px;line-height:1;display:none;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  /* ================================================================================================
+     6lt — THE CONTROLS ROUND THE BOX ARE QUIET UNTIL YOU REACH FOR THEM.
+     Ced: "make the icons around the box (rotate, layer, drag) have thin grey outlines and when the
+     cursor hovers thos, it will change the fill with light grey."
+     They wore the selection's own blue at the selection's own weight, which made five small blue
+     discs compete with the blue frame they hang off — on a drawing that is already red and black, the
+     furniture was the loudest thing on the sheet. A hairline grey ring and a grey glyph say "a
+     control is here" without claiming the eye; the light grey fill on hover says which one the
+     pointer is on. The one exception is the resize grips, which are the selection itself and stay
+     blue — you are meant to see the shape of the box.
+     ================================================================================================ */
+  .anno .rot,.anno .mov{position:absolute;bottom:-32px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid var(--ctl-line,#b9bfc9);color:var(--ctl-ink,#6b7280);font-size:12px;line-height:1;display:none;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.14);transition:background .1s ease,border-color .1s ease,color .1s ease}
+  /* 6lk — three controls under the box now, so they are centred as a row of three rather than as a
+     pair: rotate, move, and (on a picture) edit. The offsets are the same 23/3 pattern stepped out by
+     one slot, so the set stays centred on the box whichever of the two it is. */
   .rot{left:calc(50% - 23px);cursor:grab}
   .mov{left:calc(50% + 3px);cursor:move;font-size:13px}
   .anno.sel .rot,.anno.sel .mov{display:flex}
   .anno.sel.editing .rot,.anno.sel.editing .mov{display:flex}   /* 6ha — see above */
+  .anno .edp{position:absolute;bottom:-32px;width:20px;height:20px;border-radius:50%;
+    background:#fff;border:1px solid var(--ctl-line,#b9bfc9);color:var(--ctl-ink,#6b7280);
+    font-size:12px;line-height:1;display:none;align-items:center;justify-content:center;padding:0;
+    cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.14);
+    transition:background .1s ease,border-color .1s ease,color .1s ease}
+  .anno.sel .edp,.anno.sel.editing .edp{display:flex}
+  /* 6lt — the light grey fill, on all five alike */
+  .anno .rot:hover,.anno .mov:hover,.anno .lup:hover,.anno .ldn:hover,.anno .edp:hover{
+    background:var(--ctl-hov,#e8eaee);border-color:var(--ctl-line-h,#9aa2ae);color:var(--ctl-ink-h,#3f4654)}
+  .anno .rot:active,.anno .mov:active,.anno .lup:active,.anno .ldn:active,.anno .edp:active{
+    background:var(--ctl-act,#dcdfe5)}
+  /* 6lk — with three controls the row is re-centred rather than grown off one end: 3x20px and two
+     6px gaps is 72px, so they start 36px left of the middle. `haspic` is set on the element that
+     carries the furniture, and the selui frame copies it. */
+  /* ================================================================================================
+     6lw — AND THE TURN GOES IN THE MIDDLE. Ced: "it makes more sense to put the rotate in the middle,
+     edit on left and drag on right."
+     He is right about why: rotate is the one of the three that acts on the box AS A WHOLE and about
+     its own centre, so the middle of the row is where it belongs — it sits under the point it turns
+     about. Edit and drag act on what is inside and on where it sits, and they take the ends. With
+     only two controls (anything that is not a picture) the pair keeps rotate first, so the turn is
+     always to the left of the drag whichever set you are looking at.
+     ================================================================================================ */
+  .anno.haspic .edp{left:calc(50% - 36px)}
+  .anno.haspic .rot{left:calc(50% - 10px)}
+  .anno.haspic .mov{left:calc(50% + 16px)}
+  /* ================================================================================================
+     6lz — AND EVERY ONE OF THEM IS DRAWN UPRIGHT. The mark carries the turn; `--urot` is its negative,
+     written beside the transform by `setMarkSpin`, and each control cancels the turn it inherits. They
+     still orbit the box — that is what says which box they belong to — but an up-arrow points up at
+     every angle. The resize grips are left alone: they are the selection itself, and a square turned
+     is the same square. */
+  .anno .rot,.anno .mov,.anno .edp,.anno .lup,.anno .ldn,.anno .x{
+    transform:rotate(var(--urot,0deg))}
   /* 6i5 — Ced: "add up or down button when selecting a redline to put them up or down the layering.
      put these on the left side of the box." One step per press, up the stack and down it, on the edge
      the drag and rotate controls do not use. */
   .anno .lup,.anno .ldn{position:absolute;left:-28px;width:20px;height:20px;border-radius:50%;
-    background:#fff;border:var(--selbw) solid var(--selink);color:var(--selink);font-size:12px;line-height:1;
+    background:#fff;border:1px solid var(--ctl-line,#b9bfc9);color:var(--ctl-ink,#6b7280);
+    font-size:12px;line-height:1;
     display:none;align-items:center;justify-content:center;padding:0;cursor:pointer;
-    box-shadow:0 1px 3px rgba(0,0,0,.25)}
+    box-shadow:0 1px 2px rgba(0,0,0,.14);
+    transition:background .1s ease,border-color .1s ease,color .1s ease}
   .anno .lup{top:calc(50% - 23px)}
   .anno .ldn{top:calc(50% + 3px)}
   .anno.sel .lup,.anno.sel .ldn,

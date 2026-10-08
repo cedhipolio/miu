@@ -2439,7 +2439,7 @@ async function loadPdf(file){
     }catch(e){ LOG("detach step skipped",e&&e.message); }
     S.docBytes=(base===buf)?buf.slice(0):base.slice(0);   // clean copy for vector export / re-edit
     S.doc=await pdfjsLib.getDocument({data:(base===buf)?buf:base.slice(0)}).promise;
-    S.pages=[]; S.annos=[]; S.lines=[]; S.suggestions=new Set(); S.sel=null; S.selLine=null; S.selMulti=new Set(); S.selMultiL=new Set(); S.clip=null; S.discrepancies=[];
+    S.pages=[]; S.annos=[]; S.lines=[]; S.suggestions=new Set(); S.sel=null; S.selLine=null; S.selMulti=new Set(); S.selMultiL=new Set(); S.clip=null; S.discrepancies=[]; S._zMerged=0;   /* 6ln */
     /* 6ga — a new document has its own save history. Carrying the previous one's time across would put
        a confident "Last saved 6:53 PM" beside work that has never been saved at all. */
     clearSavedReadout();
@@ -2557,7 +2557,15 @@ function updateRail(){
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("redlined",red.has(+p.dataset.idx)));
 }
 let io=null;
-function observePages(){ setupVirtualization(); updateCurrentRail(); reapplyPageView(); }
+/* 6lh — `rebuild` is whether the set of page ELEMENTS has changed. After `renderAll` it has, and the
+   observer has to be pointed at the new ones. After a ZOOM it has not — 6ep made zoom keep every page
+   div — so rebuilding only costs an entry per page on the next frame and an `unloadPage` for each one
+   off screen. The other two halves are wanted either way: which page you are looking at can change
+   with the scale, and page view has to be re-applied. See `rezoomPages`. */
+function observePages(rebuild){
+  if(rebuild!==false)setupVirtualization();
+  updateCurrentRail(); reapplyPageView();
+}
 /* Put page view back after the page list is rebuilt. */
 function reapplyPageView(){
   try{
@@ -4019,7 +4027,18 @@ function attachPagePointer(pg,i){
       /* 6ha — a BOX or an ELLIPSE shows the shape itself as it is dragged, in the colours it will have,
          with the dotted marquee left underneath as the size guide. A text box shows its outline the
          same way, because where its edges land is the whole of the gesture. */
-      if(shapeMarquee){
+      /* ==========================================================================================
+         6m5 — EXCEPT A TEXT BOX, WHICH IS NOT A SHAPE. Ced, of the text tool's drag: "the preview for
+         it as well is weird. make it look like the textbox", with a capture of a solid red slab.
+         `ghostShape` paints the shape IN THE TOOL'S OWN STYLE — the ribbon's fill, its opacity, its
+         stroke — which is right for a box and an ellipse, because that is what those marks will look
+         like. A text box has no fill and no outline; it is words on the page. So painting the shape
+         style over the gesture shows something the mark will never be, and it hides the drawing you
+         are placing the box ON, which is the one thing you need to see while you place it.
+         The marquee alone is the preview, undimmed, with a see-through interior: a dashed rule where
+         the four edges will land, which is exactly what a text box's selection looks like.
+         ========================================================================================== */
+      if(shapeMarquee&&shapeMarquee!=="text"){
         mbox.classList.add("ghosting");
         ghostShapeMove(i,(shapeMarquee==="circle")?"ellipse":"rect",sx,sy,pt.x,pt.y);
       }
@@ -4606,13 +4625,99 @@ function drawPageLines(i){
      copy of every stroke in it — visible as doubled handles on a callout's leader. */
   [...pg.querySelectorAll("svg.draw.ingroup")].forEach(gs=>{
     [...gs.querySelectorAll("*")].forEach(n=>n.remove()); });
-  /* 6ia — whichever of the two layers this stroke belongs in */
-  const layerFor=l=>((l&&l.under&&svgUnder)?svgUnder:svg);
+  /* ================================================================================================
+     6ln — A STROKE GOES WHERE ITS z PUTS IT, AMONG THE MARKS.
+     The two band SVGs stay — the ghost, the shape preview and the start-point marker all belong to
+     whatever is being drawn right now and are always on top of their band — but a REAL stroke is drawn
+     into a run layer inside the mark layer, so a z-index can put it between two marks.
+
+     One SVG per unbroken run of strokes in the band's order, not one per stroke: a drawing is made in
+     bursts, so the runs are few. Measured on the fixture's busiest page the count is in single
+     figures, and a run with nothing in it is never created.
+     ================================================================================================ */
+  [...pg.querySelectorAll("svg.draw.run")].forEach(n=>n.remove());
+  /* ================================================================================================
+     6lp — A SELECTED STROKE'S HANDLES ARE ALWAYS ON TOP.
+     Ced: "the blue dragger of the line is not visible as it rests below the redline."
+     The point handles and the rotate / move / delete grips were drawn into the stroke's own layer, so
+     a stroke deliberately sitting under a mark had its controls under that mark too — and a control
+     you cannot see is a control you do not have. A MARK's furniture has lived in `.annoui`, above
+     every band, since 6is; a stroke's belongs there for the same reason. Where the stroke sits in the
+     stack is a decision about the drawing; where its handles sit is not.
+     ================================================================================================ */
+  let _uiSvg=null;
+  const uiLayer=()=>{
+    if(_uiSvg)return _uiSvg;
+    const host=pg.querySelector(".annoui"); if(!host)return svg;
+    _uiSvg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    _uiSvg.setAttribute("class","draw selui");
+    const _w0=svg.getAttribute("width"), _h0=svg.getAttribute("height");
+    if(_w0)_uiSvg.setAttribute("width",_w0);
+    if(_h0)_uiSvg.setAttribute("height",_h0);
+    host.appendChild(_uiSvg);
+    return _uiSvg;
+  };
+  [...pg.querySelectorAll(".annoui > svg.draw.selui")].forEach(n=>n.remove());
+  const _runOf=new Map();
+  try{
+    const SVGNS="http://www.w3.org/2000/svg";
+    const _w=svg.getAttribute("width"), _h=svg.getAttribute("height");
+    [true,false].forEach(u=>{
+      const host=pg.querySelector(u?".annolayer-under":".annolayer");
+      if(!host)return;
+      const items=bandList(i,u).filter(o=>!maLayerHidden(o))
+        .map(o=>({z:o.z||0, line:(layerColl(o)===S.lines), o}))
+        .sort((p,q)=>(p.z-q.z));
+      let cur=null;
+      items.forEach(it=>{
+        if(!it.line){ cur=null; return; }           /* a mark breaks the run */
+        if(it.o.group!=null&&!it.o.ghost)  { cur=null; return; }  /* grouped strokes have their own */
+        if(!cur){
+          cur=document.createElementNS(SVGNS,"svg");
+          cur.setAttribute("class","draw run"+(u?" under":""));
+          if(_w)cur.setAttribute("width",_w);
+          if(_h)cur.setAttribute("height",_h);
+          cur.style.zIndex=String(it.z);
+          host.appendChild(cur);
+        }
+        _runOf.set(it.o.id,cur);
+      });
+    });
+  }catch(e){}
+  /* 6ia/6ln — the run this stroke belongs in, or its band's own layer for anything transient */
+  const layerFor=l=>(l&&l.id!=null&&_runOf.get(l.id))||((l&&l.under&&svgUnder)?svgUnder:svg);
   const w=pg.offsetWidth,h=pg.offsetHeight,defCol=$("#c_text").value;
   /* 6ha — the ghost rides the same pass as the real strokes, so it is drawn by the same code */
   const _draws=S.lines.filter(l=>l.page===i&&!maLayerHidden(l));   /* 6jc — hidden layers stay off */
   if(_ghost&&_ghost.page===i)_draws.push(_ghost);
   try{ paintGhostShape(svg,pg.offsetWidth,pg.offsetHeight); }catch(e){}
+  /* ================================================================================================
+     6lm — A START POINT YOU CAN SEE.
+     Ced: "show the first point of a line if only inserted by click and not dragging."
+     `clickRunArm` already builds a ghost — but from (x,y) to (x,y), which is a stroke of zero length
+     and draws nothing at all. Until the hand moves and the ghost is stretched to the pointer, the
+     only sign that a start point had been taken was a line in the status bar, so a click that landed
+     and a click that missed looked exactly alike.
+     It is drawn here rather than as part of the ghost because it is not a stroke: it is a mark of
+     where the run began, in the stroke's own colour, and it has to stay put while the ghost swings
+     about. Two circles — a filled core and a white ring round it — so it reads on ink and on paper
+     alike, at a size that does not pretend to be part of the drawing.
+     ================================================================================================ */
+  try{
+    if(_clickRun&&_clickRun.page===i){
+      const cx=_clickRun.x*w, cy=_clickRun.y*h;
+      const col=(_ghost&&_ghost.col)||defCol||"#fa3237";
+      const ring=document.createElementNS("http://www.w3.org/2000/svg","circle");
+      ring.setAttribute("cx",cx); ring.setAttribute("cy",cy); ring.setAttribute("r",5.5);
+      ring.setAttribute("fill","none"); ring.setAttribute("stroke","#ffffff");
+      ring.setAttribute("stroke-width",2); ring.setAttribute("opacity",".95");
+      ring.setAttribute("pointer-events","none");
+      const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+      dot.setAttribute("cx",cx); dot.setAttribute("cy",cy); dot.setAttribute("r",3.5);
+      dot.setAttribute("fill",col); dot.setAttribute("pointer-events","none");
+      svg.appendChild(ring); svg.appendChild(dot);
+    }
+  }catch(e){}
   /* 6ia — bottom to top inside each layer, by the stroke's own z */
   _draws.sort((p1,q1)=>((p1.z||0)-(q1.z||0))||(S.lines.indexOf(p1)-S.lines.indexOf(q1)));
   _draws.forEach(l=>{
@@ -4783,7 +4888,7 @@ function drawPageLines(i){
         const c=mk("circle",{cx:p[0],cy:p[1],r:6,fill:selInk(),stroke:"#fff","stroke-width":2});
         c.style.pointerEvents="all"; c.style.cursor="move";
         c.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); selectLine(l.id); startLineDrag(ev,l,"pt"+k,pg); });
-        svg.appendChild(c);
+        uiLayer().appendChild(c);        /* 6lp — above every band, not in the stroke's own layer */
       });
       /* 6g9 — A STROKE GETS THE SAME TWO GRIPS A MARK HAS.
          Ced: "all shapes, texts, and items should have drag and rotate on them when selected." A
@@ -4799,19 +4904,21 @@ function drawPageLines(i){
            A mark has all three; a stroke had two, and its delete lived in a floating bar — a different
            place to look for the same thing. They sit in a row now, each with a 30px invisible target
            round it so a fingertip finds it as easily as a pointer does. */
+        /* 6m6 — the same three controls a mark and a group carry, in the same grey, at the same
+           size. The colours come off the `--ctl-*` tokens through `svg.draw.selui .lgrip` in app.css
+           rather than being written here, so one edit moves all three kinds of selection at once. */
         const grip=(dx,glyph,title,onDown,danger)=>{
-          const ink=danger?"#ff5e62":selInk();
-          const g=mk("g",{});
-          const hit=mk("circle",{cx:bcx+dx,cy:bby+26,r:15,fill:"transparent"});
-          const c=mk("circle",{cx:bcx+dx,cy:bby+26,r:10,fill:"#fff",stroke:ink,"stroke-width":2});
-          const t=mk("text",{x:bcx+dx,y:bby+30,"text-anchor":"middle","font-size":12,fill:ink});
+          const g=mk("g",{class:"lgrip"+(danger?" danger":"")});
+          const hit=mk("circle",{cx:bcx+dx,cy:bby+26,r:15,class:"lg-hit"});
+          const c=mk("circle",{cx:bcx+dx,cy:bby+26,r:10,class:"lg-ring"});
+          const t=mk("text",{x:bcx+dx,y:bby+30,"text-anchor":"middle","font-size":12,class:"lg-ink"});
           t.textContent=glyph;
           const ttl=mk("title",{}); ttl.textContent=title;
           g.appendChild(hit); g.appendChild(c); g.appendChild(t); g.appendChild(ttl);
           g.style.pointerEvents="all"; g.style.cursor=(glyph==="\u21bb")?"grab":(danger?"pointer":"move");
           g.style.touchAction="none";
           g.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); onDown(ev); });
-          svg.appendChild(g);
+          uiLayer().appendChild(g);      /* 6lp */
         };
         grip(-26,"\u21bb","Rotate — the angle is shown as you turn it",ev=>startLineRotate(ev,l,pg));
         grip(0,"\u2725","Drag to move this stroke",ev=>startLineDrag(ev,l,"move",pg));
@@ -4842,6 +4949,13 @@ function startLineRotate(ev,l,pg){
   const ccx=r.left+cx*w, ccy=r.top+cy*h;
   const a0=Math.atan2(ev.clientY-ccy,ev.clientX-ccx);
   const hud=degHUD();
+  /* 6lx — a stroke has no box element, so its extent is measured off its own points: the cross hugs
+     the stroke the same way it hugs a mark, rather than reaching across the page. */
+  try{
+    const _xs=o.map(p=>p[0]), _ys=o.map(p=>p[1]);
+    const _bw=(Math.max(..._xs)-Math.min(..._xs))*w, _bh=(Math.max(..._ys)-Math.min(..._ys))*h;
+    rotGuideOpen(pg,ccx,ccy,{bw:Math.max(8,_bw),bh:Math.max(8,_bh)});
+  }catch(_){}
   const move=e=>{
     if(!_turned){ if(Math.hypot(e.clientX-_rx,e.clientY-_ry)<=DRAG_SLOP)return; _turned=true; }
     let deg=(Math.atan2(e.clientY-ccy,e.clientX-ccx)-a0)*180/Math.PI;
@@ -4857,9 +4971,12 @@ function startLineRotate(ev,l,pg){
     l.x1=np[0][0]; l.y1=np[0][1];
     l.x2=np[np.length-1][0]; l.y2=np[np.length-1][1];
     drawPageLines(l.page); dimRelayout(l);
-    degHUDShow(hud,-deg,caught,ccx,ccy);
+    /* 6lu — a stroke turns BY an amount rather than TO an angle, so the change is the reading that
+       means something here and it is the one shown; the guide is the same for both. */
+    try{ rotGuideTo(e.clientX,e.clientY); rotGuideSpin(deg); }catch(_){}   /* 6lx */
+    degHUDShow(hud,-deg,caught,ccx,ccy,-deg);
   };
-  const up=()=>{ degHUDHide(hud); window.removeEventListener("pointermove",move);
+  const up=()=>{ degHUDHide(hud); try{ rotGuideClose(); }catch(_){}   /* 6lu */ window.removeEventListener("pointermove",move);
                  window.removeEventListener("pointerup",up);
     if(!_turned){
       askAngle({ title:"Turn this stroke",
@@ -5072,11 +5189,33 @@ function cssBaseline(sizePt,fontKey,lineH){
    Two copies of a wrap rule, which is the fault 6eg was raised to kill. The screen's is the one Ced
    asked for, so it becomes the definition and the file reads it. `wrapMode` is still the per-mark
    override in the panel, and it now reaches the screen as well — 6kf overrode it unconditionally. */
+/* ==================================================================================================
+   6m4 — AND A TEXT BOX BREAKS INSIDE THE WORD AGAIN, BY DEFAULT.
+   Ced: "make the default break inside a line."
+
+   This is the third time this switch has moved, so it is worth writing down what each swing was
+   actually answering, because they were not the same question:
+
+     6f2  a free box wraps on WORDS — a box you drew is prose, not a ruled column
+     6ht  Ced: "text inside textbox should wrap by individual characters and not as words when the
+          box was adjusted to be smaller" — a text box fills each line
+     6kn  the EXPORT was still reading the old default while the screen had been hard-coded to words
+          in 6kf, so screen and file disagreed; one definition won and it happened to be words
+     6m4  Ced again, on a narrowed box: break inside the line
+
+   6kn's real work was killing the second copy of the rule, and that stands — this function is still
+   the one definition the screen, the reflow and the file all read, so moving it moves all three
+   together. What it got wrong was the default it settled on, and Ced has now said twice which one he
+   wants for a TEXT BOX: fill the line, break where it runs out. A CALLOUT and a SHAPE are unchanged —
+   a note in a box is prose and breaking `INSIDE` into `INSI`/`DE` there is still wrong — and
+   `wrapMode` is still the per-mark override in the properties panel, so either rule is a chip away.
+   ================================================================================================== */
 function wrapsWords(a){
   if(!a)return false;
   const m=a.wrapMode;
   if(m==="words")return true;
   if(m==="chars")return false;
+  if(isTextBox(a))return false;      /* 6m4 — fill the line, the way the printed columns do */
   return isFreeBox(a);
 }
 function redlineWrapLines(text,size,pi,maxW,fontKey,words,lsp){
@@ -5459,11 +5598,25 @@ function growTextBox(a,ed,pgEl){
      the fact. always retain what the user intends."
      This grows a text box downward so typing never disappears below its own edge, which is right up
      to the moment somebody drags a handle: from then on the height is a DECISION, and a tool that
-     quietly undoes a decision on the next keystroke is worse than one that lets text overflow. A box
-     that has been resized by hand wraps to the width it was given and stays exactly as tall as it
-     was left — the same contract every drawing program has.
+     quietly undoes a decision on the next keystroke is worse than one that lets text overflow.
+
+     6lv — AND THE DECISION IS A FLOOR, NOT A CEILING.
+     Ced, later: "if the text wraps, the text box should extend below to still cover the text."
+
+     These two asks pull in opposite directions and it is worth writing down how they are reconciled,
+     because the obvious reading of either one breaks the other. 6ke stopped the box re-deriving its
+     own size, which is right: a box you dragged narrow must not spring back. 6lc then let the lines
+     that would not fit SHOW rather than be clipped, which was better than losing them but leaves text
+     hanging outside its own box — and that is what Ced is looking at now.
+
+     The two axes are not the same decision. WIDTH is wholly the user's: it decides where the words
+     break, and nothing may change it. HEIGHT is only ever a minimum — the box will not shrink below
+     the height it was given, and it will grow below to cover whatever the words come to. That is the
+     formula two lines down, `Math.max(a.minNh, need/ph)`, which was already right; all that stood in
+     front of it was this bail-out. So a hand-sized box keeps every decision that was made about it
+     and still covers its own text.
      ============================================================================================== */
-  if(a.userSized)return false;
+  if(a.userSized&&a.minNh==null)a.minNh=a.nh||0.03;
   const ph=pgEl.offsetHeight; if(!(ph>0))return false;
   if(a.minNh==null)a.minNh=a.nh||0.03;
   const prev=ed.style.height;
@@ -5472,6 +5625,15 @@ function growTextBox(a,ed,pgEl){
   if(prev)ed.style.setProperty("height",prev,"important");
   if(!(need>0))return false;
   const want=Math.max(a.minNh,need/ph);
+  /* 6lr — and the LINE COUNT is kept honest while we are measuring anyway. `a.lines` was left at
+     whatever the mark was made with — measured on a five-line note it still said 4 — and although
+     nothing a free box does reads it today, it is written into the file and into every snapshot, and
+     `fitTextInside` derives a line PITCH from it the moment a mark stops being a free box. A number
+     in the state that does not match the thing on screen is a trap for the next reader. */
+  try{
+    const lh=parseFloat(getComputedStyle(ed).lineHeight);
+    if(lh>0)a.lines=Math.max(1,Math.round(need/lh));
+  }catch(e){}
   if(Math.abs(want-(a.nh||0))<0.0004)return false;
   a.nh=want;
   ed.style.setProperty("height",(want*ph)+"px","important");
@@ -5789,6 +5951,18 @@ function maLayerStamp(){
   const d=maLayers()[0].id, cur=(S.layCur!=null?S.layCur:d);
   (S.annos||[]).forEach(a=>{ if(a.lay==null)a.lay=cur; });
   (S.lines||[]).forEach(l=>{ if(l.lay==null)l.lay=cur; });
+  /* 6ln — AND THE TWO OLD SEQUENCES ARE MERGED, ONCE PER DOCUMENT. Until now a mark's z and a stroke's
+     z were renumbered 1..n inside their own array, so a file written before this carries a mark at
+     z=3 and a stroke at z=3 that mean nothing to each other. Comparing them without merging first
+     would order a page by which array a thing happened to be in. This runs on the first layout after
+     a document arrives, and then not again: afterwards every z is already on the one scale, and
+     renumbering on every layout would churn values that a drag is in the middle of reading. */
+  try{
+    if(!S._zMerged&&(S.pages||[]).length){
+      S._zMerged=1;
+      for(let pi=0;pi<S.pages.length;pi++){ bandRenumber(pi,true); bandRenumber(pi,false); }
+    }
+  }catch(e){}
 }
 function maPicUnframed(a){ return (a&&a.picRaw)||(a&&a.src)||""; }
 /* ==================================================================================================
@@ -6435,7 +6609,7 @@ function layoutAnnos(){
        on printed lines — so the test is "is this one box over several printed lines". */
     if(a.onCell&&(a.wrap||(a.lines||1)<=1)) topPx+=REDLINE_DROP*h;   // 2. sit 4px lower
     d.style.top=topPx+"px"; if(a.z)d.style.zIndex=a.z;
-    d.style.transformOrigin="center center"; if(a.rot)d.style.transform="rotate("+a.rot+"deg)";
+    setMarkSpin(d,a.rot);          /* 6lz — and the controls on it stay the right way up */
 
     const isImg=(a.kind==="img");
     const shp=shapeOf(a);
@@ -6857,6 +7031,49 @@ function layoutAnnos(){
         toggleMulti(a.id); return; }
       if(S.selMulti.has(a.id)){ dragMulti(e,pg); return; }
       if(a.group!=null&&!groupOpenIs(a.group)){ selectGroup(a.group); dragMulti(e,pg); return; }   /* 6jz */
+      /* ============================================================================================
+         6ll — A PRESS INSIDE THE SELECTED MARK MOVES THE SELECTED MARK.
+         Ced: "when editing a redline, all dragger or tool drag should be shown above the redlines and
+         you should be moving the selected redline."
+
+         The handles were already right: measured with a small mark selected under a larger one,
+         `elementsFromPoint` at the move grip answers `BUTTON.mov` and dragging it moved the selected
+         mark and not the other. The BODY was not: at the centre of the selected mark the topmost
+         element was the OTHER mark's `.ed`, three deep, so a drag that started inside the box you
+         were working on picked up whatever happened to lie over it.
+
+         Overlap is the normal state of a marked-up drawing — a note inside a box, a box over a
+         cloud — and the mark you are working on is the one the tool has every reason to prefer. So
+         while something is selected, a press that lands inside ITS box drags IT, whichever mark the
+         hit test reached first.
+
+         A CLICK is still a click. `dragBody` does nothing until the pointer passes the slop, so a
+         press that never moves has changed nothing; the pointerup below then selects the mark that
+         was actually under the hand, which is how you reach a small mark lying inside a big selected
+         one. Drag what you are holding, click to pick up something else.
+         ============================================================================================ */
+      if(S.sel!=null&&S.sel!==a.id&&!a.group){
+        const _f=document.querySelector(".annoui > .anno.selui");
+        const _sa=S.annos.find(z=>z.id===S.sel);
+        const _sd=markEl(S.sel);
+        const _sp=_sa?document.querySelector('.page[data-idx="'+_sa.page+'"]'):null;
+        if(_f&&_sa&&_sd&&_sp&&!_sa.lock&&_sa.group==null){
+          const r=_f.getBoundingClientRect();
+          if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom){
+            const sx=e.clientX, sy=e.clientY, pick=a.id;
+            const onUp=ev2=>{
+              window.removeEventListener("pointerup",onUp,true);
+              if(Math.hypot(ev2.clientX-sx,ev2.clientY-sy)<=DRAG_SLOP){
+                try{ selNotFromDraw(); selectAnno(pick); }catch(_){}
+              }
+            };
+            window.addEventListener("pointerup",onUp,true);
+            selNotFromDraw();
+            dragBody(e,_sd,_sa,_sp);
+            return;
+          }
+        }
+      }
       selectAnno(a.id); dragBody(e,d,a,pg);
     };
     ed.addEventListener("mousedown",_press);
@@ -6983,7 +7200,7 @@ let _inLayout=false;
    gains the selection without a re-layout, which is the ordinary case: a click on a neighbour.
    ================================================================================================= */
 let _hEl=null;                 /* the one element that currently carries a set */
-const HANDLE_SEL=":scope > .rz, :scope > .rot, :scope > .mov, :scope > .lup, :scope > .ldn";
+const HANDLE_SEL=":scope > .rz, :scope > .rot, :scope > .mov, :scope > .lup, :scope > .ldn, :scope > .edp";
 function stripHandles(d){ if(!d)return; d.querySelectorAll(HANDLE_SEL).forEach(n=>n.remove()); }
 function markHandles(d,a,pg,ed){
   if(!d||!a||!pg)return d;
@@ -6999,6 +7216,30 @@ function markHandles(d,a,pg,ed){
   const movH=el("button","mov","✥"); movH.title="Drag to move this redline";
   d.appendChild(movH);
   dragify(movH,d,a,pg,ed);
+  /* ================================================================================================
+     6lk — AND THE PICTURE EDITOR, WHERE THE HAND ALREADY IS.
+     Ced: "add an edit picture button in here as well beside the drag for easy access", with a capture
+     of a selected picture and an arrow at the move grip.
+     Opening the editor meant going down to the selection bar at the foot of the window, or finding it
+     in the right-click menu — a trip across the screen for the one thing you do to a picture over and
+     over. It is a round control beside the move grip, the same size and the same ink as the rest of
+     the furniture, and it appears on ANY picture mark: a photo you added, a snapshot you took with the
+     snapshot tool, and a markup placed from the library are all `kind:"img"` and all open the same
+     editor. (Ced: "add an edit as well if the photo was from a snapshot markup on tool, not only on
+     added image photos" — measured on the built page, the BAR and the right-click menu already offered
+     it for a snapshot; this control is the one that was missing, so it is the one that has to cover
+     every kind.)
+     ================================================================================================ */
+  if(a.kind==="img"){
+    const edH=el("button","edp","✎"); edH.type="button";
+    edH.title="Edit this picture — erase, select and fill, without leaving the sheet";
+    edH.onclick=ev=>{ ev.stopPropagation(); ev.preventDefault();
+      try{ selectAnno(a.id); skEditor(a); }catch(e){ try{toast("Could not open the picture editor");}catch(_){} } };
+    /* a press must not start a drag of the mark underneath it */
+    edH.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); });
+    d.appendChild(edH);
+    d.classList.add("haspic");      /* 6lk — re-centres the row of three; the frame copies the class */
+  }
   /* 6i5 — one step up or down the stack, on the left edge of the box */
   const up=el("button","lup","⤒"); up.type="button";
   up.title="Up one layer — above the mark it is under, and past the strokes at the top of the stack";
@@ -7014,7 +7255,7 @@ function markHandles(d,a,pg,ed){
   d.appendChild(dn);
   return d;
 }
-const SEL_FURNITURE=".x,.rz,.rot,.mov,.lup,.ldn";
+const SEL_FURNITURE=".x,.rz,.rot,.mov,.lup,.ldn,.edp";
 function selUIFrameFor(id){
   const a=S.annos.find(z=>z.id===id); if(!a)return null;
   const pg=document.querySelector(`.page[data-idx="${a.page}"]`); if(!pg)return null;
@@ -7053,6 +7294,7 @@ function paintSelUI(){
        ones a rotated box was being resized by, which is why it went the wrong way. */
     const fresh=back&&back.querySelector(":scope > "+SEL_FURNITURE);
     [...f.children].forEach(n=>{ if(back&&!fresh)back.appendChild(n); else n.remove(); });
+    try{ if(back)back.classList.remove("hasselui"); }catch(e){}   /* 6lj */
     f.remove();
   });
   document.querySelectorAll(".annoui").forEach(l=>{ l.innerHTML=""; });
@@ -7068,8 +7310,11 @@ function paintSelUI(){
   const f=el("div","anno sel selui"); f.dataset.sel=String(S.sel);
   /* 6is — and the frame wears the mark's own classes, because which handles a mark gets is decided by
      them: a shape and a free text box carry the two side pills, a cell redline does not. `editing` is
-     deliberately left off — a selected mark keeps its handles while you type in it (6ha). */
-  [...c.d.classList].forEach(k=>{ if(!/^(anno|sel|multi|dragging|editing)$/.test(k))f.classList.add(k); });
+     deliberately left off — a selected mark keeps its handles while you type in it (6ha).
+     6lj — and so is `hasselui`, which is the mark's note to itself that this frame exists. Copying it
+     onto the frame told the frame not to draw the ring either, and the selection lost its outline
+     altogether — measured as no blue at all on four scan lines through the box. */
+  [...c.d.classList].forEach(k=>{ if(!/^(anno|sel|multi|dragging|editing|hasselui)$/.test(k))f.classList.add(k); });
   /* 6k2 — a mark that has just BECOME the selection has no handles yet: a click on a neighbour
      repaints this layer without re-laying the marks out. Built here, once, for the one that needs
      them. */
@@ -7079,6 +7324,13 @@ function paintSelUI(){
   [...c.d.querySelectorAll(":scope > "+SEL_FURNITURE)].forEach(n=>f.appendChild(n));
   if(!f.children.length)return;
   c.ui.appendChild(f);
+  /* 6lj — ONE RING, NOT THREE. `.anno.sel` carries a 2px `box-shadow` ring, and this frame is itself
+     an `.anno.sel`, so a selected mark was drawing two of them — at two slightly different fractional
+     positions, which is what reads as a thick or doubled edge. A picture drew a THIRD: `.ed.imgwrap`
+     has an `outline` of its own. The frame is the one that should carry it, because the frame is the
+     thing that sits above every mark and is now pixel-aligned, so the mark underneath is told to stop
+     drawing its own while the frame is up. */
+  try{ c.d.classList.add("hasselui"); }catch(e){}
   syncSelUI();
 }
 /* the frame follows the mark through a drag, a resize and a turn — `positionBar` is called on every
@@ -7087,14 +7339,43 @@ function syncSelUI(){
   const f=document.querySelector(".annoui > .anno.selui"); if(!f)return;
   const c=selUIFrameFor(+f.dataset.sel);
   if(!c){ f.remove(); return; }
-  f.style.left=c.d.style.left||"0px";
-  f.style.top=c.d.style.top||"0px";
-  f.style.width=c.d.offsetWidth+"px";
-  f.style.height=c.d.offsetHeight+"px";
-  f.style.transformOrigin="center center";
-  f.style.transform=c.a.rot?("rotate("+c.a.rot+"deg)"):"";
+  /* ==============================================================================================
+     6lj — THE SELECTION FRAME LANDS ON WHOLE PIXELS.
+     Ced: "make the blue lines in display all even", with a capture of a selected picture.
+
+     Measured on that capture: scanning across the frame gave blue runs of 2, 2, 2 and 3 pixels, and
+     scanning down it gave 2, 2, 1 and 2. A 2px ring, painting 3 on one side and 1 on the other.
+
+     Two causes, and both are here. The frame took its `left` and `top` straight from the mark's own
+     inline style — a fraction, because a mark's position is a fraction of the page width times the
+     scale — while its width and height came from `offsetWidth`, which is already rounded. So one
+     edge sat on a whole pixel and the opposite edge did not, and a ring straddling a half pixel is
+     painted as three device pixels on one side and one on the other. Rounding the whole box fixes
+     every side at once, and moving the furniture by less than a pixel is not a thing the eye can
+     see — it is drawn on top of a mark that has not moved.
+     (The second cause is three rings being drawn where one was wanted; see `hasselui` below.)
+     ============================================================================================== */
+  const _px=v=>Math.round(parseFloat(v)||0);
+  const _l=_px(c.d.style.left), _t=_px(c.d.style.top);
+  f.style.left=_l+"px";
+  f.style.top=_t+"px";
+  f.style.width=Math.round(c.d.offsetWidth)+"px";
+  f.style.height=Math.round(c.d.offsetHeight)+"px";
+  /* 6lj — and the rounding has to be done where the PIXELS are, not where the page's numbers are.
+     Rounding `left` inside the page lands on a whole pixel of the page, and the page itself sits at a
+     fraction of the window (it is centred in the free space, and that is rarely an even number), so
+     the first attempt at this measured 622.8 on screen from a left of 623. The frame is nudged by
+     whatever fraction is left after it has been placed, which costs one rect read and puts all four
+     of its edges on the device grid. */
+  try{
+    const r=f.getBoundingClientRect();
+    const dx=r.left-Math.round(r.left), dy=r.top-Math.round(r.top);
+    if(dx)f.style.left=(_l-dx)+"px";
+    if(dy)f.style.top=(_t-dy)+"px";
+  }catch(e){}
+  setMarkSpin(f,c.a.rot);          /* 6lz — the frame turns; the controls on it do not */
   /* the mark may have gained or lost a class since the frame was built (a shape typed into, say) */
-  [...c.d.classList].forEach(k=>{ if(!/^(anno|sel|multi|dragging|editing)$/.test(k))f.classList.add(k); });
+  [...c.d.classList].forEach(k=>{ if(!/^(anno|sel|multi|dragging|editing|hasselui)$/.test(k))f.classList.add(k); });
 }
 function startAnnoResize(ev,a,d,ed,pg,pos){
   /* 6fb — a LOCKED mark does not move. The lock is checked at the gesture, not in the renderer,
@@ -7296,6 +7577,29 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          The re-wrap happens anyway, in CSS, at the width the box now has. */
       if(isTextBox(a)&&_rsMoved){ a.minNh=a.nh; a.userSized=true; }
       if(!document.querySelector(".anno.editing")){ layoutAnnos(); }
+      /* ==========================================================================================
+         6m4 — AND THEN THE BOX IS MADE TALL ENOUGH TO HOLD WHAT IT NOW SAYS.
+         Ced: "text wrapping issue not yet solved. make the default break inside a line. but the text
+         should be all covered", with a capture of a box three lines deep whose third line is sitting
+         below its own bottom edge, and then "make sure the size of the textbox the user puts is
+         granted."
+
+         Measured: `growTextBox` is called from exactly two places, `ed.oninput` and the paste
+         handler. Both are TYPING. Narrowing a box with a side handle re-wraps the text — more lines,
+         in the same height — and nothing re-measured it, so the extra lines hung out of the bottom.
+         6lc had already made a text box's overflow visible rather than clipped, which is why they are
+         seen rather than lost, and that is the picture Ced sent.
+
+         The missing call is this one, and the rule it follows is 6lv's: WIDTH is the user's decision
+         and is not touched; HEIGHT is a floor — `minNh` was just set to the height the hand let go
+         of, one line above — and the box may grow past it to cover its own text. So the size the
+         hand gave is granted in the only sense that can be granted for both asks at once.
+         ========================================================================================== */
+      if(isTextBox(a)&&_rsMoved){
+        const dd=document.querySelector(`.anno[data-id="${a.id}"]`);
+        const ee=dd&&dd.querySelector(".ed");
+        if(ee&&growTextBox(a,ee,pg))layoutAnnos();
+      }
       else { const dd=document.querySelector(`.anno[data-id="${a.id}"]`);
              paintShapeOutline(dd,a,pg.offsetWidth,pg.offsetHeight,
                shapeNeedsSvg(a,(a.nw||0.1)*pg.offsetWidth,(a.nh||0.06)*pg.offsetHeight)); }
@@ -8202,12 +8506,47 @@ function layerColl(o){
   if(o&&S.annos&&S.annos.indexOf(o)>=0)return S.annos;
   return isStrokeObj(o)?S.lines:S.annos;      /* not yet in either list: go by its shape */
 }
+/* ==================================================================================================
+   6ln — MARKS AND STROKES SHARE ONE STACK.
+   Ced, twice: "the lines still don't have layers" and "they should also be able to rest on top of
+   photos and other redlines" — and, separately, "the blue dragger of the line is not visible as it
+   rests below the redline." All three are one fault, and it is structural rather than a bug in the
+   layering arithmetic.
+
+   A stroke was drawn into `svg.draw` and a mark into `.annolayer`, two sibling layers at z-index 7
+   and 8. So a stroke was BELOW every mark on the page by construction, however many times you pressed
+   ⤒, and its selection handles — which are drawn into the same stroke layer — were below them too.
+   Worse, the two kinds kept SEPARATE z sequences, each renumbered 1..n inside its own array, so a
+   mark's z and a stroke's z were two different scales that could not be compared at all. "Raise this
+   line above that photo" had no expressible answer.
+
+   One band, one sequence. `bandList` is every mark AND every stroke in a band, `bandRenumber` gives
+   them a single gapless order, and every operation that moves something through the stack — front,
+   back, one step up, one step down — works on that list. The screen follows: `drawPageLines` builds
+   a run of SVG inside the mark layer for each unbroken run of strokes in the order, with the run's
+   own z-index, so a stroke can sit between two marks. The export follows too: two bands rather than
+   four, each sorted by the one z.
+   ================================================================================================== */
+function sameBand(o,p){ return o&&p&&o.page===p.page&&(!!o.under===!!p.under); }
+function bandList(page,under){
+  const u=!!under;
+  return (S.annos||[]).filter(a=>a.page===page&&!!a.under===u)
+    .concat((S.lines||[]).filter(l=>l.page===page&&!!l.under===u));
+}
+/* one gapless, positive 1..n order over both kinds. A z is a CSS z-index on screen and a sort key in
+   the export, and a NEGATIVE one on screen drops a mark behind the sheet itself rather than behind its
+   neighbours — so the stack is kept positive rather than counting away from zero in both directions. */
+function bandRenumber(page,under){
+  const all=bandList(page,under);
+  const ord=(o)=>{ const c=layerColl(o); return c.indexOf(o); };
+  all.sort((p,q)=>((p.z||0)-(q.z||0))||(ord(p)-ord(q)));
+  all.forEach((o,k)=>{ o.z=k+1; });
+  return all;
+}
 function topZ(a){
   if(!a)return a;
   try{
-    const coll=layerColl(a);
-    const band=z=>z.page===a.page&&(!!z.under===!!a.under);
-    const mx=Math.max(0,...coll.filter(z=>z!==a&&band(z)).map(z=>z.z||0));
+    const mx=Math.max(0,...bandList(a.page,a.under).filter(z=>z!==a).map(z=>z.z||0));
     a.z=mx+1;
   }catch(e){}
   return a;
@@ -8220,83 +8559,104 @@ function topZ(a){
 function stepLayer(list,dir){
   const all=(list||[]).filter(Boolean);
   if(!all.length)return 0;
-  /* 6ib — marks and strokes are two separate piles; each half of a mixed selection steps in its own */
-  const A=all.filter(o=>layerColl(o)===S.annos), L=all.filter(o=>layerColl(o)===S.lines);
-  let n=0;
-  if(A.length)n+=_stepLayerIn(S.annos,A,dir);
-  if(L.length)n+=_stepLayerIn(S.lines,L,dir);
-  return n;
+  /* 6ln — ONE PILE, NOT TWO. A mixed selection used to step each kind in its own sequence, which is
+     exactly why a line could never pass a mark. */
+  return _stepBand(all,dir);
 }
-function _stepLayerIn(coll,list,dir){
-  const marks=(list||[]).filter(Boolean);
+/* ==================================================================================================
+   6lo — ONE PRESS STEPS PAST WHAT IT OVERLAPS.
+   Ced: "if a page has 100 redlines, and two are overlapping, where the first is in layer 10 and the
+   second is in layer 20, the user clicking the up layer should not take 9 to ten clicks to swap with
+   the item on top. it should know that the item being up layered should be above the one it overlaps
+   with."
+
+   The step was already "past the nearest NEIGHBOUR", not "one unit of z" — but nearest by z, over
+   everything in the band, and on a busy sheet most of what is between you and the thing you can see
+   on top of you is somewhere else entirely. Nine presses to move past one picture, and eight of them
+   look like nothing happening, because the eight marks you passed were not overlapping anything.
+
+   So the neighbour to step past is the nearest one ABOVE that actually touches the block's own
+   rectangle. A press then does the thing you pressed it for: it puts this mark over the one that was
+   covering it. With nothing overlapping — a mark on its own in the corner — there is nothing on
+   screen that a step could show, so it falls back to the nearest by z and the stack still walks.
+   ================================================================================================== */
+function _bbox(o){
+  try{
+    if(o&&o.nx!=null){
+      const w=(o.nw||0.02), h=(o.nh||0.02);
+      return [o.nx,o.ny,o.nx+w,o.ny+h];
+    }
+    const P=(o&&o.pts&&o.pts.length)?o.pts:[[o.x1,o.y1],[o.x2,o.y2]];
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    P.forEach(q=>{ if(!q)return; x0=Math.min(x0,q[0]); y0=Math.min(y0,q[1]);
+                   x1=Math.max(x1,q[0]); y1=Math.max(y1,q[1]); });
+    if(!isFinite(x0))return null;
+    /* a rule has no thickness to speak of; give it a hair so a crossing counts as a touch */
+    const pad=0.004;
+    return [x0-pad,y0-pad,x1+pad,y1+pad];
+  }catch(e){ return null; }
+}
+function _hits(a,b){
+  const r=_bbox(a), q=_bbox(b);
+  if(!r||!q)return false;
+  return !(r[2]<q[0]||q[2]<r[0]||r[3]<q[1]||q[3]<r[1]);
+}
+function _stepBand(marks,dir){
   if(!marks.length)return 0;
-  const ids=new Set(marks.map(a=>a.id));
   const a0=marks[0];
-  const band=z=>z.page===a0.page&&(!!z.under===!!a0.under);
-  const others=coll.filter(z=>band(z)&&!ids.has(z.id));
+  const ids=new Set(marks.map(a=>a.id));
+  const others=bandList(a0.page,a0.under).filter(z=>!ids.has(z.id));
   const mine=marks.map(z=>z.z||0);
   const lo=Math.min(...mine), hi=Math.max(...mine);
-  /* the neighbour to step past: the nearest z above the block, or the nearest below it */
-  const above=others.filter(z=>(z.z||0)>hi).sort((p,q)=>(p.z||0)-(q.z||0))[0];
-  const below=others.filter(z=>(z.z||0)<lo).sort((p,q)=>(q.z||0)-(p.z||0))[0];
-  if(dir>0&&above){ const t=above.z; above.z=lo; marks.forEach((m,i)=>{ m.z=t+i; }); }
-  else if(dir<0&&below){ const t=below.z; below.z=hi; marks.forEach((m,i)=>{ m.z=t-(marks.length-1-i); }); }
+  const touches=z=>marks.some(m=>_hits(m,z));
+  const upAll   =others.filter(z=>(z.z||0)>hi).sort((p,q)=>(p.z||0)-(q.z||0));
+  const downAll =others.filter(z=>(z.z||0)<lo).sort((p,q)=>(q.z||0)-(p.z||0));
+  /* the one it is actually hiding behind, if there is one; otherwise the next by z */
+  const above=upAll.filter(touches)[0]||upAll[0];
+  const below=downAll.filter(touches)[0]||downAll[0];
+  if(dir>0&&above){
+    /* everything from the block up to and including that neighbour shifts down by the block's size,
+       and the block lands just above it — so the ones skipped keep their order among themselves */
+    const t=above.z;
+    others.forEach(z=>{ if((z.z||0)>hi&&(z.z||0)<=t)z.z=(z.z||0)-marks.length; });
+    marks.forEach((m,k)=>{ m.z=t-marks.length+1+k; });
+  }
+  else if(dir<0&&below){
+    const t=below.z;
+    others.forEach(z=>{ if((z.z||0)<lo&&(z.z||0)>=t)z.z=(z.z||0)+marks.length; });
+    marks.forEach((m,k)=>{ m.z=t+k; });
+  }
   else{
-    /* nothing left to step past in this band — cross the strokes instead */
+    /* nothing left to step past in this band — cross into the other one */
     const to=(dir>0)?false:true;
     if(!!a0.under===to)return 0;                 /* already at the very top or the very bottom */
     marks.forEach(m=>{ m.under=to; });
-    /* and land at the near edge of the band it arrives in */
-    const band2=coll.filter(z=>z.page===a0.page&&(!!z.under===to)&&!ids.has(z.id)).map(z=>z.z||0);
+    const band2=bandList(a0.page,to).filter(z=>!ids.has(z.id)).map(z=>z.z||0);
     const edge=band2.length?(dir>0?Math.min(...band2)-1:Math.max(...band2)+1):1;
-    marks.forEach((m,i)=>{ m.z=edge+i*(dir>0?-1:1); });
+    marks.forEach((m,k)=>{ m.z=edge+k*(dir>0?-1:1); });
   }
-  /* renumber both bands 1..n, positive and gapless, the way layerMarks leaves them */
-  [true,false].forEach(u=>{
-    const all=coll.filter(z=>z.page===a0.page&&(!!z.under===u))
-                  .sort((p,q)=>((p.z||0)-(q.z||0))||(coll.indexOf(p)-coll.indexOf(q)));
-    all.forEach((z,k)=>{ z.z=k+1; });
-  });
+  bandRenumber(a0.page,true); bandRenumber(a0.page,false);
   return marks.length;
 }
 function layerMarks(list,dir){
   const all=(list||[]).filter(Boolean);
   if(!all.length)return 0;
-  /* 6ib — the same split: each pile is sorted within itself */
-  const A=all.filter(o=>layerColl(o)===S.annos), L=all.filter(o=>layerColl(o)===S.lines);
-  let n=0;
-  if(A.length)n+=_layerIn(S.annos,A,dir);
-  if(L.length)n+=_layerIn(S.lines,L,dir);
-  return n;
-}
-function _layerIn(coll,list,dir){
-  const marks=(list||[]).filter(Boolean);
-  if(!marks.length)return 0;
-  /* 6hu — FRONT AND BACK CROSS THE STROKES. Ced: "improve the layering, some redlines are not
-     following the layering." A mark is drawn in one of two bands — above the strokes or below them —
-     and front/back only ever sorted WITHIN a band, so a mark sent to the front of the lower band still
-     came out under every line on the page and looked as though the button had done nothing. Front now
-     means above everything, back means below everything, and the sort inside the band decides the rest.
-     The ⇅ button is still the one that flips the band without re-sorting. */
-  marks.forEach(a=>{ a.under=(dir!=="front"); });
-  const ids=new Set(marks.map(a=>a.id));
-  const key=a=>a.page+"|"+(a.under?1:0);
-  /* the block's own order is whatever it is now: z first, then the order they were made in */
-  const rank=a=>((a.z||0)*1e6)+coll.indexOf(a);
-  const bands=[...new Set(marks.map(key))];
-  bands.forEach(bk=>{
-    const mine=marks.filter(a=>key(a)===bk).sort((p,q)=>rank(p)-rank(q));
-    const others=coll.filter(a=>key(a)===bk&&!ids.has(a.id)).map(a=>a.z||0);
+  /* 6hu — FRONT AND BACK CROSS THE BANDS. A mark sent to the front of the lower band still came out
+     under every line on the page and looked as though the button had done nothing.
+     6ln — and the band is now marks AND strokes, so "the front" means the front of everything. */
+  all.forEach(a=>{ a.under=(dir!=="front"); });
+  const ids=new Set(all.map(a=>a.id));
+  const pages=[...new Set(all.map(a=>a.page))];
+  pages.forEach(pi=>{
+    const u=(dir!=="front");
+    const rank=a=>((a.z||0)*1e6)+layerColl(a).indexOf(a);
+    const mine=all.filter(a=>a.page===pi).sort((p,q)=>rank(p)-rank(q));
+    const others=bandList(pi,u).filter(a=>!ids.has(a.id)).map(a=>a.z||0);
     const mx=others.length?Math.max(...others):0, mn=others.length?Math.min(...others):0;
     mine.forEach((a,k)=>{ a.z=(dir==="front")?(mx+1+k):(mn-mine.length+k); });
-    /* and the whole band is renumbered 1..n in the order that leaves. A z is a CSS z-index on screen
-       and a sort key in the export, and a NEGATIVE one on screen can drop a mark behind the sheet
-       itself rather than behind its neighbours — so the stack is kept positive and gapless instead of
-       counting away from zero in both directions. */
-    const all=coll.filter(a=>key(a)===bk).sort((p,q)=>rank(p)-rank(q));
-    all.forEach((a,k)=>{ a.z=k+1; });
+    bandRenumber(pi,true); bandRenumber(pi,false);
   });
-  return marks.length;
+  return all.length;
 }
 /* every mark that travels with this one: a group moves as one layer, and a callout's box is the
    whole of it as far as layering goes (its leader is a stroke and lives in the stroke layer) */
@@ -9350,7 +9710,24 @@ function rezoomPages(settle){
   fitColumn();
   resizePageBoxes();
   softenPages();                           /* what is on screen stays on screen */
-  setupVirtualization();
+  /* ==============================================================================================
+     6lh — A ZOOM DOES NOT NEED A NEW OBSERVER, AND BUILDING ONE COSTS THE WHOLE DOCUMENT.
+     Ced: "zoom in and out are again very slow."
+
+     `setupVirtualization()` disconnects the IntersectionObserver and makes a new one over every page.
+     A fresh observer delivers an entry for EVERY element it is given, on the next frame, whether or
+     not anything about it has changed — so each zoom step produced one record per page, and the
+     off-screen ones (most of a 32-page site package) each ran `unloadPage`, throwing away a canvas
+     that the next step would have to draw again. Measured on the 32-page fixture: a ten-notch wheel
+     zoom made 300 `unloadPage` calls and 20 observers, 30 pages torn down per notch, and the worst
+     frame in the gesture was 462ms.
+
+     None of that work was ever needed. An observer watches ELEMENTS, and a zoom does not create or
+     remove any — 6ep made zoom keep every page div and only redraw its canvas — so the observer it
+     already has is watching exactly the right things and recomputes its own intersections when they
+     change size. Rebuilding is only right after `renderAll`, which does replace the elements, and
+     that is where the other two calls are.
+     ============================================================================================== */
   resharpenSoon(settle);                   /* and comes back crisp when the zooming stops */
   try{ layoutAnnos(); }catch(e){}
   try{ drawAllLines(); }catch(e){}
@@ -9407,7 +9784,7 @@ async function setZoom(z,anchor,settle){
        a FRACTION OF THE PAGE before the re-layout and put back under the cursor after it — exact at
        any zoom, on both axes, and clamped to what there actually is to scroll. */
     const pi=_zpi, before=_zfrac;
-    rezoomPages(settle); observePages();
+    rezoomPages(settle); observePages(false);   /* 6lh — the pages are the same elements */
     if(inPage) centreCurrentPage();
     else{
       const p=document.querySelector(`.page[data-idx="${pi}"]`);
@@ -9782,7 +10159,11 @@ async function exportPdf(){
     }
     /* One exit for every kind of mark: flatten it, or register it as the annotation it describes. */
     function emitMark(o,pg,apRef,rect,matrix,bw,bh,dict){
-      if(o&&o.flat){ flattenInto(pg,apRef,rect,matrix,bw,bh); return; }
+      /* 6lq — a PICTURE is never painted into the sheet, whatever its `flat` says. The flag can only
+         be set on one by a document written before pictures were kept out of the flatten, and the
+         point of the rule is the file somebody else opens: a photo has to arrive as an annotation
+         they can move or delete. */
+      if(o&&o.flat&&o.kind!=="img"){ flattenInto(pg,apRef,rect,matrix,bw,bh); return; }
       if(o&&o.subj)dict.Subj=PDFString.of(String(o.subj));
       annotsOf(pg).push(ctx.register(ctx.obj(dict)));
     }
@@ -10402,13 +10783,16 @@ async function exportPdf(){
        over-strokes(3), over-marks(4). A stroke now carries its own band and its own z. */
     /* 6jc — a layer that is switched off is not in the file either: switching one off is a decision
        about what this drawing says today, not about what you can see while you work. */
+    /* 6ln — TWO BANDS, NOT FOUR, and one z inside each. The four-level split put every stroke below
+       every mark of its band by construction, which is the fault on screen as well; now the exported
+       page carries exactly the order the screen shows, because both read the same number. */
     S.annos.forEach((a,idx)=>{ if(maLayerHidden(a))return;
-      drawItems.push({kind:(a.kind==="img"?"i":(isShape(a)?"s":"t")),a,layer:a.under?2:4,z:(a.z||0),idx}); });
+      drawItems.push({kind:(a.kind==="img"?"i":(isShape(a)?"s":"t")),a,layer:a.under?1:2,z:(a.z||0),idx}); });
     /* 6gm — and the SAME order on the exported page as on the screen: a stroke is layer 3, above every
        text mark, not layer 1 underneath them. The two orderings disagreeing would be worse than either
        being wrong, because you would not find out until the PDF was on someone's desk. */
     S.lines.forEach((l,idx)=>{ if(maLayerHidden(l))return;
-      drawItems.push({kind:"l",l,layer:(l.under?1:3),z:(l.z||0),idx:1e6+idx}); });
+      drawItems.push({kind:"l",l,layer:(l.under?1:2),z:(l.z||0),idx:1e6+idx}); });
     drawItems.sort((p,q)=> (p.layer-q.layer) || (p.z-q.z) || (p.idx-q.idx));
     drawItems.forEach(it=>{
       if(it.kind==="t")drawText(it.a);
@@ -12772,22 +13156,167 @@ function lenHUDHide(h){ if(!h)return; h.classList.remove("show","caught"); h.tex
 window.addEventListener("pointerup",()=>{ try{ lenHUDHide(document.getElementById("lenHUD")); }catch(e){} },true);
 window.addEventListener("pointercancel",()=>{ try{ lenHUDHide(document.getElementById("lenHUD")); }catch(e){} },true);
 
+/* ==================================================================================================
+   6lz — THE CONTROLS AROUND A MARK STAY THE RIGHT WAY UP.
+   Ced: "when a redline is rotated, always make the arrows of up and down layer retain the up and down
+   orientation so it does not become confusing for the user. actually, retain this principle to all
+   icons of the redlines so its not confusing."
+
+   A mark is turned by putting a `rotate()` on the element, and everything inside an element turns with
+   it — including the five round controls hanging off its edges. Measured on a box turned 30°: the
+   mark's transform was `matrix(0.866, 0.5, -0.5, 0.866, 0, 0)` and `.lup`'s own transform was `none`,
+   so the up-arrow was wearing the mark's 30° and pointing somewhere between up and right. On a mark
+   turned past 90° the up arrow points DOWN, which is not a confusing control so much as a wrong one.
+
+   An icon is not part of the drawing; it is a thing you press. So the mark carries the turn and each
+   control cancels it: one custom property written beside the transform, and one CSS rule that reads
+   it. The controls still ORBIT the box — they stay attached to the edge they belong to, which is what
+   says which box they act on — and each one is drawn upright wherever it has landed.
+   ================================================================================================== */
+function setMarkSpin(el,rot){
+  if(!el)return;
+  const r=+rot||0;
+  el.style.transformOrigin="center center";
+  el.style.transform=r?("rotate("+r+"deg)"):"";
+  try{ el.style.setProperty("--urot",(-r)+"deg"); }catch(e){}
+}
 /* 6fa — the angle readout that follows a rotate handle. One element, made once and reused. */
 function degHUD(){
   let h=document.getElementById("degHUD");
   if(!h){ h=document.createElement("div"); h.id="degHUD"; h.className="deghud"; document.body.appendChild(h); }
   return h;
 }
-function degHUDShow(h,deg,caught,cx,cy){
+/* ==================================================================================================
+   6lu — WHAT A TURN LOOKS LIKE WHILE IT IS HAPPENING.
+   Ced sent a picture of a mark mid-rotation and said "apply this animation when rotating": the mark
+   lifted on a pale ground, a dashed cross through the point it is turning about, an arm out to the
+   hand, and the angle read twice — where it is now, and how far it has come.
+
+   The reading is the part that does real work. One number cannot answer both questions a hand asks
+   while turning something: "what angle is this at" and "how far have I moved it". A callout being
+   lined up with a member wants the first; a mark being nudged back straight wants the second. They
+   are stacked, the absolute above and the change below, so neither has to be worked out from the
+   other. The cross and the arm are there so the centre of the turn is a place you can see rather
+   than a point you infer from the way the mark is swinging.
+
+   None of it exists at rest: the overlay is built when a rotation starts and taken down when the
+   hand lets go, so a sheet that is not being turned carries nothing extra at all.
+   ================================================================================================== */
+function degHUDShow(h,deg,caught,cx,cy,delta){
   if(!h)return;
   const d=((Math.round(deg*10)/10)%360+360)%360;
-  h.textContent=(Math.round(d*10)/10)+"\u00b0";
+  const abs=(Math.round(d*10)/10)+"\u00b0";
+  if(delta==null){ h.textContent=abs; }
+  else{
+    /* 6lu — two readings, the angle and the change, the way Ced's picture has them */
+    let dv=Math.round(delta*10)/10;
+    if(dv>180)dv-=360; if(dv<-180)dv+=360;
+    h.innerHTML="";
+    const a1=document.createElement("span"); a1.className="dh-abs"; a1.textContent=abs;
+    const a2=document.createElement("span"); a2.className="dh-dlt";
+    a2.textContent=(dv>0?"+":"")+dv+"\u00b0";
+    h.appendChild(a1); h.appendChild(a2);
+  }
   h.classList.toggle("caught",!!caught);
-  h.style.left=Math.round(cx)+"px";
-  h.style.top=Math.round(cy)+"px";
   h.classList.add("show");
+  /* ================================================================================================
+     6ly — ONE SMALL PROMPT, LYING DOWN.
+     Ced: "the input for the angle should be just a small prompt like the photo earlier, just always
+     make it horizontal", with a capture of the chip standing on end, its digits running down the
+     screen one to a line.
+
+     6lu stacked the two readings, the angle above the change, on the argument that it kept the chip
+     the width of one number. It does — and it also makes a chip two lines tall and barely wider than
+     "238°", which is a tall block sitting on top of the very thing you are trying to look at, and
+     which is one narrow container away from breaking a second time. The two numbers go side by side
+     instead (see `.deghud` in ma.css): a short wide pill reads at a glance, it covers a band of the
+     drawing rather than a column of it, and lying down is a shape a reading can keep however small the
+     room gets. `white-space:nowrap` in the sheet is the belt to that brace — a chip with no break
+     opportunities in it cannot be made to stand up.
+
+     It is also kept INSIDE the window. The chip is placed on the mark's own centre, and a mark near an
+     edge put it half off the screen with nothing to pull it back; it is clamped to the viewport with a
+     margin, which costs one measurement and means the reading is always readable. The clamp is in
+     half-size terms because the chip is centred on the point it is given.
+     ================================================================================================ */
+  let L=Math.round(cx), T=Math.round(cy);
+  try{
+    const w=h.offsetWidth||46, hh=h.offsetHeight||22, M=8;
+    L=Math.min(Math.max(L,w/2+M), window.innerWidth-w/2-M);
+    T=Math.min(Math.max(T,hh/2+M), window.innerHeight-hh/2-M);
+  }catch(e){}
+  h.style.left=L+"px";
+  h.style.top=T+"px";
 }
 function degHUDHide(h){ if(h)h.classList.remove("show"); }
+/* the dashed cross, the arm and the pale ground — one SVG over the page, for the length of the turn */
+function rotGuideOpen(pg,cx,cy,box){
+  try{
+    rotGuideClose();
+    const host=pg&&pg.querySelector(".annoui"); if(!host)return null;
+    const r=pg.getBoundingClientRect();
+    const NS="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(NS,"svg");
+    svg.setAttribute("class","rotguide");
+    svg.setAttribute("width",pg.offsetWidth); svg.setAttribute("height",pg.offsetHeight);
+    const X=cx-r.left, Y=cy-r.top;
+    const mk=(n,at)=>{ const e=document.createElementNS(NS,n);
+      for(const k in at)e.setAttribute(k,at[k]); return e; };
+    if(box){
+      svg.appendChild(mk("rect",{x:box.x-r.left,y:box.y-r.top,width:box.w,height:box.h,
+        class:"rg-lift",rx:3}));
+    }
+    /* ==============================================================================================
+       6lx — THE CROSS BELONGS TO THE SHAPE, NOT TO THE PAGE.
+       Ced: "make the grey lines only stretch up to the shape or redline or photo's shape, just a
+       little extended."
+
+       6lu drew the two axes right across the sheet — measured on a 734 x 950 page, `x1 0 -> x2 734`
+       and `y1 0 -> y2 950`. That is a pair of full-length rules cutting the drawing in half, over a
+       mark that may be an inch across, and at that length they stop reading as "this mark's centre"
+       and start reading as a guide belonging to the page. The job of the cross is to say where the
+       pivot is, and that only needs to reach as far as the thing turning about it.
+
+       So each axis is the mark's own half-extent plus a short overhang, and because the box's extent
+       changes as it turns, the half-extents are recomputed from the ANGLE each frame (`rotGuideSpin`):
+       the axis-aligned bounding box of a w x h rectangle turned by t is
+       `w|cos t| + h|sin t`  by  `w|sin t| + h|cos t|`. A stroke, which has no box of its own, gets a
+       modest fixed reach instead.
+       ============================================================================================== */
+    const EXT=16;                                       /* the "little extended" part, in pixels */
+    const bw=(box&&(box.bw||box.w))||0, bh=(box&&(box.bh||box.h))||0;
+    const ax=(bw?bw/2:70)+EXT, ay=(bh?bh/2:70)+EXT;
+    const axH=mk("line",{x1:X-ax,y1:Y,x2:X+ax,y2:Y,class:"rg-ax"});
+    const axV=mk("line",{x1:X,y1:Y-ay,x2:X,y2:Y+ay,class:"rg-ax"});
+    svg.appendChild(axH); svg.appendChild(axV);
+    const arm=mk("line",{x1:X,y1:Y,x2:X,y2:Y,class:"rg-arm"});
+    svg.appendChild(arm);
+    svg.appendChild(mk("circle",{cx:X,cy:Y,r:3,class:"rg-hub"}));
+    host.appendChild(svg);
+    _rotGuide={svg,arm,axH,axV,X,Y,r,bw,bh,ext:EXT};
+    return _rotGuide;
+  }catch(e){ return null; }
+}
+let _rotGuide=null;
+function rotGuideTo(x,y){
+  if(!_rotGuide)return;
+  try{ _rotGuide.arm.setAttribute("x2",x-_rotGuide.r.left);
+       _rotGuide.arm.setAttribute("y2",y-_rotGuide.r.top); }catch(e){}
+}
+/* 6lx — the axes follow the box's turning extent, so the cross keeps hugging the shape */
+function rotGuideSpin(deg){
+  const G=_rotGuide; if(!G||!G.axH||!G.bw||!G.bh)return;
+  try{
+    const t=((+deg||0)*Math.PI)/180, cs=Math.abs(Math.cos(t)), sn=Math.abs(Math.sin(t));
+    const ax=(G.bw*cs+G.bh*sn)/2+G.ext, ay=(G.bw*sn+G.bh*cs)/2+G.ext;
+    G.axH.setAttribute("x1",G.X-ax); G.axH.setAttribute("x2",G.X+ax);
+    G.axV.setAttribute("y1",G.Y-ay); G.axV.setAttribute("y2",G.Y+ay);
+  }catch(e){}
+}
+function rotGuideClose(){
+  try{ if(_rotGuide&&_rotGuide.svg)_rotGuide.svg.remove(); }catch(e){}
+  _rotGuide=null;
+}
 
 /* rotate an annotation by dragging the ↻ handle */
 /* =================================================================================================
@@ -12869,7 +13398,16 @@ function startAnnoRotate(ev,a,d,pg){
       _rotMoved=true;
       S.history.push(_rpre); if(S.history.length>80)S.history.shift();
       S.future=[]; updateUndoUI();
+      /* 6lu — the cross and the arm go up on the first real movement, not on the press, so a click
+         that turns out to be a request to type the angle leaves nothing behind */
+      /* 6lx — the guide is given the mark's UNROTATED size (`offsetWidth/Height`); `r` is the
+         bounding box it already occupies at `base`, which is a different number the moment the mark
+         arrives with a turn on it, and `rotGuideSpin` derives the turning extent itself. */
+      try{ rotGuideOpen(pg,cx,cy,{x:r.left,y:r.top,w:r.width,h:r.height,
+                                  bw:d.offsetWidth,bh:d.offsetHeight}); }catch(_){}
+      try{ rotGuideSpin(a.rot||0); }catch(_){}
     }
+    try{ rotGuideTo(e.clientX,e.clientY); }catch(_){}
     let deg=base+(Math.atan2(e.clientY-cy, e.clientX-cx)-start)*180/Math.PI;
     let caught=false;
     if(e.shiftKey){ deg=Math.round(deg/15)*15; caught=true; }
@@ -12877,11 +13415,17 @@ function startAnnoRotate(ev,a,d,pg){
       const step=SNAP_DEG_STEP, sn=Math.round(deg/step)*step;
       if(Math.abs(deg-sn)<=SNAP_DEG){ deg=sn; caught=true; }
     }
-    a.rot=Math.round(deg*10)/10; d.style.transform="rotate("+a.rot+"deg)"; positionBar();
-    degHUDShow(hud,a.rot,caught,cx,cy);
+    a.rot=Math.round(deg*10)/10;
+    setMarkSpin(d,a.rot);                            /* 6lz — upright while it turns, too */
+    try{ const _f=document.querySelector('.anno.selui'); if(_f)setMarkSpin(_f,a.rot); }catch(_){}
+    positionBar();
+    /* 6lx — the cross hugs the shape, so it has to follow the shape's own turning box */
+    try{ rotGuideSpin(a.rot); }catch(_){}
+    degHUDShow(hud,a.rot,caught,cx,cy,a.rot-base);   /* 6lu — and how far it has come */
   };
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
     degHUDHide(hud);
+    try{ rotGuideClose(); }catch(_){}        /* 6lu */
     if(!_rotMoved){
       /* 6hb — a press that went nowhere is a request to type the angle */
       askAngle({ title:"Rotate this mark",

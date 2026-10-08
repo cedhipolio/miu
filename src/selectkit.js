@@ -781,6 +781,25 @@ function skEditor(a,opts){
     gp.title="Drag to turn the picture — the angle is shown as you turn it. Shift snaps to 15°";
     box.appendChild(gp); return gp;
   })()];
+  /* ================================================================================================
+     6m0 — THE CHEQUER STAYS STILL WHILE THE PICTURE TURNS.
+     Ced: "in edit picture, do when rotated, make the transparent background be still so the user have
+     visual cues if the shape is straight."
+
+     The chequer was the BOX's own background, and the free-turn preview rotates the box — so the
+     squares turned with the picture and the one reference that could tell you whether an edge had come
+     square was turning too. A chequer that moves with the thing you are straightening tells you
+     nothing; a chequer that stays put is a ruled grid you can line an edge up against.
+
+     It cannot simply be moved outside the box, because it has to be CLIPPED to the picture — a chequer
+     spilling past the picture's edge would stop saying "these pixels are transparent", which is the
+     other job it does. So it is a child: the clip rides the box and keeps the picture's own rectangle,
+     and the pattern inside it is counter-rotated about the same centre and oversized well past the
+     corners, which leaves the squares axis-aligned on screen inside a window the shape of the picture.
+     ================================================================================================ */
+  const bgclip=document.createElement("div"); bgclip.className="sk-edbgclip";
+  const bgpat=document.createElement("div"); bgpat.className="sk-edbg";
+  bgclip.appendChild(bgpat); box.appendChild(bgclip);
   box.appendChild(cv); box.appendChild(ov); box.appendChild(ring); stage.appendChild(box);
   const foot=document.createElement("div"); foot.className="sk-edfoot";
   card.appendChild(head); card.appendChild(bar); card.appendChild(bar2);
@@ -902,6 +921,13 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(st.cv)ctx.drawImage(st.cv,0,0); else if(st.px)ctx.putImageData(st.px,0,0);
   };
   const put=st=>{
+    /* 6m0 — AND SO DOES UNDO. A run of free turns resamples from the pixels the run began with, and
+       putting a history state back replaces those pixels wholesale: carry the run across an Undo and
+       the next turn resamples a picture that is no longer on screen, by an angle that includes turns
+       the user has just taken back. Found while correcting the free-rotate case in `tools.py`, which
+       undoes a 30 degree turn and then asks for 45. The two history pushes end the run for every
+       operation that WRITES; this ends it for every one that RESTORES. */
+    try{ endSpinRun(); }catch(e){}
     const w=st.w||(st.cv?st.cv.width:st.px.width), h=st.h||(st.cv?st.cv.height:st.px.height);
     const r=(typeof st.rot==="number")?st.rot:picRot;
     if(st.orig){
@@ -914,9 +940,17 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(cv.width!==w||cv.height!==h){ cv.width=ov.width=w; cv.height=ov.height=h; applyZoom(); dropBox(); }
     drawBack(g,st,w,h); mask=st.mask?Uint8Array.from(st.mask):null;
     skMaskShow(ov,mask); say(); };
-  const push=()=>{ try{ undo.push(shot()); while(undo.length>HIST_MAX)undo.shift();
+  /* 6m0 — ANY change to the pixels ends a run of free turns, because the base a run resamples from is
+     the picture as it was before the run and would silently throw away whatever has been done since.
+     Both history pushes are the gate — every brush, fill, crop, quarter turn, flip and Restore goes
+     through one of them — and the free turn sets `_inFreeTurn` so its own push does not end the run it
+     is part of. One flag and two lines, rather than a hook on each of eleven operations. */
+  let _inFreeTurn=false;
+  const push=()=>{ try{ if(!_inFreeTurn)endSpinRun();
+                        undo.push(shot()); while(undo.length>HIST_MAX)undo.shift();
                          redo.length=0; syncHist(); }catch(e){} };
-  const pushGeo=()=>{ try{ undo.push(geoShot()); while(undo.length>HIST_MAX)undo.shift();
+  const pushGeo=()=>{ try{ if(!_inFreeTurn)endSpinRun();
+                           undo.push(geoShot()); while(undo.length>HIST_MAX)undo.shift();
                            redo.length=0; syncHist(); }catch(e){} };
   /* the ORIGINAL is turned with the picture, so Restore still brushes back the right pixels in the
      right places however many times the picture has been turned. Turned in place, because the restore
@@ -932,10 +966,23 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       r.width=r.height=0;
     }
   }
-  const mkb=(where,label,glyph,fn,on,title)=>{
+  /* ================================================================================================
+     6m2 — AND EVERY BUTTON CARRIES A KEY THAT IS NOT ITS WORDS.
+     Shortening five labels to fit two rows broke four cases in `tools.py`, every one of which pressed
+     a button by matching a regex against its visible text. That is the same trap v45 found on the
+     selection bar and fixed there by matching on `title` instead: a LABEL is a design decision and is
+     allowed to change; a handle is a contract and is not. `title` is only half a handle, though — it
+     is prose, and prose is edited too.
+     So each button gets `data-k`, a short key that names what the button DOES. It is written here,
+     once, from the key the call site passes, and the tests press `[data-k="wand"]`. A label may be
+     reworded, translated or shortened from now on without touching a test.
+     ================================================================================================ */
+  const mkb=(where,label,glyph,fn,on,title,key)=>{
     const b=document.createElement("button");
     b.type="button"; b.className="sk-edb"+(on?" on":"");
     if(title)b.title=title;
+    b.dataset.k=key||String(label||glyph||"").toLowerCase()
+                      .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"b";
     /* 6lf — a glyph may be DRAWN rather than typed. Ced sent a picture of the bucket he wanted for
        Fill, and an emoji is not a thing you can match to a picture: it is whatever face the machine
        happens to have, in whatever colour that face was designed in, and on this bar it came out as a
@@ -953,7 +1000,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
 
   /* ---- row one: the brushes, then the selection, then the fill ---- */
   const gTools=group(bar), gDraw=group(bar), gSel=group(bar), gFill=group(bar);
-  let bErase,bRestore,bWipe,bWand,bLasso,bCrop,bInv,bClr,bFill,bErase2,bUndo,bRedo,countTag,zoomTag;
+  let bErase,bRestore,bWipe,bWand,bLasso,bCrop,bCropApply,bInv,bClr,bFill,bErase2,bUndo,bRedo,
+      countTag,zoomTag;
   let bShapeSel=null, shapeRow=null;     /* 6la */
   const drawBtns={};                     /* 6kq — pen · line · arrow · box · ellipse */
   const say=()=>{
@@ -983,6 +1031,10 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     bWand.classList.toggle("on",t==="wand");
     bLasso.classList.toggle("on",t==="lasso");
     if(bCrop)bCrop.classList.toggle("on",t==="crop");
+    /* 6m1 — the crop box belongs to the crop tool: picking up anything else puts it away without
+       cutting, and picking Crop up puts it back on the picture's edges. */
+    if(t==="crop"){ if(!cropBox)cropOpen(); } else cropClose();
+    if(bCropApply)bCropApply.style.display=(t==="crop")?"":"none";
     /* 6kq — the five drawing tools light the same way, and their settings come up with them */
     DRAW_TOOLS.forEach(k=>{ if(drawBtns[k])drawBtns[k].classList.toggle("on",t===k); });
     if(bShapeSel)bShapeSel.classList.toggle("on",t==="shapesel");
@@ -1011,18 +1063,18 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
               try{ ring.style.setProperty("--sk-ink",drawCol); }catch(e){} }
     sizeRing(); };
   bErase  =mkb(gTools,"Erase","◧",()=>setTool("erase"),true,
-               "Rub the picture out — hold and sweep");
+               "Rub the picture out — hold and sweep","erase");
   /* 6gk — Ced: "the erase should have a restore counterpart." It paints back the picture as it came
      in, from a copy kept aside when the editor opened, so an over-eager sweep is mended by brushing
      over it rather than undone wholesale. */
   bRestore=mkb(gTools,"Restore","↺",()=>setTool("restore"),false,
-               "Brush the original picture back where you erased it");
+               "Brush the original picture back where you erased it","restore");
   /* 6gs — Ced: "add a feature in edit photo where it recognizes the ends of lines in erase function so
      the erasing is easier." A brush has to be traced along a line and stops wherever the hand stops;
      what you actually mean is "this line, all of it". Click one and the connected run of ink is taken,
      end to end — the ends are where the ink stops, which is exactly what the flood finds. */
   bWipe   =mkb(gTools,"Erase line","✂",()=>setTool("wipe"),false,
-               "Click a line and the whole run goes, end to end — Shift selects it instead");
+               "Click a line and the whole run goes, end to end — Shift selects it instead","wipe");
   /* 6j3 — RESTORE ALL. Ced: "add restore button on edit photo." Restore beside it is a BRUSH — you
      paint the original back where you rubbed too far — and there was no way to say "put all of it
      back" short of undoing one step at a time. This is that button: the picture as it came in, in one
@@ -1038,21 +1090,21 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     g.drawImage(orig,0,0);
     mask=null; skMaskShow(ov,null); say();
     setStatus("The picture is back as it came in.");
-  },false,"Put the whole picture back as it came in — one step, and undoable");
+  },false,"Put the whole picture back as it came in — one step, and undoable","restoreall");
   /* 6kq — THE FIVE THINGS YOU CAN ADD. The glyphs match the ribbon's own tools so the hand already
      knows them, and each one is the gesture it looks like: pen is freehand, the other four are drawn
      from one corner to the other. Shift constrains — a line to the nearest 45°, a box to a square, an
      ellipse to a circle. */
   drawBtns.pen    =mkb(gDraw,"Pen","✎",()=>setTool("pen"),false,
-                       "Draw freehand into the picture");
+                       "Draw freehand into the picture","pen");
   drawBtns.line   =mkb(gDraw,"Line","╱",()=>setTool("line"),false,
-                       "Drag a straight line — Shift holds it to 45°");
+                       "Drag a straight line — Shift holds it to 45°","line");
   drawBtns.arrow  =mkb(gDraw,"Arrow","↗",()=>setTool("arrow"),false,
-                       "Drag an arrow — the head lands where you let go");
+                       "Drag an arrow — the head lands where you let go","arrow");
   drawBtns.rect   =mkb(gDraw,"Box","▭",()=>setTool("rect"),false,
-                       "Drag a box — Shift makes it square");
+                       "Drag a box — Shift makes it square","rect");
   drawBtns.ellipse=mkb(gDraw,"Ellipse","◯",()=>setTool("ellipse"),false,
-                       "Drag an ellipse — Shift makes it a circle");
+                       "Drag an ellipse — Shift makes it a circle","ellipse");
   /* 6la — THE BUCKET. Ced: "add fill option (like bucket)". `Fill selection` paints what the wand
      has already chosen, behind the ink, which is the job for putting a ground under a capture. A
      bucket is the other job: click a space and that space takes the colour, on top, with no
@@ -1072,7 +1124,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       '<rect x="93" y="373" width="172" height="23" rx="11"/>'+
     '</svg>';
   drawBtns.bucket=mkb(gDraw,"Fill",BUCKET_SVG,()=>setTool("bucket"),false,
-                      "Click a space and it takes the ink colour — Shift to pick the space first");
+                      "Click a space and it takes the ink colour — Shift to pick the space first","bucket");
   /* =================================================================================================
      6la — AUTO. Ced: "have a automatic mode that will read the photo and will do what it should do.
      basically it will capture the shape and then erase the lines, and the make the fill ... this is
@@ -1097,41 +1149,41 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
               res.nClosed.toLocaleString()+" closed lines against "+res.nEnds.toLocaleString()+
               " with a free end. A line that crosses right through the shape is left: it closes on "+
               "the outline at both ends, so take it with Erase line. Undo puts all of this back.");
-  },false,"Find the subject, take the stray lines off it, and fill it behind the ink — one press");
-  bWand   =mkb(gSel,"Magic wand","✦",()=>setTool("wand"),false,
-               "Click a space to select it — Shift adds another");
+  },false,"Find the subject, take the stray lines off it, and fill it behind the ink — one press","auto");
+  bWand   =mkb(gSel,"Wand","✦",()=>setTool("wand"),false,
+               "Click a space to select it — Shift adds another","wand");
   /* 6gt — Ced: "add a lasso effect on edit photo." For everything the wand cannot reach: draw round
      it by hand and what you drew round is selected, through the same three chips. */
   bLasso  =mkb(gSel,"Lasso","◌",()=>setTool("lasso"),false,
-               "Draw round a region by hand — Shift adds it, Alt takes it out");
+               "Draw round a region by hand — Shift adds it, Alt takes it out","lasso");
   /* 6la — SHAPED SELECT. Ced: "shaped select - within magic wand type tool". The lasso is for a
      region with no shape to it; most of what wants selecting on a drawing is a rectangle, and
      drawing one by hand round it is both slower and worse. It answers to the same three chips. */
-  bShapeSel=mkb(gSel,"Shape select","▱",()=>setTool("shapesel"),false,
-               "Drag a rectangle or an ellipse over what you want — Shift adds, Alt takes out");
-  bInv    =mkb(gSel,"Select inverse","⧉",()=>{
+  bShapeSel=mkb(gSel,"Shape","▱",()=>setTool("shapesel"),false,
+               "Drag a rectangle or an ellipse over what you want — Shift adds, Alt takes out","shapesel");
+  bInv    =mkb(gSel,"Invert","⧉",()=>{
     push();
     mask=skMaskInvert(mask,cv.width*cv.height);
     skMaskShow(ov,mask); say();
     setStatus("Selection inverted.");
-  },false,"Swap the selection for everything else");
+  },false,"Swap the selection for everything else","invert");
   bClr    =mkb(gSel,"Deselect","✕",()=>{ push(); mask=null; skMaskShow(ov,null); say(); },false,
-               "Drop the selection");
-  bFill   =mkb(gFill,"Fill selection","■",()=>{
+               "Drop the selection","deselect");
+  bFill   =mkb(gFill,"Fill sel.","■",()=>{
     if(!mask||!skMaskCount(mask)){ setStatus("Pick a region with the wand first.",true); return; }
     push();
     skMaskFill(g,cv,mask,fillCol);
     setStatus("Filled — under the redlines, so the drawing still reads on top of it.");
-  },false,"Paint the selection, underneath everything already drawn");
+  },false,"Paint the selection, underneath everything already drawn","fillsel");
   /* 6gq — Ced: "add an erase selected feature in edit photos to erase the selected area by magic wand
      tool." The fill's opposite: everything selected is taken out, ink and ground alike. Wand the thing
      you do not want — or wand what you DO want and invert — and it is gone in one press. */
-  bErase2=mkb(gFill,"Erase selection","\u2327",()=>{
+  bErase2=mkb(gFill,"Clear sel.","\u2327",()=>{
     if(!mask||!skMaskCount(mask)){ setStatus("Pick a region with the wand first.",true); return; }
     push();
     skMaskErase(g,cv,mask);
     setStatus("Erased everything in the selection.");
-  },false,"Rub out everything the wand has selected");
+  },false,"Rub out everything the wand has selected","clearsel");
   const col=document.createElement("input");
   col.type="color"; col.value=fillCol; col.className="sk-edcol";
   col.title="What the fill paints — white by default, so a captured drawing reads over the sheet";
@@ -1238,12 +1290,12 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     fit=Math.min(availW/cv.width,availH/cv.height);
     setZoom(Math.min(1,fit));
   };
-  mkb(gView,"","−",()=>setZoom(zoom/1.25),false,"Zoom out");
+  mkb(gView,"","−",()=>setZoom(zoom/1.25),false,"Zoom out","zoomout");
   zoomTag=document.createElement("span"); zoomTag.className="sk-ednum sk-edzoom";
   gView.appendChild(zoomTag);
-  mkb(gView,"","＋",()=>setZoom(zoom*1.25),false,"Zoom in");
-  mkb(gView,"Fit","⤢",()=>fitZoom(),false,"Fit the picture in the window");
-  mkb(gView,"1:1","▣",()=>setZoom(1),false,"Every pixel of the capture, one for one");
+  mkb(gView,"","＋",()=>setZoom(zoom*1.25),false,"Zoom in","zoomin");
+  mkb(gView,"Fit","⤢",()=>fitZoom(),false,"Fit the picture in the window","fit");
+  mkb(gView,"1:1","▣",()=>setZoom(1),false,"Every pixel of the capture, one for one","oneone");
   /* 6gt — AND THE PICTURE TURNS. Ced: "add a rotate tool to rotate the photo itself within the edit
      photo." A quarter at a time, losslessly — the pixels are redrawn with the sides swapped rather
      than resampled, so four turns are exactly what you started with. It is an editing step like any
@@ -1265,8 +1317,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     setStatus("Turned a quarter "+(dir<0?"anticlockwise":"clockwise")+
               " — the mark takes the new proportions when you save.");
   };
-  mkb(gTurn,"Rotate left","⟲",()=>turnPic(-1),false,"Turn the picture a quarter anticlockwise");
-  mkb(gTurn,"Rotate right","⟳",()=>turnPic(1),false,"Turn the picture a quarter clockwise");
+  mkb(gTurn,"Rotate left","⟲",()=>turnPic(-1),false,"Turn the picture a quarter anticlockwise","turnleft");
+  mkb(gTurn,"Rotate right","⟳",()=>turnPic(1),false,"Turn the picture a quarter clockwise","turnright");
   /* 6i6 — and the two mirrors, beside the two turns */
   const flipPic=axis=>{
     pushGeo();
@@ -1286,8 +1338,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     applyZoom(); dropBox();
     setStatus(axis==="h"?"Flipped left to right." : "Flipped top to bottom.");
   };
-  mkb(gTurn,"Flip across","⇋",()=>flipPic("h"),false,"Mirror the picture left to right");
-  mkb(gTurn,"Flip down","⇵",()=>flipPic("v"),false,"Mirror the picture top to bottom");
+  mkb(gTurn,"Flip H","⇋",()=>flipPic("h"),false,"Mirror the picture left to right","fliph");
+  mkb(gTurn,"Flip V","⇵",()=>flipPic("v"),false,"Mirror the picture top to bottom","flipv");
   /* 6gz — CROP. Ced: "add crop on edit photo to crop the final photo." A snapshot is dragged out over
      a drawing and almost always brings a margin of something else with it; erasing that margin leaves
      it as empty pixels the mark still has to carry and still has to be sized around. A crop takes it
@@ -1317,6 +1369,93 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     setTool("erase");
     setStatus("Cropped to "+W+" × "+H+" — the mark takes the new proportions when you save.");
   };
+  /* ================================================================================================
+     6m1 — THE CROP BOX ARRIVES ON THE PICTURE'S OWN EDGES.
+     Ced: "crop should also come from the edges of the photo, not dragged by the user."
+
+     6gz made Crop a drag: press at one corner, sweep to the other, and the moment you let go the
+     picture is cut. Measured on entering the tool, the overlay carried exactly zero painted pixels —
+     there was nothing on screen at all until the hand started moving, and the only way to take a
+     narrow strip off one side was to draw a box round everything else by eye and hope.
+
+     Cropping is almost always SUBTRACTIVE: you have a picture and you want a bit less of it. So the
+     box starts as the whole picture, with a grip on every corner and every edge, and you push the
+     sides in to the part you want. Nothing is cut until Apply, so the box can be nudged, reconsidered
+     and nudged again — Escape leaves the picture alone, Enter applies. Dragging out a fresh box from
+     empty space still works for the times you want to pick a small detail out of a large capture, so
+     the old gesture is not taken away; it is just no longer the only one.
+     ================================================================================================ */
+  const CROP_PTS=[[0,0],[0.5,0],[1,0],[1,0.5],[1,1],[0.5,1],[0,1],[0,0.5]];
+  let cropBox=null;
+  function cropSay(){
+    if(!cropBox)return;
+    const W=Math.round(cropBox.w), H=Math.round(cropBox.h);
+    setStatus("Crop "+W+" × "+H+" — drag the edges or the corners, then Apply. "+
+              "Escape leaves the picture as it is.");
+  }
+  function cropPaint(){
+    if(!cropBox)return;
+    const og=ov.getContext("2d");
+    const X=cropBox.x, Y=cropBox.y, W=cropBox.w, H=cropBox.h;
+    const u=Math.max(1,1/Math.max(0.05,zoom));        /* one screen pixel, in picture pixels */
+    og.clearRect(0,0,ov.width,ov.height);
+    og.save();
+    og.fillStyle="rgba(8,14,26,.55)";
+    og.fillRect(0,0,ov.width,ov.height);
+    og.clearRect(X,Y,W,H);
+    if(W>2&&H>2){
+      og.strokeStyle="rgba(255,255,255,.35)"; og.lineWidth=u; og.setLineDash([]);
+      og.beginPath();
+      for(let i=1;i<3;i++){
+        og.moveTo(X+W*i/3,Y); og.lineTo(X+W*i/3,Y+H);
+        og.moveTo(X,Y+H*i/3); og.lineTo(X+W,Y+H*i/3);
+      }
+      og.stroke();
+    }
+    og.setLineDash([]); og.lineWidth=u*3; og.strokeStyle="rgba(8,14,26,.85)";
+    og.strokeRect(X,Y,W,H);
+    og.lineWidth=u; og.strokeStyle="#ffffff";
+    og.setLineDash([u*6,u*4]); og.strokeRect(X,Y,W,H);
+    /* 6m1 — and the eight grips, so it is visible that the box is a thing you take hold of */
+    og.setLineDash([]);
+    const s=Math.max(u*3.5,Math.min(W,H)*0.02);
+    og.lineWidth=u*1.5;
+    CROP_PTS.forEach(p=>{
+      const px=X+W*p[0], py=Y+H*p[1];
+      og.fillStyle="#ffffff"; og.fillRect(px-s,py-s,s*2,s*2);
+      og.strokeStyle="rgba(8,14,26,.9)"; og.strokeRect(px-s,py-s,s*2,s*2);
+    });
+    og.restore();
+  }
+  function cropOpen(){
+    cropBox={x:0,y:0,w:cv.width,h:cv.height};
+    skOvShow(ov,true);                     /* 6j2 — the box is not a selection; hold the overlay up */
+    cropPaint(); cropSay();
+    if(bCrop)bCrop.classList.add("on");
+  }
+  function cropClose(){
+    if(!cropBox)return;
+    cropBox=null;
+    skOvShow(ov,false);
+    try{ skMaskShow(ov,mask); }catch(e){}
+  }
+  function cropApply(){
+    if(!cropBox)return;
+    const b=cropBox; cropBox=null; skOvShow(ov,false);
+    cropTo(b.x,b.y,b.x+b.w,b.y+b.h);
+  }
+  /* which part of the box the pointer has hold of: a corner, an edge, the inside, or nothing */
+  function cropHit(x,y){
+    if(!cropBox)return null;
+    const t=Math.max(3,10/Math.max(0.05,zoom));       /* ten screen pixels of grab */
+    const X=cropBox.x, Y=cropBox.y, W=cropBox.w, H=cropBox.h;
+    if(x<X-t||x>X+W+t||y<Y-t||y>Y+H+t)return null;
+    let h="";
+    if(Math.abs(y-Y)<=t)h+="n"; else if(Math.abs(y-(Y+H))<=t)h+="s";
+    if(Math.abs(x-X)<=t)h+="w"; else if(Math.abs(x-(X+W))<=t)h+="e";
+    if(h)return h;
+    return (x>X&&x<X+W&&y>Y&&y<Y+H)?"move":null;
+  }
   /* 6ha — FREE ROTATION. Ced: "rotate should also has free rotate option." A quarter turn is the one
      you want for a picture taken sideways; a detail lifted off a drawing is almost never out by exactly
      ninety degrees. The slider previews with a CSS transform — no pixels are touched while you sweep it
@@ -1336,20 +1475,119 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
              "For more, use the quarter turns, or drag the ↻ grip on the picture itself";
   const fnum=document.createElement("span"); fnum.className="sk-ednum"; fnum.textContent="0°";
   const fmtDeg=d=>((Math.round(d*100)/100)+"°");
-  const preview=deg=>{ box.style.transform=deg?("rotate("+deg+"deg)"):""; fnum.textContent=fmtDeg(deg); };
+  /* 6m0 — the box turns and the chequer inside it turns back, so the grid stays square to the screen.
+     The chequer was built with the picture, in `skEditor`; this is `skEdWire`, the other side of the
+     same function boundary, so it is found on the box rather than closed over — exactly as the turn
+     grip below is. (Written closed-over first, inside a `try`, which swallowed `bgpat is not defined`
+     and shipped a build where the chequer turned with the picture and every measurement said so. The
+     `try` is gone: a lookup that fails should be visible, and a missing element is handled by asking
+     whether it is there.) */
+  const bgpat=box.querySelector(".sk-edbg");
+  const preview=deg=>{
+    box.style.transform=deg?("rotate("+deg+"deg)"):"";
+    if(bgpat)bgpat.style.transform=deg?("rotate("+(-deg)+"deg)"):"";
+    fnum.textContent=fmtDeg(deg);
+  };
+  /* ================================================================================================
+     6m0 — A FREE TURN TAKES THE SMALLEST ROOM IT CAN, AND A TURN BACK IS A TURN BACK.
+     Ced: "do not make the selection or canvass bigger every rotate, always take the smallest space it
+     can get."
+
+     Measured on a 749 x 912 capture, sweeping the slider +10, -10, +10, -10 — four gestures that end
+     exactly where they started:
+
+         749x912  ->  896x1029  ->  1062x1169  ->  1249x1336  ->  1463x1533
+
+     Nearly double, for nothing. Two separate causes, and both are fixed here.
+
+     ONE: each turn resampled THE RESULT OF THE LAST ONE. A turn's canvas has to be big enough to hold
+     the old rectangle's corners, so every turn grows it, and turning back grows it again — the empty
+     triangles from the first turn are now picture as far as the second one knows. So a run of free
+     turns is accumulated instead: `spinBase` keeps the pixels as they were before the first turn of
+     the run and `spinAcc` the total angle, and each commit resamples the BASE by the total. +10 then
+     -10 is a 0 degree turn of the original, which is the original, at its original size and with no
+     resampling loss either. Anything that changes the pixels for real — a brush, a crop, a quarter
+     turn, a flip, Restore all — ends the run, because the base would no longer be the truth.
+
+     TWO: the result is then TRIMMED to its own ink. A turn leaves transparent corners, and on a
+     capture lifted off a drawing — which is most of what this editor sees — there is usually a margin
+     of nothing round the subject as well. Carrying it costs the mark paper on the sheet and gives the
+     hand a box bigger than the thing in it. Fully transparent rows and columns come off the edges;
+     a picture with an opaque ground has none and is untouched, which is correct rather than a
+     limitation. The mark's own box is pulled in by the same fractions, about its centre, so nothing
+     on the sheet appears to move.
+     ================================================================================================ */
+  let spinBase=null, spinOrigBase=null, spinAcc=0;   /* where a run of free turns began, and its total */
+  let trimShiftX=0, trimShiftY=0;                    /* 6m0 — how far a trim moved the subject */
+  /* a DECLARATION, not a const: `push`/`pushGeo` are written far above this line and call it, and a
+     `const` would leave them reaching into the temporal dead zone if anything ever pushed earlier. */
+  function endSpinRun(){
+    try{ if(spinBase)spinBase.width=spinBase.height=0;
+         if(spinOrigBase)spinOrigBase.width=spinOrigBase.height=0; }catch(e){}
+    spinBase=null; spinOrigBase=null; spinAcc=0;
+  }
+  const snapCanvas=src=>{ const t=document.createElement("canvas");
+    t.width=src.width; t.height=src.height; t.getContext("2d").drawImage(src,0,0); return t; };
+  /* the fully transparent border round what is actually drawn, in pixels */
+  const inkBounds=c=>{
+    try{
+      const w=c.width, h=c.height;
+      if(!(w>0&&h>0))return null;
+      const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data;
+      let x0=w, y0=h, x1=-1, y1=-1;
+      for(let y=0;y<h;y++){
+        const row=y*w*4;
+        for(let x=0;x<w;x++){
+          if(d[row+x*4+3]){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+        }
+      }
+      if(x1<0)return null;                       /* nothing drawn at all — leave it alone */
+      return {x:x0,y:y0,w:x1-x0+1,h:y1-y0+1};
+    }catch(e){ return null; }                    /* a tainted canvas reads as "do not trim" */
+  };
   const turnFree=deg=>{
-    deg=((+deg%360)+360)%360;
-    if(!deg)return;
-    const rad=deg*Math.PI/180;
-    const w0=cv.width, h0=cv.height;
-    const nw=Math.max(1,Math.ceil(Math.abs(w0*Math.cos(rad))+Math.abs(h0*Math.sin(rad))));
-    const nh=Math.max(1,Math.ceil(Math.abs(w0*Math.sin(rad))+Math.abs(h0*Math.cos(rad))));
+    if(!(+deg))return;
+    _inFreeTurn=true;
+    try{ turnFreeInner(+deg); } finally{ _inFreeTurn=false; }
+  };
+  const turnFreeInner=deg=>{
+    /* 6m0 — accumulate against the pixels the run started from, not against the last result */
+    if(!spinBase){ spinBase=snapCanvas(cv); spinOrigBase=orig?snapCanvas(orig):null; spinAcc=0; }
+    spinAcc=((spinAcc+ +deg)%360+360)%360;
+    const src0=spinBase, srcO=spinOrigBase;
+    const rad=spinAcc*Math.PI/180;
+    const w0=src0.width, h0=src0.height;
+    let nw=Math.max(1,Math.ceil(Math.abs(w0*Math.cos(rad))+Math.abs(h0*Math.sin(rad))));
+    let nh=Math.max(1,Math.ceil(Math.abs(w0*Math.sin(rad))+Math.abs(h0*Math.cos(rad))));
     const spin=src=>{ const t=document.createElement("canvas"); t.width=nw; t.height=nh;
       const tg=t.getContext("2d");
       tg.translate(nw/2,nh/2); tg.rotate(rad); tg.drawImage(src,-src.width/2,-src.height/2);
       return t; };
     pushGeo();
-    const pic=spin(cv), og=orig?spin(orig):null;
+    let pic=spin(src0), og=srcO?spin(srcO):null;
+    /* 6m0 — and then down to the ink. The two are trimmed by the SAME box, so Restore keeps painting
+       the original back in register with the picture it belongs to. */
+    const bb=inkBounds(pic);
+    let trimL=0, trimT=0, trimR=0, trimB=0;
+    if(bb&&(bb.w<nw||bb.h<nh)&&bb.w>=4&&bb.h>=4){
+      trimL=bb.x; trimT=bb.y; trimR=nw-(bb.x+bb.w); trimB=nh-(bb.y+bb.h);
+      const cut=src=>{ const t=document.createElement("canvas"); t.width=bb.w; t.height=bb.h;
+        t.getContext("2d").drawImage(src,bb.x,bb.y,bb.w,bb.h,0,0,bb.w,bb.h); return t; };
+      const p2=cut(pic); pic.width=pic.height=0; pic=p2;
+      if(og){ const o2=cut(og); og.width=og.height=0; og=o2; }
+      /* 6m0 — THE BOX KEEPS ITS CENTRE WHEN IT IS SAVED, so a trim that takes more off one side than
+         the other would slide the picture across the sheet. A turn's own corners are symmetric by
+         construction — it is turned about its own centre — so this only bites when the picture had an
+         off-centre margin to begin with, and then it is exactly the amount the subject moves. It is
+         recorded here, in page units, where the scale is known, and added back at save. */
+      try{
+        const P=(S.pages&&S.pages[a.page])||{};
+        const W=P.w1||612, H=P.h1||792;
+        trimShiftX+=(((bb.x+bb.w/2)-nw/2)*pxW)/W;
+        trimShiftY+=(((bb.y+bb.h/2)-nh/2)*pxH)/H;
+      }catch(e){}
+      nw=bb.w; nh=bb.h;
+    }
     cv.width=ov.width=nw; cv.height=ov.height=nh;
     g.clearRect(0,0,nw,nh); g.drawImage(pic,0,0); pic.width=pic.height=0;
     if(og&&orig){ orig.width=nw; orig.height=nh;
@@ -1358,7 +1596,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     mask=null; skMaskShow(ov,mask); say();
     picChanged=true;
     applyZoom(); dropBox();
-    setStatus("Turned "+Math.round(deg)+"° — the mark takes the new shape when you save.");
+    setStatus("Turned "+Math.round(spinAcc>180?spinAcc-360:spinAcc)+"°"+
+              ((trimL||trimT||trimR||trimB)?" and trimmed to the picture":"")+
+              " — the mark takes the new shape when you save.");
   };
   frng.addEventListener("input",()=>preview(+frng.value));
   const commitFree=()=>{ const deg=+frng.value; frng.value="0"; preview(0); if(deg)turnFree(deg); };
@@ -1425,9 +1665,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     paintBorder();
     row.appendChild(brng); row.appendChild(bnum); gTurn.appendChild(row);
   }
-  bCrop=mkb(gTurn,"Crop","◱",()=>{ setTool("crop");
-    setStatus("Drag a box round what you want to keep — everything outside it goes.");
-  },false,"Drag a box round what to keep; everything outside it is cut away");
+  /* 6m1 — one button for both halves of the gesture: it opens the box on the picture's edges, and
+     once the box is up it is the Apply. Enter does the same from the keyboard, Escape puts it away. */
+  bCrop=mkb(gTurn,"Crop","◱",()=>{
+    if(cropBox){ cropApply(); return; }
+    setTool("crop");
+  },false,"Crop the picture — the box starts on its edges; push the sides in, then Apply","crop");
+  bCropApply=mkb(gTurn,"Apply","✓",()=>cropApply(),false,"Cut the picture down to the box","cropapply");
+  bCropApply.style.display="none";
   /* 6gl — the wheel belongs to the editor while the editor is open: ctrl-wheel zooms the PICTURE, and
      a plain wheel outside the scrolling stage is swallowed rather than scrolling the sheet behind. */
   /* 6ip — SHIFT-WHEEL IS THE BRUSH. Ced: "shift scroll up or down makes the brushes bigger or
@@ -1476,11 +1721,11 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const st=undo.pop(); if(!st)return;
     /* 6gz — what goes onto the redo stack has to be able to put the shape back too */
     redo.push(shotFor(st)); while(redo.length>HIST_MAX)redo.shift(); put(st); syncHist();
-  },false,"Undo the last change to the picture (Ctrl+Z)");
+  },false,"Undo the last change to the picture (Ctrl+Z)","undo");
   bRedo=mkb(gHist,"Redo","↷",()=>{
     const st=redo.pop(); if(!st)return;
     undo.push(shotFor(st)); put(st); syncHist();
-  },false,"Redo (Ctrl+Y)");
+  },false,"Redo (Ctrl+Y)","redo");
   countTag=document.createElement("span"); countTag.className="sk-edcount";
   gHist.appendChild(countTag);
 
@@ -1610,64 +1855,50 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       return;
     }
     if(tool==="crop"){
-      /* the box is drawn on the overlay while it is dragged, with the part that will be cut away
-         dimmed, so what you are keeping is what you can see */
-      const og=ov.getContext("2d");
-      skOvShow(ov,true);                 /* 6j2 — the box is drawn on the overlay; keep it up */
-      let x1=x, y1=y;
-      /* 6j2 — and DRAWN SO IT READS. Ced: "the identifiers is not showing well." One hairline dashed
-         rectangle at three times the screen's resolution is a faint grey thread; the marks that say
-         what is happening — the corners you are dragging between, and the thirds you line a detail up
-         on — were not there at all. The box now carries a dark rule under a white dash, a solid corner
-         bracket at each end, and a rule of thirds, every one of them scaled so it is the same weight on
-         screen whatever the picture's resolution or the zoom. */
-      const paintBox=()=>{
-        og.clearRect(0,0,ov.width,ov.height);
-        const X=Math.min(x,x1), Y=Math.min(y,y1), W=Math.abs(x1-x), H=Math.abs(y1-y);
-        const u=Math.max(1,1/Math.max(0.05,zoom));        /* one screen pixel, in picture pixels */
-        og.save();
-        og.fillStyle="rgba(8,14,26,.55)";
-        og.fillRect(0,0,ov.width,ov.height);
-        og.clearRect(X,Y,W,H);
-        if(W>2&&H>2){
-          /* the thirds, faint, inside the kept region */
-          og.strokeStyle="rgba(255,255,255,.35)"; og.lineWidth=u; og.setLineDash([]);
-          og.beginPath();
-          for(let i=1;i<3;i++){
-            og.moveTo(X+W*i/3,Y); og.lineTo(X+W*i/3,Y+H);
-            og.moveTo(X,Y+H*i/3); og.lineTo(X+W,Y+H*i/3);
-          }
-          og.stroke();
-        }
-        /* the edge: a dark rule with a white dash over it, so it reads on any picture */
-        og.setLineDash([]); og.lineWidth=u*3; og.strokeStyle="rgba(8,14,26,.85)";
-        og.strokeRect(X,Y,W,H);
-        og.lineWidth=u; og.strokeStyle="#ffffff";
-        og.setLineDash([u*6,u*4]); og.strokeRect(X,Y,W,H);
-        /* solid corner brackets — the identifiers */
-        og.setLineDash([]); og.lineWidth=u*3; og.strokeStyle="#4da3ff";
-        const c=Math.max(u*8,Math.min(W,H)*0.18);
-        og.beginPath();
-        og.moveTo(X,Y+c); og.lineTo(X,Y); og.lineTo(X+c,Y);
-        og.moveTo(X+W-c,Y); og.lineTo(X+W,Y); og.lineTo(X+W,Y+c);
-        og.moveTo(X+W,Y+H-c); og.lineTo(X+W,Y+H); og.lineTo(X+W-c,Y+H);
-        og.moveTo(X+c,Y+H); og.lineTo(X,Y+H); og.lineTo(X,Y+H-c);
-        og.stroke();
-        og.restore();
-      };
+      /* ============================================================================================
+         6m1 — the box is already there, on the picture's own edges; a press takes hold of whichever
+         part of it is under the pointer. Nothing is cut here — `cropApply` does that, from the Apply
+         button or Enter — so the box can be pushed about until it is right.
+         ============================================================================================ */
+      if(!cropBox)cropOpen();
+      skOvShow(ov,true);
+      const grab=cropHit(x,y);
+      const b0={x:cropBox.x,y:cropBox.y,w:cropBox.w,h:cropBox.h};
+      const sx0=x, sy0=y;
       try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
-      const cmove=e2=>{ const q=at(e2); x1=q[0]; y1=q[1]; paintBox(); };
-      const cup=()=>{
-        cv.removeEventListener("pointermove",cmove);
-        cv.removeEventListener("pointerup",cup);
-        cv.removeEventListener("pointercancel",cup);
-        skOvShow(ov,false);
-        cropTo(x,y,x1,y1);
+      const kmove=e2=>{
+        const q=at(e2); const dx=q[0]-sx0, dy=q[1]-sy0;
+        let X=b0.x, Y=b0.y, W=b0.w, H=b0.h;
+        if(grab==="move"){
+          X=Math.max(0,Math.min(cv.width-W, b0.x+dx));
+          Y=Math.max(0,Math.min(cv.height-H,b0.y+dy));
+        }else if(grab){
+          if(grab.indexOf("w")>=0){ X=b0.x+dx; W=b0.w-dx; }
+          if(grab.indexOf("e")>=0){ W=b0.w+dx; }
+          if(grab.indexOf("n")>=0){ Y=b0.y+dy; H=b0.h-dy; }
+          if(grab.indexOf("s")>=0){ H=b0.h+dy; }
+        }else{
+          /* 6m1 — a press on the dimmed part still draws a fresh box, the 6gz way */
+          X=Math.min(sx0,q[0]); Y=Math.min(sy0,q[1]);
+          W=Math.abs(q[0]-sx0); H=Math.abs(q[1]-sy0);
+        }
+        if(W<0){ X+=W; W=-W; }
+        if(H<0){ Y+=H; H=-H; }
+        X=Math.max(0,Math.min(cv.width-1,X));
+        Y=Math.max(0,Math.min(cv.height-1,Y));
+        W=Math.max(4,Math.min(cv.width-X,W));
+        H=Math.max(4,Math.min(cv.height-Y,H));
+        cropBox={x:X,y:Y,w:W,h:H};
+        cropPaint(); cropSay();
       };
-      cv.addEventListener("pointermove",cmove);
-      cv.addEventListener("pointerup",cup);
-      cv.addEventListener("pointercancel",cup);
-      paintBox();
+      const kup=()=>{
+        cv.removeEventListener("pointermove",kmove);
+        cv.removeEventListener("pointerup",kup);
+        cv.removeEventListener("pointercancel",kup);
+      };
+      cv.addEventListener("pointermove",kmove);
+      cv.addEventListener("pointerup",kup);
+      cv.addEventListener("pointercancel",kup);
       return;
     }
     /* 6la — THE BUCKET. The same flood the wand runs, painted rather than selected. Shift makes it
@@ -1990,7 +2221,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
           const W=P.w1||612, H=P.h1||792;
           const nw=(cv.width*pxW)/W, nh=(cv.height*pxH)/H;
           if(nw>0&&nh>0&&isFinite(nw)&&isFinite(nh)){
-            const cx=a.nx+a.nw/2, cy=a.ny+a.nh/2;
+            /* 6m0 — plus however far a free turn's trim moved the subject inside the picture, so a
+               margin cut off one side does not slide the mark across the sheet */
+            const cx=a.nx+a.nw/2+(trimShiftX||0), cy=a.ny+a.nh/2+(trimShiftY||0);
             a.nw=nw; a.nh=nh;
             a.nx=Math.max(0,Math.min(1-nw,cx-nw/2));
             a.ny=Math.max(0,Math.min(1-nh,cy-nh/2));
@@ -2006,6 +2239,11 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   function keys(e){
     if(!SK_ED)return;
     const k=(e.key||"").toLowerCase();
+    /* 6m1 — while the crop box is up, Escape puts the BOX away rather than the editor, and Enter
+       applies it. Nothing is cut by a key that was meant for the dialog. */
+    if(e.key==="Escape"&&cropBox){ e.preventDefault(); e.stopPropagation(); setTool("erase");
+      setStatus("Crop cancelled — the picture is as it was."); return; }
+    if(e.key==="Enter"&&cropBox){ e.preventDefault(); e.stopPropagation(); cropApply(); return; }
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); return; }
     if((e.ctrlKey||e.metaKey)&&k==="z"&&!e.shiftKey){ e.preventDefault(); e.stopPropagation(); bUndo.click(); return; }
     if((e.ctrlKey||e.metaKey)&&(k==="y"||(k==="z"&&e.shiftKey))){ e.preventDefault(); e.stopPropagation(); bRedo.click(); return; }

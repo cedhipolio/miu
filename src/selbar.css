@@ -4,29 +4,72 @@
    Bluebeam. It keeps its own palette in both themes for the same reason the properties panel does: it
    floats over a white page and has to read against one.
    ================================================================================================= */
+/* 6ls — EVEN, AND ROUNDED. Ced: "make the bottom tool bar icons evenly distributed, make some names
+   two lines if needed. also, make the toolbar rounded."
+   The buttons were packed left to right at their natural widths, so "Apply to pages" was three times
+   the width of "Copy" and the row read as a ragged line of words rather than a row of controls. They
+   are a track of equal columns now — every button the width of the widest name — and a name too long
+   for one line breaks onto two rather than stretching its column. The bar's own corners go from the
+   11px of a panel to a full pill, which is what the floating bars either side of it already are. */
 .selbar{
   position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
-  z-index:4100; display:flex; align-items:center; gap:2px;
+  z-index:4100; display:flex; align-items:stretch; gap:2px;
   max-width:calc(100vw - 24px); overflow-x:auto; overflow-y:visible;
   background:#1f232b; color:#e6e9ef;
-  border:1px solid #363c48; border-radius:11px;
+  border:1px solid #363c48; border-radius:999px;
   box-shadow:0 14px 40px rgba(0,0,0,.45);
-  padding:5px 7px; font-size:12px;
+  padding:6px 10px; font-size:12px;
 }
 .selbar[hidden]{display:none}
-.selbar::-webkit-scrollbar{height:6px}
-.selbar::-webkit-scrollbar-thumb{background:#3a414f;border-radius:4px}
+/* ==================================================================================================
+   6m3 — AND NOTHING SQUARE HANGS OFF THE BOTTOM OF IT.
+   Ced, of the bar: "what is up with the bottom part of the tool", with a capture of a dark band with
+   square ends running the width of the pill and cutting its bottom curve off.
+
+   That band is the SCROLLBAR. The bar scrolls sideways when its buttons are wider than the window
+   (`overflow-x:auto`), and 6ls then made the bar a full pill — so on any window too narrow for the
+   whole row, a 6px track with square corners was painted along the inside of a 999px radius and stuck
+   out of the silhouette at both ends. Measured: the bar is 961px wide and the window Ced is working
+   in is narrower than the row, which is exactly when the track appears.
+
+   The scrolling itself is worth keeping — it is how the last two controls are reached on a small
+   window — so it is the TRACK that goes, on all three engines. A wheel, a trackpad swipe and a drag
+   all still scroll the bar, and the overflow menu (`.sb-more`) is still there for the hand that would
+   rather not scroll at all.
+   ================================================================================================== */
+.selbar{scrollbar-width:none;-ms-overflow-style:none}
+.selbar::-webkit-scrollbar{height:0;width:0;display:none}
 
 .sb-count{
   display:inline-flex;align-items:center;justify-content:center;
-  min-width:24px;height:24px;padding:0 6px;margin-right:5px;
-  border-radius:6px;background:#2f3541;color:#fff;
+  align-self:center;
+  min-width:24px;height:24px;padding:0 6px;margin-right:6px;
+  border-radius:999px;background:#2f3541;color:#fff;
   font:700 12px/1 var(--sans);flex:0 0 auto;
 }
+/* =================================================================================================
+   6li — EVERY BUTTON SAYS WHAT IT IS.
+   Ced: "for the bottom toolbar, make these changes on the names. also apply names on the icons …
+   make sure the labels are small and all caps, kind of similar to the headers on the ribbon."
+
+   6jf gave nine of these buttons an icon and no word, on the reasoning that the bar would otherwise
+   be as wide as v32's and that hover says what each one is. Hover is not a label — it costs a second
+   per button and it does not exist on a tablet — and the width problem has a better answer than
+   silence: stack the word UNDER the glyph instead of beside it. A button is then as wide as its own
+   word rather than glyph-plus-word, the bar is one row of thirteen small tiles, and nothing has to be
+   learned or hovered.
+
+   The type is the ribbon's own group header — 8px, 800, .1em tracking, uppercase (`.grp::before` in
+   app.css) — because that is the register this is: a name under a control, not prose.
+   ================================================================================================= */
 .sb-b{
-  display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
-  background:transparent;border:0;border-radius:7px;color:#cfd6e2;
-  padding:6px 9px;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1;
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:5px;
+  /* 6ls — one column per control, all the same width, so the row is a row and not a ragged line of
+     words. `min-width` rather than a fixed width: a name wider than the column is allowed to set it,
+     and `flex-basis:0` with `flex-grow:1` then shares any slack evenly. */
+  flex:1 0 auto; min-width:68px;
+  background:transparent;border:0;border-radius:9px;color:#cfd6e2;
+  padding:5px 4px 4px;cursor:pointer;font-size:12px;line-height:1;
 }
 .sb-b:hover{background:#2b313b;color:#fff}
 .sb-b.on{background:#2f7be0;color:#fff}
@@ -37,12 +80,35 @@
   width:15px;height:15px;opacity:1}
 .sb-i.sb-svg svg{display:block;width:15px;height:15px}
 .sb-b .ma-i{fill:currentColor}
-.sb-l{letter-spacing:.005em}
-.sb-more{padding:6px 8px}
-/* 6jf — the actions that came back are icons: the bar carries nine of them and five words, which is
-   about as wide as v32's five words and an overflow, and every one says what it is on hover. */
-.sb-ico{padding:6px 8px}
+/* 6li — the ribbon's own header type, so the two read as one family
+   6ls — and it may run to TWO lines. "Apply to pages" on one line is a column half as wide again as
+   every other; on two it is the same width as "Flatten" and the row stays even. Centred, with the
+   line box tight enough that two lines are not taller than the icon beside them. */
+/* 6m3 — AND A ONE-LINE NAME SITS IN THE MIDDLE OF THE SPACE A TWO-LINE ONE TAKES.
+   Ced: "make the texts align middle." Measured across the bar: every label began at the same y (714),
+   so a one-line name was pinned to the TOP of the two-line block its neighbours occupy and left 10px
+   of air under it — nine tiles with the word high and three with the word filling the space. The
+   label gets the height of two lines whatever it says, and centres in it, so every name sits on the
+   same optical line and the row reads level. */
+.sb-l{font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  line-height:1.25;color:inherit;opacity:.8;text-align:center;
+  white-space:normal;max-width:58px;hyphens:none;
+  display:flex;align-items:center;justify-content:center;min-height:20px}
+.sb-b:hover .sb-l,.sb-b.on .sb-l{opacity:1}
+/* 6ls — the two wordless controls are not part of the even track: they are not actions on the mark */
+.sb-more{padding:5px 7px;flex:0 0 auto;min-width:0;align-self:center}
+.sb-del{flex:0 0 auto;min-width:0;align-self:center}
+/* 6jf/6li — these were the wordless ones. They are not any more; the class now only says that their
+   glyph is a drawing rather than a letter, and the padding matches. */
+.sb-ico{padding:5px 7px}
 .sb-ico .sb-i{font-size:13px}
+/* 6li — THE LOCK IS RED WHILE IT IS ON. Ced: "on the lock and unlock, make the icon red when it is
+   locked." A locked mark refuses every gesture, so the one state you have to be able to read across
+   the room is that one — the same red the delete control uses, on the glyph alone so the button does
+   not look pressed. */
+.sb-b.sb-locked .sb-i{color:#ff5a5a;opacity:1}
+.sb-b.sb-locked .sb-l{color:#ff5a5a;opacity:1}
+.sb-b.sb-locked:hover .sb-i,.sb-b.sb-locked:hover .sb-l{color:#ff7b7b}
 /* 6jg — the delete control, the same red disc in a rounded box the floating bars now carry */
 .sb-del{margin-left:4px;padding:5px 6px;border-radius:9px}
 .sb-del .sb-i{display:flex;align-items:center;justify-content:center;
@@ -197,14 +263,36 @@ body.selbaron #markR{bottom:64px}
 .gframe.up .ggrips{bottom:auto;top:-34px}
 .gframe .ggrips{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);
   display:flex;gap:6px;pointer-events:none}
-.gframe .ggrip{width:22px;height:22px;border-radius:50%;background:#fff;border:var(--selbw) solid var(--selink);
-  color:var(--selink);font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
+/* ==================================================================================================
+   6m6 — ONE DESIGN FOR EVERY BOX. Ced: "apply the updated colors of icons (grey) in all redlines",
+   with captures of a group's trio and a stroke's still wearing selection blue, and then "also be
+   consistent on all designs of the boxs".
+
+   6lt greyed the five controls round a single MARK and stopped there, so the tool shipped with two
+   languages for the same three buttons: 20px grey discs on a mark, 22px blue ones on a group, and a
+   third set drawn in SVG on a stroke. Which set you got depended on what you had happened to click,
+   which is exactly the kind of difference that makes a tool feel improvised.
+
+   So the group's trio takes the mark's size, ring, ink and hover fill, written from the same
+   `--ctl-*` tokens, and the stroke's does the same in its own medium (see `svg.draw.selui .lgrip` in
+   app.css). The corner handles already agreed — 11px white circles on the selection blue, on a mark
+   and on a group alike — and they stay blue, because they are not controls, they ARE the selection.
+   The one difference left is deliberate: a group's frame is DASHED where a mark's ring is solid, and
+   that is the only thing on screen that says "this is several things at once".
+   ================================================================================================== */
+.gframe .ggrip{width:20px;height:20px;border-radius:50%;background:#fff;
+  border:1px solid var(--ctl-line,#b9bfc9);color:var(--ctl-ink,#6b7280);
+  font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
   padding:0;pointer-events:auto;cursor:pointer;touch-action:none;
-  box-shadow:0 1px 3px rgba(0,0,0,.28)}
+  box-shadow:0 1px 2px rgba(0,0,0,.14);
+  transition:background .1s ease,border-color .1s ease,color .1s ease}
 .gframe .ggrip.grot{cursor:grab}
 .gframe .ggrip.gdrag{cursor:move}
 .gframe .ggrip.danger{border-color:#ff5e62;color:#ff5e62}
-.gframe .ggrip:hover{filter:brightness(1.05);box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.gframe .ggrip:hover{background:var(--ctl-hov,#e8eaee);
+  border-color:var(--ctl-line-h,#9aa2ae);color:var(--ctl-ink-h,#3f4654)}
+.gframe .ggrip.danger:hover{background:#ffecec;border-color:#ff5e62;color:#ff3b40}
+.gframe .ggrip:active{background:var(--ctl-act,#dcdfe5)}
 
 
 /* =================================================================================================
@@ -283,23 +371,46 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    it is centred in its stage, so two rows of buttons packed against the left edge of a very wide
    dialog read as a toolbar belonging to something else. Centred, each row sits over the picture it
    acts on. They still wrap, and a wrapped row centres too. */
-.sk-edbar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+/* ==================================================================================================
+   6m2 — TWO ROWS, AND THE RIBBON'S OWN DIVIDER BETWEEN THE GROUPS.
+   Ced: "make the tools at least just two rows, and make sure all items are aligned. separated by the
+   same separator on the ribbon. make sure neumorphism is also in tach."
+
+   Measured in his own window — 1471px wide, so a 1423px card and a 1393px bar — the two bars wrapped
+   into FOUR rows: row one needed 1720px of content and row two 1733px, against 1393px of room. So the
+   job is 20% off each row, twice, and it is paid for in four places rather than by cutting anything
+   out:
+
+     the group BOXES go          each was a 1px border and 8px of padding; four groups a row, and the
+                                 ribbon's dotted rule says the same thing in 1px with no padding at all
+     the buttons tighten         11px of side padding to 7, and 7px between glyph and word to 5
+     the type drops to 11px      ~8% off every label, which is where most of a row's width lives
+     the sliders shorten         110px of track to 72, which is still 240 steps of a 30 degree range
+
+   Nothing is removed and nothing is renamed: every tool Ced has learnt where to find is still where it
+   was, in the same order, with the same word under it. The neumorphism is untouched — it lives on
+   `.sk-edb` in app.css, on the button rather than on the group, so taking the group's plate away does
+   not take the emboss with it.
+   ================================================================================================== */
+.sk-edbar{display:flex;align-items:stretch;justify-content:center;gap:0;flex-wrap:wrap;
   margin-bottom:8px}
-/* 6gk — the tools, the selection, the fill: three groups on one row, so the wand and Invert are side
-   by side and the row reads as what it is rather than as nine loose buttons */
-.sk-edgrp{display:flex;align-items:center;gap:4px;background:#1a1e25;border:1px solid #333a47;
-  border-radius:9px;padding:4px}
+/* 6gk/6m2 — the tools, the selection, the fill: groups on one row, divided the way the ribbon divides
+   its own categories — a 1px dotted rule, no plate, no padding of its own. */
+.sk-edgrp{display:flex;align-items:center;gap:3px;padding:2px 7px;
+  border-right:1px dotted #3f4756}
+.sk-edbar .sk-edgrp:last-child{border-right:none}
 .sk-edbar2{margin-bottom:10px}
-.sk-edzoom{min-width:48px;text-align:center}
+.sk-edzoom{min-width:40px;text-align:center}
 /* 6gk — what the next wand click does to the selection: new, add, subtract */
 .sk-edmodes{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
   border-radius:8px;padding:2px}
-.sk-edm{background:transparent;border:0;color:#9aa4b4;border-radius:6px;padding:5px 9px;
-  font:600 11.5px/1 var(--sans);cursor:pointer;white-space:nowrap}
+.sk-edm{background:transparent;border:0;color:#9aa4b4;border-radius:6px;padding:4px 7px;
+  font:600 11px/1 var(--sans);cursor:pointer;white-space:nowrap}
 .sk-edm:hover{background:#262b34;color:#e6e9ef}
 .sk-edm.on{background:#2f7be0;color:#fff}
-.sk-edb{display:inline-flex;align-items:center;gap:7px;background:#262b34;border:1px solid #3a414f;
-  color:#cfd6e2;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer}
+.sk-edb{display:inline-flex;align-items:center;gap:5px;background:#262b34;border:1px solid #3a414f;
+  color:#cfd6e2;border-radius:8px;padding:6px 7px;font-size:11px;cursor:pointer;
+  white-space:nowrap;line-height:1.1}
 .sk-edb:hover{background:#2f3541}
 .sk-edb.on{background:#2f7be0;border-color:#2f7be0;color:#fff}
 .sk-edg{font-size:13px;line-height:1}
@@ -307,10 +418,10 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    because the bucket's artwork is taller than it is wide, so matched by WIDTH it reads smaller than
    the typed glyphs beside it. */
 .sk-edg svg{display:block;width:1.15em;height:1.15em;fill:currentColor}
-.sk-edsize{display:inline-flex;align-items:center;gap:8px;color:#8d96a6;font-size:11.5px;
-  background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:5px 10px}
-.sk-edsize input[type=range]{width:110px}
-.sk-ednum{color:#e6e9ef;font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+.sk-edsize{display:inline-flex;align-items:center;gap:6px;color:#8d96a6;font-size:11px;
+  background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:4px 7px;white-space:nowrap}
+.sk-edsize input[type=range]{width:64px}
+.sk-ednum{color:#e6e9ef;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
 /* 6ha — THE STAGE IS THE ROOM, THE PICTURE SITS IN THE MIDDLE OF IT.
    Ced: "the photo should always be in the middle of edit photo ui." It was pinned to the top and to
    the centre only horizontally, so a picture smaller than the stage — which is most of them, since the
@@ -329,13 +440,6 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    own ground — so transparent pixels read as transparent, exactly as they will on the sheet — and the
    picture carries a hairline edge and a drop shadow, which is what says "this is the picture". */
 .sk-edwrap{position:relative;display:block;flex:0 0 auto;margin:auto;
-  /* 6im — a DARKER chequer. Ced: "change the transparent background of the edit photo to a darker
-     gray." The light one it had was almost the colour of the page behind a capture, so a white ground
-     and an empty one looked the same; these two greys read as "nothing here" against red ink. */
-  background:
-    linear-gradient(45deg,#33394400 25%,transparent 25%,transparent 75%,#33394400 75%),
-    linear-gradient(45deg,#3b414c 25%,#4b5260 25%,#4b5260 75%,#3b414c 75%);
-  background-size:14px 14px;background-position:0 0,7px 7px;
   /* 6im — the edge is drawn with crisp rings only. The 34px blurred drop shadow under it had to be
      re-blurred every time the brush changed a pixel of the canvas above it, which is most of what made
      a sweep feel like treacle on a three-times-resolution capture. */
@@ -344,7 +448,25 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
   /* and the picture is its own compositing layer, so a stroke repaints it and nothing else */
   /* `contain:layout` (not `paint`) — the turn grip hangs below the edge and must not be clipped */
   contain:layout;will-change:transform;transform:translateZ(0)}
-.sk-edcanvas{display:block;touch-action:none;image-rendering:auto}
+/* ==================================================================================================
+   6m0 — THE CHEQUER IS A FIXED GRID NOW, NOT THE PICTURE'S WALLPAPER.
+   It used to be `.sk-edwrap`'s own background, and the free-turn preview puts a `rotate()` on that
+   element — so the squares turned with the picture and could not tell you whether an edge had come
+   square. The clip rides the box, which keeps the chequer inside the picture's own rectangle (that is
+   what says "these pixels are transparent"); the pattern inside is counter-rotated about the same
+   centre and run well past the corners, so it stays square to the screen at every angle.
+   `inset:-71%` is the margin a square needs to still cover its own clip when the clip is turned: half
+   the diagonal of a square is 0.707 of its side, so 71% either way is the worst case plus a hair.
+   The 6im greys are unchanged — a darker chequer, so a white ground and an empty one never look
+   alike. */
+.sk-edbgclip{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.sk-edbg{position:absolute;inset:-71%;transform-origin:center center;
+  background:
+    linear-gradient(45deg,#33394400 25%,transparent 25%,transparent 75%,#33394400 75%),
+    linear-gradient(45deg,#3b414c 25%,#4b5260 25%,#4b5260 75%,#3b414c 75%);
+  background-size:14px 14px;background-position:0 0,7px 7px}
+.sk-edcanvas{display:block;touch-action:none;image-rendering:auto;position:relative;z-index:1}
+.sk-edov{z-index:2}
 /* 6j4 — the frame the Border slider sets, shown on the stage the way it will sit on the sheet */
 .sk-edwrap.bordered{box-shadow:0 0 0 var(--sk-bord,0px) var(--sk-bordcol,#fa3237),
   0 0 0 calc(var(--sk-bord,0px) + 1px) rgba(255,255,255,.5),
