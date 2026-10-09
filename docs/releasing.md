@@ -22,7 +22,7 @@ npm test                 # tools.py       · 214 checks
 npm run test:wysiwyg     # wysiwyg.py     · marks, screen against export
 npm run test:text        # textparity.py  · type, screen against export
 npm run test:stamp       # stampparity.py · the COP stamp as a block
-npm run test:behave      # behave.py      · forty-five behaviours, real mouse and keyboard
+npm run test:behave      # behave.py      · fifty-one behaviours, real mouse and keyboard
 npm run test:keys        # keys.py        · every shortcut, on a real keyboard
 npm run test:reopen      # reopen.py      · export with photos, reopen, are they still there
 

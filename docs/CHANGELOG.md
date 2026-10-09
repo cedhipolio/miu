@@ -4,7 +4,79 @@ Per-version working notes — what was asked for, what was measured, why each fi
 is — live alongside this repo in the **MIU (Mark It Up)** Claude project as `claude/vNN-notes.md`,
 back to v11. This file is the summary.
 
-Versions are numbered by release, not semver: v47 is the forty-seventh published build.
+Versions are numbered by release, not semver: v48 is the forty-eighth published build.
+
+---
+
+## v48
+
+**The page renderer gets a queue, and that turns out to be three of the seven things asked for.**
+
+**A fast scroll stops drawing the pages it goes past** (`6m7`). Ced: *"some pages are taking too long
+to load. and some are not loading at all. also when zooming in and out, the loading is too long."*
+The JavaScript was never the cost, and the profile says so plainly: a ten-notch ctrl-wheel zoom spends
+**47ms inside `setZoom` altogether**, 95th-percentile frame 31–38ms. What costs is the thing a JS
+profile cannot see — pdf.js drawing a page, which on this fixture is 61–88ms at 1×, 71–120ms at 2× and
+**180–204ms at 3.5×**. And nothing stood between the IntersectionObserver and that work: measured on a
+fast scroll, **29 renders started and 29 pages were unloaded**, about three seconds of drawing for
+pages that were gone before the ink was dry, all of it competing with the page you were looking at.
+
+One queue, three rules: one render at a time; the next one taken is the page nearest the middle of the
+window; and a page is re-checked when its turn comes, not when it was asked for. Measured after: **26
+of 30 renders are dropped in 0.1ms** instead of drawn in 100.
+
+**And nothing on screen is left blank** (`6m7`). The other half: the observer fires on a *crossing*, so
+a page whose render was dropped while it was already in view was never asked for again — which is
+exactly the page that never loads. A sweep 120ms after the last scroll event asks for anything on
+screen that is not drawn. Measured: blank-in-view goes from 1 page to **none**, after a fast scroll
+down, a fast scroll back up, and a fast zoom.
+
+**The zoom is seamless because the resharpen is serial** (`6m7`). `resharpenSoon` *started* every soft
+page's render in the same turn — thirteen in flight at once on a six-press zoom. They go one at a time
+now, nearest first, and any that has scrolled away by its turn is dropped.
+
+| | before | after |
+|---|---|---|
+| ctrl-wheel zoom in ×10, worst frame | 56.8ms | **38.5ms** |
+| zoom out ×10, worst frame | 76ms | **41ms** |
+| zoom buttons ×6, worst frame | 86.3ms | **39.6ms** |
+| long tasks in a zoom gesture | 1–2, up to 81ms | **none** |
+| document open → first page drawn | 1.98s | **1.1s** |
+
+**The sheet is centred in the window** (`6m8`). Ced: *"always make the the pdf center unless zoomed in
+in specific place."* `margin:auto` centres the page in `#pages`, and `#pages` starts after the rail:
+measured at 1500px wide, the column ran 74 to 1492, its middle was 783, the window's was 750, and the
+sheet sat **33px right of centre at every zoom**. v44's 6lb widened the column and could not fix this,
+because a column that starts after the rail has its middle to the right of the window's however wide it
+is. The left margin is worked out from the window instead — measured after, **0.0px off** at 0.6×, 1×
+and 1.6× — and the rule steps aside once the sheet is wider than the room, which is the "unless zoomed
+in" half.
+
+**Escape is two rungs** (`6m9`). Ced: *"when esc was clicked, always go to select current redline.
+double esc is select tool."* 6jt built it as five — the caret, the field, the group, the selection, the
+tool — and from inside a mark's text with a tool in hand that was four presses to reach Select. Press
+once: the caret comes out, a half-drawn run is called off, an open group closes, and the redline stays
+selected. Press again: the selection goes and Select is active. The same count from every state.
+
+**The shortcuts, measured rather than assumed** (`6ma`). Ced: *"ctrl a, s, c, v, x, y, and del are not
+working well all the time."* Every one of them, in nine states — nothing selected, a mark, a stroke, a
+multi-selection, straight after drawing, with a ribbon control focused, with the properties popup open,
+with the caret in a mark, with the caret in Find. **Seventeen of eighteen already worked.** The one that
+did not: Ctrl+C and Ctrl+X with the caret in the Find box, which handed the key to the browser to copy
+an empty selection in a search field. 6gu had already worked out the right rule for a mark — with text
+under it, it means the text; with none, it means the drawing — and simply had not applied it to the
+ribbon's own fields. Ctrl+V is deliberately left alone: pasting a search term is a real thing to want.
+
+**Snapshot and Insert photo wear Ced's own marks** (`6mb`). A bracketed camera and the same frame with
+his file in it, replacing U+25A3 and the picture emoji. Ced: *"just use the logo is sent no need to
+replicate it"* — so they are **traced from the artwork**, not drawn by eye: `tools/traceicon.py` takes
+the pixels through marching squares and Douglas-Peucker, and `tools/composeicon.py` builds the second
+mark by rasterising the frame and the file together and tracing once, so there is no seam where two
+separately-fitted outlines would meet.
+
+**Verified.** `tools.py` 0 failing · `wysiwyg` 0/19 · `textparity` 0/10 · `stampparity` 0/4 ·
+`behave` **0 of 52** (seven new) · `keys` all · `reopen` photos survive. Every new case was confirmed to
+fail with its fix reverted.
 
 ---
 

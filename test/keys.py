@@ -178,7 +178,13 @@ async def main():
         st1=await pg.evaluate("()=>({mode:S.mode,sel:S.sel})")
         await pg.keyboard.press("Escape"); await pg.wait_for_timeout(300)
         st2=await pg.evaluate("()=>({mode:S.mode,sel:S.sel})")
-        lad = (st0["sel"] is not None and st1["sel"] is None and st1["mode"]=="box" and st2["mode"]=="select")
+        # 6m9 — TWO RUNGS. Ced: "when esc was clicked, always go to select current redline. double
+        # esc is select tool." The first press used to drop the selection and keep the tool; it now
+        # leaves the redline SELECTED, and the second press does both at once. Same count from every
+        # state, which is the point — the five-rung ladder took four presses from inside a text.
+        lad = (st0["sel"] is not None
+               and st1["sel"] is not None and st1["mode"] == "box"      # 1: still picked up
+               and st2["sel"] is None and st2["mode"] == "select")      # 2: tool down, selection gone
         print(f"  Escape ladder (drew a box)         {st0} / {st1} / {st2}  {'ok' if lad else 'FAIL'}")
         if not lad: fails.append("Escape ladder")
 

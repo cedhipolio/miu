@@ -32,6 +32,7 @@ Usage: python3 stampparity.py <packed.html> <some.pdf> [--zoom 5] [--tol 0.4]
 """
 import argparse, asyncio, json, pathlib, subprocess, sys
 from PIL import Image
+import numpy as np
 from playwright.async_api import async_playwright
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -206,15 +207,48 @@ async def main():
     pdf = Image.open(pdfpng).convert("RGB")
     print(f"page element {pw}px for {info['w1']}pt -> the file rendered at {dpi} dpi")
     print(f"screen {scr.size}  pdf {pdf.size}")
+    # ------------------------------------------------------------------------------------------
+    # 6m8 — FIND THE STAMP, DO NOT ASSUME WHERE IT IS.
+    # The crop used to be worked out from the stamp's `nx` on the assumption that the screenshot maps
+    # one-to-one onto the page element. It does not always: an element wider than the window is
+    # captured through its scrolling ancestor, and whatever is painted in the clipped margin — the
+    # rail — comes with it. Measured when the reading column changed width by 62px, the screen image
+    # carried 78px of rail on its left, the crop landed 78px to the left of the stamp, and a frame
+    # that is demonstrably 330px wide in BOTH images was reported as 282 on screen and the whole
+    # suite failed on a difference that was not there. The DOM and the file agreed throughout.
+    # The frame is a red rule of known length, so it is found rather than predicted: the longest
+    # horizontal red run in each image is the stamp's top edge, and the crop is taken from there.
+    # `nx` is still printed, because a real move would show up as a gap between the two.
+    def find_stamp(im):
+        a = np.asarray(im)
+        red = (a[..., 0] > 170) & (a[..., 1] < 100) & (a[..., 2] < 100)
+        best = None
+        for y in range(red.shape[0]):
+            xs = np.nonzero(red[y])[0]
+            if xs.size < 200:
+                continue
+            for r in np.split(xs, np.where(np.diff(xs) != 1)[0] + 1):
+                if r.size >= 200 and (best is None or r.size > best[2]):
+                    best = (y, int(r[0]), int(r.size))
+        return best
 
-    def crop(im, pad=0.01):
+    sfind, dfind = find_stamp(scr), find_stamp(pdf)
+    print(f"stamp nx {info['nx']:.4f} -> predicted x {int(info['nx']*scr.size[0])} · "
+          f"found screen {sfind and sfind[1]} pdf {dfind and dfind[1]}")
+    if not sfind or not dfind:
+        print("could not find the stamp's frame in one of the images")
+        sys.exit(1)
+
+    def crop_at(im, at, pad=0.01):
         W, H = im.size
-        return im.crop((int((info["nx"] - pad) * W), int((info["ny"] - pad) * H),
-                        int((info["nx"] + info["nw"] + pad) * W),
-                        int((info["ny"] + info["nh"] + pad) * H)))
+        x0 = max(0, at[1] - int(pad * W))
+        y0 = max(0, at[0] - int(pad * H))
+        return im.crop((x0, y0,
+                        min(W, x0 + at[2] + int(2 * pad * W)),
+                        min(H, y0 + int((info["nh"] + 2 * pad) * H))))
 
-    s = frame_and_bands(crop(scr))
-    d = frame_and_bands(crop(pdf))
+    s = frame_and_bands(crop_at(scr, sfind))
+    d = frame_and_bands(crop_at(pdf, dfind))
     if not s or not d:
         print(f"no stamp found: screen {bool(s)}, pdf {bool(d)}")
         sys.exit(1)

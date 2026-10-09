@@ -542,20 +542,24 @@ async def main():
         still = await page.evaluate("()=>S.mode")
         await drag(*at(0.42, 0.30), *at(0.58, 0.38))      # a second one without re-picking the tool
         two = (await counts())["a"]
-        # 6jt — Escape is a LADDER now: the first press drops the selection the second shape left
-        # behind and the tool stays in the hand; the second press puts the tool down.
+        # 6m9 — Escape is TWO RUNGS. Ced: "when esc was clicked, always go to select current
+        # redline. double esc is select tool." 6jt's five-rung ladder dropped the selection on the
+        # first press and put the tool down on the second; the first press now leaves the redline
+        # SELECTED and the second does both. What this case is actually about is unchanged and still
+        # asserted: the tool stays in the hand across two shapes, and Escape reaches Select.
         await page.keyboard.press("Escape")
         await page.wait_for_timeout(200)
         mid = await page.evaluate("()=>({mode:S.mode,sel:S.sel,multi:multiCount()})")
         await page.keyboard.press("Escape")
         await page.wait_for_timeout(200)
-        released = await page.evaluate("()=>S.mode")
+        released = await page.evaluate("()=>({mode:S.mode,sel:S.sel})")
         ok = (still == "box" and two == 2
-              and mid["mode"] == "box" and mid["sel"] is None and mid["multi"] == 0
-              and released == "select")
+              and mid["mode"] == "box" and mid["sel"] is not None      # rung 1: still picked up
+              and released["mode"] == "select" and released["sel"] is None)
         results.append({"tool": "Tool stays in hand", "ok": ok,
                         "why": f"after one shape: {still} · drew {two} · "
-                               f"Escape -> {mid['mode']}/sel {mid['sel']} · Escape -> {released}"})
+                               f"Escape -> {mid['mode']}/sel {mid['sel']} · "
+                               f"Escape -> {released['mode']}/sel {released['sel']}"})
 
         # ---------- 6fb: the selection bar ----------
         await clear()
@@ -2221,15 +2225,25 @@ async def main():
                  const pg=document.querySelector('.page[data-idx="0"]');
                  const look=()=>{ const r=pg.getBoundingClientRect();
                    return Math.round(r.left+r.width/2-window.innerWidth/2); };
-                 const off=[];
+                 const off=[], fitOff=[], widths=[];
                  for(const z of [1,1.5,2,2.5,3,3.5]){
                    await setZoom(z);
                    await new Promise(r=>setTimeout(r,320));
-                   off.push(look());
+                   const r=pg.getBoundingClientRect();
+                   const room=(document.getElementById("pages")||{}).clientWidth||0;
+                   off.push(look()); widths.push(Math.round(r.width));
+                   if(r.width<=room)fitOff.push(look());      /* only while there IS room to centre in */
                  }
                  await setZoom(1.2);
-                 res({off, worst:Math.max(...off.map(v=>Math.abs(v)))}); })""")
-        ok = cen["worst"] < 90
+                 res({off, widths, fitOff, fits:fitOff.length>=3,
+                      worst:Math.max(...off.map(v=>Math.abs(v)))}); })""")
+        # 6m8 — CENTRED WHILE THERE IS ROOM TO BE. The column is symmetric about the window now, so
+        # the sheet is EXACTLY centred at every zoom where it still fits — measured 0px at 1x, 1.5x,
+        # 2x and 2.5x, where this used to allow 90. Past that the sheet is wider than the room: it is
+        # deliberately flush-left so its left edge can be reached at all, and where it sits is the
+        # scroll anchor's business, not this function's. A blanket tolerance hid both facts; the fit
+        # is asked about instead.
+        ok = (cen["fits"] and max(abs(v) for v in cen["fitOff"]) <= 2)
         results.append({"tool": "Zoom keeps the sheet centred", "ok": ok, "why": json.dumps(cen)})
 
         # ---------- 6gl — THE MARKUP LIBRARY ----------
@@ -4172,9 +4186,11 @@ async def main():
                  const nap=ms=>new Promise(r=>setTimeout(r,ms));
                  const pg=document.querySelector('.page[data-idx="0"]');
                  const id=maAddShape(0,"rect",0.20,0.55,0.25,0.12,{});
+                 const id2=maAddShape(0,"rect",0.52,0.55,0.18,0.10,{});
                  const a=S.annos.find(z=>z.id===id);
                  layoutAnnos(); await nap(200);
-                 selectAnno(id); await nap(150);
+                 /* 6m9 — a BLOCK, which is what still owns the press with a tool in the hand */
+                 clearMulti(); S.selMulti.add(id); S.selMulti.add(id2); paintMulti(); await nap(150);
                  const was={nx:a.nx,ny:a.ny}, n0=S.annos.length;
                  setMode("box"); await nap(120);
                  const ed=document.querySelector(`.anno[data-id="${id}"] .ed`);
@@ -4193,8 +4209,17 @@ async def main():
                  await nap(350);
                  setMode("select");
                  res({ moved:+(a.nx-was.nx).toFixed(4), extra:S.annos.length-n0 }); })""")
+        # 6m9 — A SINGLE SELECTED MARK NO LONGER CLAIMS THE PRESS, so what this case asks about has
+        # changed. 6ju exempted it from 6hq on the grounds that "Escape drops the selection and the
+        # sheet is a drawing surface again"; Ced's new Escape keeps the selection on the first press
+        # and takes the tool on the second, so that sentence is no longer true and the exemption
+        # narrowed to multi-selections and groups. The half that survives is the half driven here —
+        # a MULTI-selection still drags as a block with a tool in the hand. The half that changed is
+        # a DRAW, and a draw cannot be observed with synthetic pointer events (the real gesture uses
+        # pointer capture); `behave.py`'s "A tool still draws over a mark when you DRAG" drives a real
+        # mouse and asserts it there.
         ok = held["moved"] > 0.01 and held["extra"] == 0
-        results.append({"tool": "The selected mark still drags", "ok": ok,
+        results.append({"tool": "A selected BLOCK still drags", "ok": ok,
                         "why": f'moved {held["moved"]} of the page \u00b7 new marks {held["extra"]}'})
 
         # ---------- 6hu — FRONT AND BACK CROSS THE STROKES ----------
@@ -4451,7 +4476,10 @@ async def main():
         ok = (not keys["tools"] and keys["dup"] == 2 and keys["paste"] == 3 and keys["del"] == 2
               and keys["undo"] == 3 and keys["redo"] == 2 and keys["all"] == 2
               and keys["grouped"] == 2 and keys["ungrouped"] == 0 and keys["nudged"]
-              and keys["esc1"] == "select" and keys["esc"] == "select"
+              # 6m9 — the first press keeps the redline and the tool; the second reaches Select.
+              # This line used to read `select` for both, which is the thing the comment above it
+              # was apologising for; the three places that test Escape now agree.
+              and keys["esc1"] == "box" and keys["esc"] == "select"
               and keys["help"] and keys["helpShut"]
               and keys["find"] == "findInput" and keys["marks"] and keys["assist"]
               and keys["snap"] == "snapshot" and keys["laser"] == "laser")

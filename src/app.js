@@ -3431,7 +3431,113 @@ async function resharpenPage(i){
   delete pg.dataset.soft;
   try{ drawPageLines(i); }catch(e){}
 }
-async function ensurePageRendered(i){
+/* ==================================================================================================
+   6m7 — ONE PAGE AT A TIME, NEAREST THE EYE FIRST, AND NOTHING AT ALL FOR A PAGE THAT HAS GONE.
+   Ced: "some pages are taking too long to load. and some are not loading at all. also when zooming in
+   and out, the loading is too long." · "zoom in and out are so slow again."
+
+   The JavaScript is not the cost and was not the cost in v45 either. Profiled on the 32-page fixture
+   with every function on the path counted and timed, a ten-notch ctrl-wheel zoom spends 47ms inside
+   `setZoom` ALTOGETHER and the 95th-percentile frame is 31–38ms. What costs is the thing the profile
+   cannot see, because it is pdf.js drawing into a canvas:
+
+       one page, rendered      zoom 1.0   61–88 ms
+                               zoom 2.0   71–120 ms
+                               zoom 3.5   180–204 ms
+
+   And there was nothing between the IntersectionObserver and that work. Scroll quickly through the
+   document and every page the observer touches on the way past is handed to pdf.js immediately, all
+   of them at once: measured on a fast scroll, **29 page renders were started and 29 pages were then
+   unloaded** — about three seconds of drawing, nearly all of it for pages that were off the screen
+   again before the ink was dry, and all of it competing with the one page you are actually looking at.
+   That is "taking too long to load", and it is also why a page you have stopped on can sit blank: it
+   is fourth in a queue of four full-page renders.
+
+   So there is a queue now, and three rules:
+     1. ONE render runs at a time. Five concurrent renders do not finish sooner; they finish in a
+        different order and they each make the others slower.
+     2. The next one taken is the page NEAREST THE MIDDLE OF THE WINDOW. The page under your eyes is
+        drawn first whatever order the observer happened to deliver.
+     3. A page is re-checked at the moment its turn comes, not when it was asked for. If it has
+        scrolled out of reach, or the zoom has moved on, or it has been drawn already, it is dropped
+        without being drawn at all.
+   A frame is yielded between renders, so a long queue never blocks a scroll.
+
+   `ensurePageRendered` keeps its name and still returns a promise that settles when that page is
+   drawn — the observer, the resharpen and the test suite all call it — but what it does now is join
+   the queue.
+   ================================================================================================== */
+const RENDER_REACH=600;            /* a page further than this outside the window is not worth drawing */
+let _rq=new Map();                 /* page index -> {resolve[]} */
+let _rqBusy=false;
+function _pageWanted(i){
+  const pg=document.querySelector(`.page[data-idx="${i}"]`);
+  if(!pg)return null;
+  if(pg.dataset.rendered==="1"||pg.dataset.rendered==="wip")return null;
+  const r=pg.getBoundingClientRect();
+  if(r.bottom<-RENDER_REACH||r.top>window.innerHeight+RENDER_REACH)return null;
+  return {pg,dist:Math.abs(r.top+r.height/2-window.innerHeight/2)};
+}
+function ensurePageRendered(i){
+  i=+i;
+  const pg=document.querySelector(`.page[data-idx="${i}"]`);
+  if(!pg||pg.dataset.rendered==="1")return Promise.resolve();
+  return new Promise(res=>{
+    const e=_rq.get(i);
+    if(e)e.waiting.push(res); else _rq.set(i,{waiting:[res]});
+    _runRenderQueue();
+  });
+}
+async function _runRenderQueue(){
+  if(_rqBusy)return;
+  _rqBusy=true;
+  try{
+    while(_rq.size){
+      /* 6m7 — decided HERE, not when the page was asked for: the window has moved since */
+      let best=null, bestD=Infinity;
+      for(const i of [..._rq.keys()]){
+        const w=_pageWanted(i);
+        if(!w){ const e=_rq.get(i); _rq.delete(i); if(e)e.waiting.forEach(f=>f()); continue; }
+        if(w.dist<bestD){ bestD=w.dist; best=i; }
+      }
+      if(best==null)break;
+      const e=_rq.get(best); _rq.delete(best);
+      try{ await _renderPageNow(best); }catch(err){}
+      if(e)e.waiting.forEach(f=>f());
+      /* let the window draw a frame between pages, so a queue never blocks a scroll */
+      await new Promise(r=>requestAnimationFrame(()=>r()));
+    }
+  } finally { _rqBusy=false; }
+  sweepPagesSoon();        /* 6m7 — and then make sure nothing on screen was left out */
+}
+/* ==================================================================================================
+   6m7 — THE SWEEP, which is the other half of dropping work.
+   Dropping a page because it has scrolled away is right while the hand is moving and wrong the moment
+   it stops: the IntersectionObserver fires on a CROSSING, so a page that was already inside the
+   margin when its render was dropped is never asked for again. Measured with the queue in and no
+   sweep: a fast scroll ended with **the page under the eyes blank**, nothing queued, nothing coming.
+
+   So whenever the scrolling settles — and whenever the queue runs dry — every page actually ON SCREEN
+   and not drawn is asked for. It is a `querySelectorAll` over the page divs and a rect each, once,
+   120ms after the last scroll event; the queue decides what is worth drawing as usual. This is the
+   belt to the observer's brace: the observer is the fast path and this is the one that cannot miss.
+   ================================================================================================== */
+let _sweepT=0;
+function sweepPagesSoon(ms){
+  clearTimeout(_sweepT);
+  _sweepT=setTimeout(()=>{
+    try{
+      document.querySelectorAll("#pages .page").forEach(pg=>{
+        const st=pg.dataset.rendered;
+        if(st==="1"||st==="wip")return;
+        const r=pg.getBoundingClientRect();
+        if(r.bottom>0&&r.top<window.innerHeight)ensurePageRendered(+pg.dataset.idx);
+      });
+    }catch(e){}
+  }, ms==null?120:ms);
+}
+window.addEventListener("scroll",()=>sweepPagesSoon(),{passive:true});
+async function _renderPageNow(i){
   const pg=document.querySelector(`.page[data-idx="${i}"]`); if(!pg||pg.dataset.rendered==="1"||pg.dataset.rendered==="wip")return;
   pg.dataset.rendered="wip";
   /* 6gs — WHAT SCALE THIS RENDER IS FOR. Ced: "the pdf also becomes broken at some point" while
@@ -3442,7 +3548,23 @@ async function ensurePageRendered(i){
   const P=S.pages[i]; const at=S.scale; const vp=P.page.getViewport({scale:at});
   const cv=el("canvas","pdf"); cv.width=vp.width; cv.height=vp.height; cv.style.width=vp.width+"px"; cv.style.height=vp.height+"px";
   try{ const task=P.page.render({canvasContext:cv.getContext("2d"),viewport:vp}); pg._task=task; await task.promise; }
-  catch(err){ pg.dataset.rendered=""; return; }
+  catch(err){
+    /* ============================================================================================
+       6m7 — AND A RENDER THAT DID NOT FINISH ASKS AGAIN. Ced: "some are not loading at all."
+       A render is cancelled whenever `unloadPage` runs over it, and a cancelled task rejects — so
+       this line used to put the page back to blank and stop. The IntersectionObserver only fires on
+       a CROSSING, so a page that was still on screen the whole time never got a second chance: it
+       stayed blank until it was scrolled out of the window and back in. That is exactly the page
+       that never loads.
+       It goes back on the queue instead, where the usual rule decides whether it is still worth
+       drawing — so a page you have scrolled past is still dropped, and one you are looking at is
+       drawn again.
+       ============================================================================================ */
+    cv.width=cv.height=0;
+    pg.dataset.rendered="";
+    if(_pageWanted(i))setTimeout(()=>{ try{ ensurePageRendered(i); }catch(e){} },0);
+    return;
+  }
   if(pg.dataset.rendered!=="wip") return; // unloaded mid-render
   if(S.scale!==at){                       // the zoom moved on while it drew
     cv.width=cv.height=0; pg.dataset.rendered="";
@@ -3611,6 +3733,28 @@ const STICKY_MODES=new Set(["line","arrow","poly","box","circle","dim","callout"
 const DRAW_MODES=new Set(["line","arrow","poly","box","circle","text","dim","callout",
                           "crossout","cross","strikerow"]);
 function toolDraws(){ return DRAW_MODES.has(S.mode); }
+/* ==================================================================================================
+   6m9 — WHOSE PRESS IS THIS, THE MARK'S OR THE TOOL'S? One definition, because there were two.
+   6ju wrote the rule twice — once in the page's `pointerdown` and once in the mark's own `_press` —
+   and the two had drifted into slightly different shapes. Narrowing it in one place and not the
+   other is how a fix half-works: measured, the mark stopped being dragged and the new mark still
+   was not drawn, because the page was still bailing out on the half of the rule nobody had touched.
+
+   The rule itself narrowed because Ced's new Escape (6m9) removed the escape hatch 6ju relied on —
+   "Escape drops the selection and the sheet is a drawing surface again" is no longer true, so a
+   SINGLE selected mark no longer claims the press. A drag draws over it (6hq), a click picks it up
+   (6l7), and the mark still moves by its own grip or the arrow keys. A MULTI-SELECTION or a GROUP
+   keeps the claim: dragging the block IS the gesture there, and there is no one mark to have meant.
+   ================================================================================================== */
+function pressOwnedByMark(id){
+  if(id==null)return false;
+  if(S.selMulti.has(id))return true;
+  const o=(S.annos||[]).find(z=>z.id===id);
+  if(!o||o.group==null)return false;
+  if(S.sel!=null){ const q=S.annos.find(z=>z.id===S.sel); if(q&&q.group===o.group)return true; }
+  for(const k of S.selMulti){ const q=S.annos.find(z=>z.id===k); if(q&&q.group===o.group)return true; }
+  return false;
+}
 /* 6jx — switching tools, or putting one down, abandons a start point that is still waiting */
 function clickRunDrop(){ try{ if(typeof clickRunClear==="function")clickRunClear(true); }catch(e){} }
 /* =================================================================================================
@@ -3924,15 +4068,8 @@ function attachPagePointer(pg,i){
     {
       const host=e.target.closest?e.target.closest(".anno"):null;
       if(host){
-        const hid=+host.dataset.id;
-        const mine=(S.sel===hid)||S.selMulti.has(hid)||(()=>{
-          const o=S.annos.find(z=>z.id===hid);
-          if(!o||o.group==null)return false;
-          if(S.sel!=null){ const q=S.annos.find(z=>z.id===S.sel); if(q&&q.group===o.group)return true; }
-          for(const id of S.selMulti){ const q=S.annos.find(z=>z.id===id); if(q&&q.group===o.group)return true; }
-          return false;
-        })();
-        if(!toolDraws()||mine)return;
+        /* 6m9 — ONE definition of this, shared with the mark's own handler; see `pressOwnedByMark` */
+        if(!toolDraws()||pressOwnedByMark(+host.dataset.id))return;
       }
     }
     /* 6hq — remember WHICH mark the press landed on: if the gesture turns out to be a click rather
@@ -6988,8 +7125,22 @@ function layoutAnnos(){
          without putting the tool down first. A press on a selected mark moves it; a press on any other
          mark still starts a new one, which is what 6hq asked for. Escape drops the selection and the
          sheet is a drawing surface again. */
-      if(toolDraws()&&!(S.sel===a.id||S.selMulti.has(a.id)
-                        ||(a.group!=null&&_groupSelected(a.group)))){
+      /* ===========================================================================================
+         6m9 — AND THAT LAST SENTENCE IS NO LONGER TRUE, so the exemption narrows.
+         6ju's whole justification rested on "Escape drops the selection and the sheet is a drawing
+         surface again". Ced's new rule — "when esc was clicked, always go to select current redline.
+         double esc is select tool" — means the first press KEEPS the selection and the second puts
+         the tool down with it, so there is no longer any press that leaves a drawing tool in the hand
+         over an empty sheet. Measured: with a box drawn and the tool still up, a drag starting inside
+         it moved the first box instead of drawing a second — 6hq's exact complaint, re-introduced by
+         the change to Escape.
+         A SINGLE selected mark therefore stops being exempt: the press goes through 6l7 like any
+         other, so a DRAG draws (6hq) and a CLICK picks the mark up. Nothing is lost — the mark still
+         moves by its own grip, which 6lw put under the box and 6lp lifted above every band, and by the
+         arrow keys. A MULTI-SELECTION and a GROUP keep the exemption, because dragging the whole
+         block IS the gesture there and there is no one mark to have clicked instead.
+         =========================================================================================== */
+      if(toolDraws()&&!pressOwnedByMark(a.id)){
         /* ===========================================================================================
            6l7 — A CLICK IS NOT A DRAW. Ced, twice: "if the user clicked on the ui/pdf or on a
            different shape/redline without dragging for shape again, it should go to select mode."
@@ -8348,9 +8499,34 @@ function syncPageCol(){
     const cr=r.right-(parseFloat(cs.paddingRight)||0)-(parseFloat(cs.borderRightWidth)||0);
     const ins=_chromeInset();
     const freeL=ins.left, freeR=window.innerWidth-ins.right;
-    /* only ever OUTWARD: the column may escape its cap, never pull in tighter than the layout
-       already placed it, or a narrow window would start squeezing the paper. */
-    const dl=Math.max(0,cl-freeL), dr=Math.max(0,freeR-cr);
+    /* ==============================================================================================
+       6m8 — AND THE BAND IS CENTRED ON THE WINDOW. Ced: "always make the the pdf center unless zoomed
+       in in specific place."
+
+       6lb escaped the column outward to the chrome's free space, which is the right WIDTH and the
+       wrong MIDDLE: the rail takes 78px on the left and nothing takes more than 8 on the right, so
+       the free band runs 70..1592 in a 1600px window and its centre is 831, not 800. The sheet is
+       centred in the column by `margin:auto`, so it landed 31px right of the window's middle at every
+       zoom — measured, and it is what Ced is looking at.
+
+       The band is made symmetric about the window instead: as wide as the NARROWER side allows, so
+       both halves match and the column's middle is the window's middle. `margin:auto` then centres
+       the sheet on the window with no arithmetic at all — which matters more than it sounds, because
+       the first cut of this computed an explicit pixel margin per page and that margin went STALE the
+       moment anything moved. Measured with it: changing the reading-column width left the old margin
+       in place and the sheet 250px off. An `auto` margin cannot go stale; it is the browser's job and
+       the browser redoes it on every layout.
+
+       It costs a little width when the chrome is lopsided — 62px in that 1600px window — and that is
+       the right trade: the column exists to hold the paper, and paper that is not in the middle is
+       what the complaint was about. Below 160px a side the symmetry is dropped rather than squeezing
+       the sheet, which is the case 6lb's "only ever OUTWARD" rule was protecting.
+       ============================================================================================== */
+    const _cx=window.innerWidth/2;
+    const _half=Math.min(_cx-freeL,freeR-_cx);
+    const wantL=(_half>=160)?(_cx-_half):freeL;
+    const wantR=(_half>=160)?(_cx+_half):freeR;
+    const dl=cl-wantL, dr=wantR-cr;
     if(_pcL!==null&&Math.abs(dl-_pcL)<0.5&&Math.abs(dr-_pcR)<0.5)return;
     _pcL=dl; _pcR=dr;
     ps.style.marginLeft =(-dl)+"px";
@@ -9503,13 +9679,34 @@ document.addEventListener("keydown",e=>{
      with none selected, in a MARK (not a ribbon field), they mean the mark. */
   const inMark=!!(ae&&ae.classList&&ae.classList.contains("ed"));
   const hasText=!!(sel&&sel.length);
+  /* ================================================================================================
+     6ma — AND A FIELD WITH NOTHING SELECTED IN IT DOES NOT OWN THE CLIPBOARD.
+     Ced: "ctrl a, s, c, v, x, y, and del are not working well all the time."
+
+     Measured, every one of them, in nine states — nothing selected, a mark, a stroke, a
+     multi-selection, straight after drawing with the tool still in hand, with a ribbon control
+     focused, with the properties popup open, with the caret in a mark, and with the caret in Find.
+     Seventeen of eighteen combinations already worked. The one that did not:
+
+         Ctrl+C / Ctrl+X with the caret in the FIND box   ->   nothing at all
+
+     and it is a state a hand gets into constantly: press `/`, find the row, then try to copy a mark.
+     `editing && !inMark` handed the key to the browser, which copied the empty selection in a search
+     field. 6gu had already worked out the right rule for a MARK — "with text actually selected it
+     means the text; with none selected it means the mark" — and simply did not apply it to the
+     ribbon's own fields, which is the kind of near-miss that makes a shortcut feel unreliable rather
+     than broken.
+     The rule is the same everywhere now: a Ctrl+C or Ctrl+X with NO text under it is about the
+     drawing, wherever the caret happens to be. Ctrl+V is deliberately left alone — pasting a search
+     term into Find is a real thing to want, and there is no selection to tell the two apart.
+     ================================================================================================ */
   if((e.ctrlKey||e.metaKey)&&k==="c"){
-    if(hasText||(editing&&!inMark)) return;   // native text copy
+    if(hasText) return;                       // native text copy
     if(copySelectedAnnos(false)) e.preventDefault();
     return;
   }
   if((e.ctrlKey||e.metaKey)&&k==="x"){
-    if(hasText||(editing&&!inMark)) return;   // native cut in a text box
+    if(hasText) return;                       // native cut in a text box
     if(copySelectedAnnos(true)) e.preventDefault();
     return;
   }
@@ -9573,6 +9770,14 @@ function resizePageBoxes(){
      That is the clipped sheet Ced has been seeing at 200%. So the margins are set per page against
      the column's own width: a sheet that fits is centred, a sheet that does not starts at the left
      edge and overflows to the right, which scrolls. */
+  /* ================================================================================================
+     6m8 — centred while it FITS, flush left when it does not. The sheet's own margins are left to
+     `margin:auto`: `syncPageCol` now makes the column symmetric about the window, so the browser's
+     own centring puts the sheet on the window's middle and keeps it there through every resize, rail
+     toggle and column change without this function being told. The first cut of 6m8 computed an
+     explicit pixel margin here instead and it went stale the moment anything moved — measured, a
+     change of reading-column width left the old margin in place and the sheet 250px off centre.
+     ================================================================================================ */
   const host=document.getElementById("pages");
   const room=host?host.clientWidth:0;
   S.pages.forEach((P,i)=>{
@@ -9695,13 +9900,33 @@ function resharpenSoon(ms){
     const _soft=[...document.querySelectorAll('#pages .page[data-soft="1"]')].sort((p,q)=>{
       const a=p.getBoundingClientRect(), b=q.getBoundingClientRect();
       return Math.abs(a.top+a.height/2-_mid)-Math.abs(b.top+b.height/2-_mid); });
+    /* ============================================================================================
+       6m7 — AND THEY GO ONE AT A TIME. This loop STARTED every soft page's render in the same turn:
+       measured on a six-press zoom, thirteen `resharpenPage` calls all in flight together, each of
+       them 70–200ms of pdf.js on the one thread, so the page under the cursor came back last and the
+       whole gesture read as treacle. The nearest one is drawn, a frame is yielded, then the next —
+       and any that has scrolled away by then is dropped rather than drawn.
+       ============================================================================================ */
+    const _near=[];
     _soft.forEach(pg=>{
       const i=+pg.dataset.idx;
       const r=pg.getBoundingClientRect();
       const close=(r.bottom>-800 && r.top<window.innerHeight+800);
-      if(close){ try{ resharpenPage(i); }catch(e){} }         /* swapped when it is ready */
+      if(close)_near.push(i);
       else { delete pg.dataset.soft; unloadPage(i); }         /* far away: the observer brings it back */
     });
+    (async()=>{
+      for(const i of _near){
+        const pg=document.querySelector(`.page[data-idx="${i}"]`);
+        if(!pg||pg.dataset.soft!=="1")continue;               /* already caught up */
+        const r=pg.getBoundingClientRect();
+        if(r.bottom<-800||r.top>window.innerHeight+800){      /* it moved while we waited */
+          delete pg.dataset.soft; unloadPage(i); continue;
+        }
+        try{ await resharpenPage(i); }catch(e){}
+        await new Promise(res=>requestAnimationFrame(()=>res()));
+      }
+    })();
     try{ layoutAnnos(); }catch(e){}
     try{ drawAllLines(); }catch(e){}
   }, (ms==null?110:ms));
@@ -12326,11 +12551,13 @@ document.addEventListener("keydown",e=>{
          press too many of a hand that was about to draw the next one. Ced: "a single esc click will
          deselect the shape while double esc click will put the tool to select." Stepping out of the
          text is the first of those two presses. */
-      setStatus("Out of the text — the mark is still selected. Escape again drops the selection.");
+      _escArmed=true;      /* 6m9 — that was rung one */
+      setStatus("Out of the text — the redline is selected. Escape again puts the tool down.");
       return;
     }
   }
-  if(_releaseChromeFocus()){ setStatus("Back to the document — the shortcuts are live again."); return; }
+  if(_releaseChromeFocus()){ _escArmed=true;   /* 6m9 */
+    setStatus("Back to the document — the shortcuts are live again."); return; }
   if(_editTarget())return;
   /* 6jx — a start point waiting for its end is the nearest thing to undo.
      6l7 — and a run with only its START point down has drawn nothing, so this press is the one Ced
@@ -12363,26 +12590,50 @@ document.addEventListener("keydown",e=>{
     const g=_grpIn; groupLeave();
     if(S.annos.some(a=>a.group===g)||S.lines.some(l=>l.group===g))selectGroup(g);
     else { clearMulti(); selectAnno(null); selectLine(null); }
+    _escArmed=true;      /* 6m9 */
     setStatus("Out of the group — the group is selected again, whole.");
     return;
   }
+  /* ================================================================================================
+     6m9 — TWO RUNGS, NOT FIVE. Ced: "when esc was clicked, always go to select current redline.
+     double esc is select tool."
+
+     6jt built Escape as a ladder where each press undid exactly one thing — the caret, then the
+     field, then the group, then the selection, then the tool. Every rung was defensible on its own
+     and the sum was not: from inside a mark's text with a tool in the hand it took FOUR presses to
+     reach Select, and a hand cannot count rungs it cannot see.
+
+     Ced's rule is two rungs and it is a better rule, because each one names a state you can picture:
+
+         press once   the current redline is SELECTED — the caret is out of it, any half-drawn run is
+                      called off, an open group is closed, and the mark itself stays picked up
+         press again  the tool is put down: the selection goes and Select is active
+
+     Everything that used to be its own rung now happens inside the first press, which is what makes
+     the count fixed. The one case that still reaches Select in a single press is the one where there
+     is nothing to settle — no caret, no run, nothing selected — because then the first rung has no
+     work to do and doing nothing is not an answer.
+     ================================================================================================ */
   const hadSel=(multiCount()||S.sel!=null||S.selLine!=null);
-  if(hadSel){
-    clearMulti(); selectAnno(null); selectLine(null);
-    /* 6l1 — the tool stays in the hand only if the tool is what put this mark there. A selection
-       made by CLICKING an existing redline means the drawing is over, so one press reaches Select. */
-    if(S.mode!=="select"&&!_selFromDraw){
-      setMode("select");
-      setStatus("Selection cleared — back to Select.");
-      return;
-    }
+  if(hadSel&&!_escArmed){
+    _escArmed=true;
     setStatus(S.mode!=="select"
-      ? "Selection cleared — the tool is still in your hand. Escape again puts it down."
-      : "Selection cleared.");
+      ? "The redline is selected — Escape again puts the tool down."
+      : "The redline is selected — Escape again drops it.");
     return;
   }
+  clearMulti(); selectAnno(null); selectLine(null);
+  _escArmed=false;
   if(S.mode!=="select"){ toolRelease(); setStatus("Tool put down — Select is active."); }
+  else setStatus(hadSel?"Selection dropped.":"Nothing selected.");
 });
+/* 6m9 — WHAT MAKES THE SECOND PRESS THE SECOND PRESS. The two rungs have to be told apart, and the
+   only honest way is to remember that the last key was an Escape that settled something. Anything
+   else a hand does — a click, a drag, another key — means the next Escape starts the ladder again,
+   so the flag is cleared by both, in the capture phase, before any handler can act on them. */
+let _escArmed=false;
+document.addEventListener("pointerdown",()=>{ _escArmed=false; },true);
+document.addEventListener("keydown",e=>{ if(e.key!=="Escape")_escArmed=false; },true);
 
 /* ------------------------------------------------------------------------------------------------
    Ctrl-select cells, then give them all one value.
@@ -12976,6 +13227,26 @@ const MA_ICONS={
      under it. Drawn rather than borrowed from a glyph, so it sits at the same weight as the
      rest of the ribbon at 15px. */
   stamp:"M12 0.4C9.3 0.4 7.1 2.6 7.1 5.3C7.1 6.6 7.6 7.6 8.2 8.6C8.9 9.7 9.3 10.6 9.5 11.5L14.5 11.5C14.7 10.6 15.1 9.7 15.8 8.6C16.4 7.6 16.9 6.6 16.9 5.3C16.9 2.6 14.7 0.4 12 0.4Z M10.4 12.7L13.6 12.7C14.8 12.7 15.6 13.5 15.6 14.7L15.6 15.6L8.4 15.6L8.4 14.7C8.4 13.5 9.2 12.7 10.4 12.7Z M4.2 15.6L19.8 15.6C21.6 15.6 22.6 16.9 22.6 18.5L22.6 19.0C22.6 19.4 22.3 19.6 21.9 19.6L2.1 19.6C1.7 19.6 1.4 19.4 1.4 19.0L1.4 18.5C1.4 16.9 2.4 15.6 4.2 15.6Z M3.0 21.2L21.0 21.2L21.0 22.0C21.0 23.1 20.1 24.0 19.0 24.0L5.0 24.0C3.9 24.0 3.0 23.1 3.0 22.0L3.0 21.2Z",
+  /* ================================================================================================
+     6mb — THE TWO PICTURE TOOLS, IN CED'S OWN DRAWING.
+     He sent a mark for each: a bracketed frame round a camera for Snapshot, and a file for Insert
+     photo, "but replace the camera as the a file icon as this one" — so the second is the first's
+     frame with his folder where the camera was. They were a glyph apiece before, U+25A3 "white
+     square containing black small square" and the picture emoji, and neither says what the tool
+     does: one is a square, the other is whatever face the machine happens to have, in whatever
+     colours that face was designed in, beside a row of monochrome marks.
+
+     TRACED, NOT REDRAWN. Ced: "just use the logo is sent no need to replicate it." The first cut of
+     this was drawn by eye from the pictures and it was close and it was not his: the corner radii,
+     the exact gap in the bracket frame and the weight of the folder's back plate were all mine.
+     `tools/traceicon.py` takes the artwork's own pixels — marching squares, then Douglas-Peucker at
+     a tolerance just wide enough to swallow the antialiasing — and `tools/composeicon.py` builds the
+     second mark by rasterising the frame and the folder TOGETHER and tracing once, so there is no
+     seam where two separately-fitted outlines would have met. Both come out as one path on the same
+     24-unit grid as the rest of the set, in `currentColor`, with `fill-rule:evenodd` for the holes.
+     ================================================================================================ */
+  snapshot:"M2.29 6.70L-0.03 6.67L-0.03 2.67L0.16 2.03L0.54 1.40L1.46 0.60L2.29 0.29L6.38 0.32L6.35 2.57L2.86 2.57L2.38 2.86L2.32 6.67ZM14.48 2.63L8.83 2.63L8.73 2.54L8.73 0.32L14.54 0.29L14.51 2.60ZM23.30 6.70L21.08 6.70L20.98 6.60L20.92 2.86L20.63 2.63L17.02 2.63L16.92 2.54L16.92 0.32L20.95 0.29L21.59 0.48L22.22 0.86L23.02 1.78L23.33 2.60L23.33 6.67ZM21.59 23.65L11.11 23.65L10.35 23.40L9.37 22.60L8.92 21.84L8.73 21.14L8.73 12.19L8.98 11.30L9.30 10.79L9.90 10.19L10.60 9.81L11.37 9.62L12.83 9.62L13.11 9.02L13.52 8.60L13.84 8.48L18.86 8.48L19.52 8.95L19.87 9.62L21.33 9.62L21.90 9.75L22.60 10.06L23.33 10.73L23.78 11.49L23.97 12.32L23.97 21.02L23.71 21.97L23.40 22.48L22.54 23.27L21.62 23.62ZM2.29 14.89L-0.03 14.86L-0.03 9.08L2.32 9.08L2.32 14.86ZM21.30 21.27L21.62 20.83L21.62 12.51L21.40 12.10L21.14 11.97L11.37 12.03L11.08 12.38L11.08 20.95L11.30 21.24L21.27 21.30ZM16.83 20.16L15.81 20.16L14.79 19.84L14.03 19.33L13.24 18.35L12.86 17.27L12.86 16.00L13.05 15.37L13.56 14.48L14.16 13.87L15.05 13.37L15.68 13.17L16.95 13.17L17.78 13.43L18.67 14.00L19.52 15.11L19.84 16.13L19.84 17.14L19.40 18.41L18.48 19.46L17.71 19.90L16.86 20.13ZM16.67 17.78L17.02 17.62L17.49 16.95L17.49 16.38L17.37 16.06L16.95 15.65L16.44 15.46L15.94 15.52L15.62 15.71L15.21 16.25L15.21 17.02L15.46 17.46L15.75 17.68L16.06 17.81L16.63 17.81ZM6.35 23.65L2.29 23.65L1.71 23.46L1.08 23.08L0.29 22.16L-0.03 21.27L-0.03 17.27L2.22 17.24L2.32 17.33L2.38 21.08L2.67 21.30L6.29 21.30L6.38 21.40L6.38 23.62Z",
+  photofile:"M2.29 6.70L-0.03 6.67L-0.03 2.67L0.16 2.03L0.54 1.40L1.46 0.60L2.29 0.29L6.38 0.32L6.35 2.57L2.86 2.57L2.38 2.86L2.32 6.67ZM14.48 2.63L8.83 2.63L8.73 2.54L8.73 0.32L14.54 0.29L14.51 2.60ZM23.30 6.70L21.08 6.70L20.98 6.60L20.92 2.86L20.63 2.63L17.02 2.63L16.92 2.54L16.92 0.32L20.95 0.29L21.59 0.48L22.22 0.86L23.02 1.78L23.33 2.60L23.33 6.67ZM2.29 14.89L-0.03 14.86L-0.03 9.08L2.32 9.08L2.32 14.86ZM20.25 22.32L9.97 22.32L9.52 22.13L9.05 21.71L8.73 21.08L8.73 10.54L8.98 10.10L9.52 9.75L14.03 9.75L14.79 10.06L16.00 11.27L16.70 11.71L17.21 11.84L20.44 11.84L20.89 12.03L21.30 12.63L21.30 13.90L20.32 13.94L20.29 12.95L20.19 12.86L16.95 12.86L16.38 12.73L15.49 12.22L14.22 10.95L13.78 10.76L9.84 10.76L9.75 10.86L9.75 20.76L9.81 20.95L10.16 21.24L10.60 21.17L11.02 20.83L13.30 15.05L13.65 14.63L13.90 14.51L23.05 14.44L23.43 14.57L23.84 14.98L23.97 15.75L21.94 20.83L21.62 21.46L21.14 21.94L20.29 22.29ZM6.35 23.65L2.29 23.65L1.71 23.46L1.08 23.08L0.29 22.16L-0.03 21.27L-0.03 17.27L2.22 17.24L2.32 17.33L2.38 21.08L2.67 21.30L6.29 21.30L6.38 21.40L6.38 23.62Z",
   applypages:"M7.22 6.43L0.00 13.80L1.15 14.80L4.18 12.03L1.57 15.37L2.77 16.47L4.97 14.75L3.29 17.10L5.23 19.03L8.05 16.42L5.80 19.50L7.11 20.92L12.44 15.90L7.69 21.33L8.84 22.64L10.46 21.80L9.57 23.16L10.30 24.00L17.57 16.63Z M22.80 0.00L21.07 0.21L18.82 1.52L14.01 6.95L10.09 3.24L9.67 3.24L7.90 5.07L7.95 5.44L18.61 16.05L19.03 16.00L20.76 14.01L16.99 9.93L20.44 7.16L23.22 4.03L24.00 1.57L23.58 0.42Z"
 };
 /* one inline drawing, sized to sit on the same line as a word */
@@ -12997,12 +13268,15 @@ const RIBBON_SHAPES={
   railToggle:"--i-eye",         /* 6gh — show / hide the page list */
   orgBtn:"--i-org",       /* 6ep — a stack of pages, not another pair of arrows */
   /* 6jo — the two the ribbon shares with the selection bar, so one idea has one picture */
-  groupBtn:"--i-group", markupsBtn:"--i-library", stampBtn:"--i-stamp"   /* 6k9 */
+  groupBtn:"--i-group", markupsBtn:"--i-library", stampBtn:"--i-stamp",  /* 6k9 */
+  photoBtn:"--i-photofile"                                               /* 6mb */
 };
 const MODE_SHAPES={ select:"--i-arrow", redline:"--i-pen", crossout:"--i-cross",
                     strikerow:"--i-strikerow", cross:"--i-striketext", line:"--i-line",
                     /* 6fh — the callout, drawn as what it makes: a box of text, a stub, a leader, an arrow */
-                    callout:"--i-callout" };
+                    callout:"--i-callout",
+                    /* 6mb — the bracketed camera, in place of U+25A3 */
+                    snapshot:"--i-snapshot" };
 function iconifyRibbon(){
   const mark=(b,glyph,shape)=>{
     if(!b||b.classList.contains("ico"))return;

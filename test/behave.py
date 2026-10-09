@@ -344,7 +344,11 @@ async def t_esc(T):
     and just selecting other redlines." """
     await T.reset()
     out = {}
-    # (a) drew something: one Escape drops the selection and KEEPS the tool
+    # (a) drew something: one Escape leaves the redline SELECTED and keeps the tool.
+    # 6m9 — Ced: "when esc was clicked, always go to select current redline. double esc is select
+    # tool." The press used to drop the selection here; it keeps it now, and the SECOND press does
+    # both. Every other half of this case is about a tool that drew nothing, where there is nothing
+    # to settle and one press still reaches Select — which is what 6l7 asked for and is unchanged.
     await T.pick("box")
     await T.drag(T.at(0.18, 0.20), T.at(0.38, 0.30))
     await T.key("Escape")
@@ -367,7 +371,7 @@ async def t_esc(T):
     out["clicked blank paper, one Escape"] = (await T.state())["mode"]
 
     ok = (out["after drawing, one Escape"]["mode"] == "box"
-          and out["after drawing, one Escape"]["sel"] is None
+          and out["after drawing, one Escape"]["sel"] is not None      # 6m9 — still picked up
           and out["and a second"] == "select"
           and out["then one Escape"]["mode"] == "select"
           and out["clicked blank paper, one Escape"] == "select")
@@ -564,9 +568,12 @@ async def t_draw_over(T):
     await T.pick("box")
     await T.drag(T.at(0.18, 0.20), T.at(0.52, 0.34))
     first = await T.annos()
-    # the box it just drew comes up SELECTED, and 6ju says a press on a mark you have deliberately
-    # selected moves it. That is a different rule and it is not the one under test, so the selection
-    # goes first — one Escape, which keeps the tool in hand.
+    # 6m9 — the box it just drew comes up SELECTED and STAYS selected through one Escape, because
+    # Ced's new rule is "esc selects the current redline, double esc is the select tool". 6ju used to
+    # exempt a selected mark from 6hq, and its justification was precisely that Escape would drop the
+    # selection and give the sheet back — which is no longer true. So the exemption narrowed to
+    # multi-selections and groups, and this case now asserts the thing it was always about with the
+    # selection STILL UP: a drag draws, whatever is selected underneath it.
     await T.key("Escape")
     # a DRAG that starts inside the first box must make a second box, not move the first
     r = await T.mark_rect(first[0]["id"])
@@ -899,7 +906,7 @@ async def t_picture_speed(T):
     return ok, fr
 
 
-@case("The sheet sits in the middle of the room the chrome leaves")
+@case("The sheet sits in the middle of the window, at every column width and zoom")
 async def t_centred(T):
     """Ced: "make sure the pdf is in the middle of the ui", with a capture of an 11x17 sheet jammed
     against the right edge and 476px of empty white to the left of it (6lb).
@@ -930,13 +937,41 @@ async def t_centred(T):
                             ?mp.getBoundingClientRect().left:W;
                     const p=document.querySelector('#pages .page');
                     const b=p.getBoundingClientRect();
-                    return {off:+(((b.left+b.right)/2)-((L+R)/2)).toFixed(1),
+                    return {off:+(((b.left+b.right)/2)-(W/2)).toFixed(1),
+                            offFromChromeBand:+(((b.left+b.right)/2)-((L+R)/2)).toFixed(1),
                             gapL:+(b.left-L).toFixed(1), gapR:+(R-b.right).toFixed(1),
                             sheetW:+b.width.toFixed(0), freeW:+(R-L).toFixed(0)};}""")
         out[col] = g
         if g["sheetW"] <= g["freeW"]:            # only meaningful while there IS room to centre in
             worst = max(worst, abs(g["off"]))
-    # 12px of the free width is the slack the chrome measurement itself carries; 224 was the fault.
+    # 6m8 — AND THE MIDDLE IT IS MEASURED AGAINST IS THE WINDOW'S NOW.
+    # 6lb centred the sheet in the room the chrome leaves, which is the right WIDTH and the wrong
+    # MIDDLE: the rail takes 78px on the left and nothing takes more than 8 on the right, so that
+    # band's centre sits 35px right of the window's and the sheet sat there too — measured, at every
+    # zoom and every column width. Ced, twice, most recently "always make the the pdf center unless
+    # zoomed in in specific place", means the middle of the screen he is looking at. So the column is
+    # made symmetric about the window and `margin:auto` does the rest; what is asserted is the
+    # window's centre, and the 35px of chrome asymmetry is now carried by the margins instead of by
+    # the paper. 12px of slack is what the measurement itself carries; 224 was the original fault.
+    # 6m8 — and through a zoom as well, while the sheet still fits. The margin is the browser's
+    # (`margin:auto` on a column that is itself symmetric about the window), so it cannot go stale —
+    # an explicit per-page margin, which the first cut of 6m8 used, demonstrably could: measured, a
+    # change of reading-column width left the old margin in place and the sheet 250px off.
+    await T.page.evaluate("()=>{document.documentElement.style.removeProperty('--col-w');}")
+    await T.page.wait_for_timeout(500)
+    zooms = []
+    for z in (0.6, 1.0, 1.6):
+        await T.page.evaluate("(z)=>setZoom(z)", z)
+        await T.page.wait_for_timeout(600)
+        zooms.append(await T.page.evaluate(
+            """(z)=>{const p=document.querySelector('#pages .page'); if(!p)return null;
+                     const b=p.getBoundingClientRect();
+                     return {z, off:+(((b.left+b.right)/2)-(window.innerWidth/2)).toFixed(1),
+                             fits:b.width<=window.innerWidth};}""", z))
+    await T.page.evaluate("()=>setZoom(1)")
+    await T.page.wait_for_timeout(400)
+    out["through a zoom"] = zooms
+    worst = max([worst] + [abs(z["off"]) for z in zooms if z and z["fits"]])
     ok = worst <= 12
     out["worst off-centre"] = round(worst, 1)
     return ok, out
@@ -2017,6 +2052,247 @@ async def t_grey_everywhere(T):
           and stroke["ring"] == GREY_RING and stroke["ink"] == GREY_INK
           and stroke["n"] == 3)
     return ok, out
+
+
+
+# =========================================================================================
+#  v48
+# =========================================================================================
+
+@case("A fast scroll does not draw the pages it goes past")
+async def t_scroll_drops(T):
+    """Ced: "some pages are taking too long to load."
+
+    Nothing stood between the IntersectionObserver and pdf.js, so every page a fast scroll touched
+    on the way past was handed over immediately, all at once. Measured before: 29 renders started
+    and 29 pages unloaded — about three seconds of drawing, nearly all of it for pages that were off
+    the screen again before the ink was dry, and all of it competing with the page you are looking
+    at. One page is drawn at a time now, nearest the middle of the window first, and each is
+    re-checked at the moment its turn comes. (6m7)
+    """
+    await T.reset()
+    await T.page.evaluate(
+        """()=>{ window.__S={started:0, drew:0};
+                 const f=window._renderPageNow;
+                 if(typeof f!=='function')return false;
+                 window._renderPageNow=async function(i){
+                   window.__S.started++;
+                   const r=await f.call(this,i);
+                   const pg=document.querySelector('.page[data-idx="'+i+'"]');
+                   if(pg&&pg.dataset.rendered==='1')window.__S.drew++;
+                   return r; };
+                 return true; }""")
+    for _ in range(30):
+        await T.page.mouse.wheel(0, 900)
+        await T.page.wait_for_timeout(16)
+    await T.page.wait_for_timeout(3000)
+    got = await T.page.evaluate(
+        """()=>({...window.__S,
+                 pages:document.querySelectorAll('#pages .page').length,
+                 drawn:document.querySelectorAll('#pages .page[data-rendered="1"]').length})""")
+    # The whole document was scrolled past. What this is about is the SIZE of the saving, not an
+    # exact count: before the queue, 29 renders were started for 29 pages that were then unloaded;
+    # after it, 9. How many get their turn depends on how fast the machine is draining the queue
+    # while the wheel turns, so the assertion is "a small fraction of the document", with room for a
+    # loaded machine — half the pages would still be a failure, and 29 of 32 certainly is.
+    ok = (got["pages"] > 10
+          and got["started"] <= max(14, got["pages"] // 3)
+          and got["drawn"] >= 1 and got["drawn"] <= 6)
+    return ok, got
+
+
+@case("Nothing on screen is left blank once the scrolling stops")
+async def t_sweep(T):
+    """The other half of dropping work: the observer fires on a CROSSING, so a page whose render was
+    dropped while it was already in view is never asked for again. Measured with the queue in and no
+    sweep: a fast scroll ended with the page under the eyes blank and nothing coming. (6m7)
+    """
+    await T.reset()
+    for _ in range(30):
+        await T.page.mouse.wheel(0, 900)
+        await T.page.wait_for_timeout(16)
+    await T.page.wait_for_timeout(3500)
+    down = await T.page.evaluate(
+        """()=>{ const o={blank:[], drawn:0};
+                 document.querySelectorAll('#pages .page').forEach(pg=>{
+                   const r=pg.getBoundingClientRect();
+                   if(r.bottom<=0||r.top>=window.innerHeight)return;
+                   if(pg.dataset.rendered==='1')o.drawn++;
+                   else o.blank.push(+pg.dataset.idx); });
+                 return o; }""")
+    for _ in range(30):
+        await T.page.mouse.wheel(0, -900)
+        await T.page.wait_for_timeout(16)
+    await T.page.wait_for_timeout(3500)
+    up = await T.page.evaluate(
+        """()=>{ const o={blank:[], drawn:0};
+                 document.querySelectorAll('#pages .page').forEach(pg=>{
+                   const r=pg.getBoundingClientRect();
+                   if(r.bottom<=0||r.top>=window.innerHeight)return;
+                   if(pg.dataset.rendered==='1')o.drawn++;
+                   else o.blank.push(+pg.dataset.idx); });
+                 return o; }""")
+    ok = (not down["blank"] and down["drawn"] >= 1
+          and not up["blank"] and up["drawn"] >= 1)
+    return ok, {"after scrolling down": down, "after scrolling back up": up}
+
+
+@case("A zoom gesture blocks the window for no more than a frame or two")
+async def t_zoom_smooth(T):
+    """Ced: "zoom in and out are so slow again." · "make the zoom in and out seamless."
+
+    The JavaScript was never the cost — profiled, a ten-notch zoom spends 47ms inside `setZoom`
+    altogether. What cost was `resharpenSoon` STARTING every soft page's render in the same turn:
+    measured on a six-press zoom, thirteen of them in flight at once, each 70–200ms of pdf.js on the
+    one thread. They go one at a time now, nearest first, and any that has scrolled away by its turn
+    is dropped. Measured after: no long task at all in a ten-notch gesture. (6m7)
+    """
+    await T.reset()
+    await T.page.evaluate(
+        """()=>{ window.__L=[]; window.__C={now:0, peak:0, n:0};
+                 try{ window.__LO=new PerformanceObserver(l=>l.getEntries()
+                        .forEach(e=>window.__L.push(+e.duration.toFixed(1))));
+                      window.__LO.observe({entryTypes:['longtask']});
+                 }catch(e){}
+                 /* how many page renders are in flight at once — the property the fix is about */
+                 ['resharpenPage','_renderPageNow'].forEach(name=>{
+                   const f=window[name]; if(typeof f!=='function')return;
+                   window[name]=async function(...a){
+                     const C=window.__C; C.n++; C.now++; if(C.now>C.peak)C.peak=C.now;
+                     try{ return await f.apply(this,a); } finally { C.now--; }
+                   };
+                 });
+                 return true; }""")
+    await T.page.mouse.move(T.box["x"] + T.box["w"] * 0.5, T.box["y"] + 300)
+    await T.page.keyboard.down("Control")
+    for _ in range(10):
+        await T.page.mouse.wheel(0, -120)
+        await T.page.wait_for_timeout(55)
+    await T.page.keyboard.up("Control")
+    await T.page.wait_for_timeout(1800)
+    got = await T.page.evaluate(
+        """()=>({tasks:window.__L.slice(), worst:window.__L.length?Math.max(...window.__L):0,
+                 renders:window.__C.n, peakAtOnce:window.__C.peak,
+                 zoom:+S.scale.toFixed(2)})""")
+    ok = (got["zoom"] > 1.05                      # the gesture really zoomed
+          and got["renders"] >= 1                 # and it really did redraw something
+          and got["peakAtOnce"] <= 1              # one at a time, which is the whole fix
+          and got["worst"] < 120                  # and nothing blocked the window for long
+          and len(got["tasks"]) <= 2)
+    return ok, got
+
+
+@case("Escape selects the redline; Escape again puts the tool down")
+async def t_escape_two(T):
+    """Ced: "when esc was clicked, always go to select current redline. double esc is select tool."
+
+    6jt built Escape as a five-rung ladder — the caret, the field, the group, the selection, the
+    tool — and from inside a mark's text with a tool in hand it took four presses to reach Select.
+    Two rungs now, and the count is the same from every state. (6m9)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.22), T.at(0.38, 0.32))
+    drawn = await T.state()
+    await T.key("Escape")
+    one = await T.state()
+    await T.key("Escape")
+    two = await T.state()
+
+    # and from inside a text, with the caret in it
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.18, 0.20), T.at(0.44, 0.26))
+    await T.type("NOTE")
+    t0 = await T.page.evaluate(
+        """()=>({inText:!!(document.activeElement&&document.activeElement.classList
+                  &&document.activeElement.classList.contains('ed')), sel:S.sel!=null})""")
+    await T.key("Escape")
+    t1 = await T.page.evaluate(
+        """()=>({inText:!!(document.activeElement&&document.activeElement.classList
+                  &&document.activeElement.classList.contains('ed')), sel:S.sel!=null,
+                 mode:S.mode})""")
+    await T.key("Escape")
+    t2 = await T.page.evaluate("()=>({sel:S.sel!=null, mode:S.mode})")
+
+    ok = (drawn["sel"] is not None and drawn["mode"] == "box"
+          and one["sel"] is not None and one["mode"] == "box"      # 1: the redline is selected
+          and two["sel"] is None and two["mode"] == "select"       # 2: the tool goes down
+          and t0["inText"] and not t1["inText"] and t1["sel"]      # 1: out of the text, still picked up
+          and not t2["sel"])                                       # 2: and then dropped
+    return ok, {"box": {"drawn": drawn["mode"], "after 1": [one["mode"], one["sel"] is not None],
+                        "after 2": [two["mode"], two["sel"] is not None]},
+                "text": {"typing": t0, "after 1": t1, "after 2": t2}}
+
+
+@case("Ctrl+C copies the mark while the caret is in Find")
+async def t_copy_from_find(T):
+    """Ced: "ctrl a, s, c, v, x, y, and del are not working well all the time."
+
+    Measured, every one of them, in nine states. Seventeen of eighteen already worked; the one that
+    did not was Ctrl+C / Ctrl+X with the caret in the Find box, which handed the key to the browser
+    to copy an empty selection in a search field. A Ctrl+C with no text under it is about the
+    drawing, wherever the caret is. (6ma)
+    """
+    await T.reset()
+    await T.pick("box")
+    await T.drag(T.at(0.20, 0.22), T.at(0.38, 0.32))
+    await T.key("Escape")
+    n0 = (await T.state())["nA"]
+    # put the caret in Find the way a hand does: press /
+    await T.key("/")
+    inFind = await T.page.evaluate(
+        """()=>document.activeElement&&document.activeElement.id==='findInput'""")
+    if not inFind:
+        return False, {"why": "pressing / did not reach the Find box"}
+    await T.page.keyboard.down("Control")
+    await T.page.keyboard.press("c")
+    await T.page.keyboard.up("Control")
+    await T.page.wait_for_timeout(350)
+    clip = await T.page.evaluate("()=>(typeof clipCount==='function')?clipCount():null")
+    await T.key("Escape")
+    await T.page.keyboard.down("Control")
+    await T.page.keyboard.press("v")
+    await T.page.keyboard.up("Control")
+    await T.page.wait_for_timeout(500)
+    n1 = (await T.state())["nA"]
+    return (clip == 1 and n1 == n0 + 1), {"clip after copy": clip, "before": n0, "after": n1}
+
+
+@case("Snapshot and Insert photo wear the marks Ced sent")
+async def t_icons(T):
+    """Ced sent a bracketed camera for Snapshot and a file for Insert photo, then: "just use the logo
+    is sent no need to replicate it." Both are traced from the artwork itself rather than drawn by
+    eye — see tools/traceicon.py and tools/composeicon.py. (6mb)
+    """
+    await T.show_ribbon()
+    got = await T.page.evaluate(
+        """()=>{ const snap=document.querySelector('#toolbar .tool[data-mode="snapshot"]');
+                 const photo=document.getElementById('photoBtn');
+                 /* the custom property resolves to the url itself, so the DRAWING is read back out
+                    of it: a traced outline is hundreds of points, a glyph was one character */
+                 const read=b=>{ if(!b)return null;
+                   const cs=getComputedStyle(b);
+                   const gi=(cs.getPropertyValue('--gi')||'').trim();
+                   let d='';
+                   try{ const m=decodeURIComponent(gi).match(/ d="([^"]+)"/); if(m)d=m[1]; }catch(e){}
+                   return {ico:b.classList.contains('ico'), img:b.classList.contains('icoimg'),
+                           isSvg:/data:image\/svg\+xml/.test(gi),
+                           glyph:(cs.getPropertyValue('--g')||'').trim(),
+                           pts:(d.match(/[ML]/g)||[]).length, len:d.length,
+                           head:d.slice(0,40), tail:d.slice(-40)}; };
+                 return {snapshot:read(snap), photo:read(photo)}; }""")
+    sn, ph = got.get("snapshot"), got.get("photo")
+    ok = bool(sn and ph
+              and sn["img"] and ph["img"] and sn["isSvg"] and ph["isSvg"]
+              and not sn["glyph"] and not ph["glyph"]     # no character behind them any more
+              and sn["pts"] > 60 and ph["pts"] > 60       # traced, not drawn with a handful of lines
+              # the two SHARE their opening: the insert-photo mark is the snapshot's own
+              # bracket frame with Ced's folder where the camera was, so what must differ is what
+              # sits inside the frame, which is the tail of the path and its length.
+              and sn["head"] == ph["head"]
+              and sn["len"] != ph["len"] and sn["pts"] != ph["pts"])
+    return ok, got
 
 
 async def main():

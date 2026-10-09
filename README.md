@@ -113,7 +113,7 @@ npm test                 # tools.py       — 214 checks, every tool and every r
 npm run test:wysiwyg     # wysiwyg.py     — what is drawn vs what is exported, within 1.5pt
 npm run test:text        # textparity.py  — the same for type
 npm run test:stamp       # stampparity.py — the COP stamp, as a block, at five times the size
-npm run test:behave      # behave.py      — forty-five behaviours, by real mouse and keyboard
+npm run test:behave      # behave.py      — fifty-one behaviours, by real mouse and keyboard
 npm run test:keys        # keys.py        — every shortcut, on a real keyboard
 npm run test:reopen      # reopen.py      — export with photos, reopen, are they still there
 ```
