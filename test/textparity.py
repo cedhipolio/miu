@@ -93,6 +93,19 @@ MARKS = """
   /* the same two points of rasterisation as the headings above: one renderer hints the outlines and
      the other does not, and at 72dpi that is where the edge pixel falls. */
   put("bundled",id,2.5);
+  /* 6n1 — the two families added for a job, each measured the same way the first bundled one is.
+     CARLITO carries Calibri's metrics, so the proof that matters is that the file agrees with the
+     screen about the width of a line of it; ARCHIVO NARROW is condensed, and a condensed face is
+     exactly where a renderer that quietly substituted a normal-width cousin would show up as a run
+     that overflows its box in the file and not on screen. */
+  id=maAddTextBox(0,0.55,0.56,"CALIBRI METRICS 123",0.34,0.05);
+  { const a=S.annos.find(z=>z.id===id); a.col="#fa3237"; a.size=13; a.bgNone=true;
+    a.align="left"; a.font="carlito"; a.text="CALIBRI METRICS 123"; }
+  put("carlito",id,2.5);
+  id=maAddTextBox(0,0.55,0.72,"CONDENSED VALUE 123",0.34,0.05);
+  { const a=S.annos.find(z=>z.id===id); a.col="#fa3237"; a.size=13; a.bgNone=true;
+    a.align="left"; a.font="narrow"; a.text="CONDENSED VALUE 123"; }
+  put("narrow",id,2.5);
   /* 6i7 — A LENGTH'S READING, TURNED. Ced: "text box of lengths are also moving down in the render."
      The reading is placed against the run it measures, and on a sloped run it is turned with it, so
      this is the case that catches a box whose height the two renderers disagree about. */

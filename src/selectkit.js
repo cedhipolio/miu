@@ -758,10 +758,31 @@ function skEditor(a,opts){
                    "holds a line to 45° and a box to a square. "+
                    "Shift-scroll resizes the brush; Ctrl-scroll zooms.";
   head.appendChild(ttl); head.appendChild(hint);
-  /* 6gk — two rows: the tools and the selection on one, the settings and the view on the other, so
-     the wand and Invert sit side by side and nothing wraps into a puzzle */
-  const bar=document.createElement("div"); bar.className="sk-edbar";
-  const bar2=document.createElement("div"); bar2.className="sk-edbar sk-edbar2";
+  /* ==================================================================================================
+     6n3 — THE TOOLS GO DOWN THE LEFT, AND THE SLIDERS GO TO THE FLOOR.
+     Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
+     management. make the tools be separated by the same separator on the ribbon, but horizontally.
+     put the free and border undo and redo on the lowest part of the tab in edit photo."
+
+     The card is a landscape box — `100vw - 48px` by `100vh - 48px` — and a picture is usually taller
+     than it is wide once it is fitted, so the room that was going spare was at the SIDES and the room
+     being spent was at the top. Two rows of buttons across the top took about 96px of height off
+     every picture in the editor; the same buttons down the left take 150px of width, which the stage
+     was not using. Measured on the fixture at 1512x923: the stage goes from 1414x561 to 1256x657,
+     so the fit of a tall capture improves by about a sixth.
+
+     Four pieces now, and each one is named for where it is rather than for what it holds:
+       `rail`  — every tool button, in a column, groups divided by the ribbon's dotted rule turned
+                 horizontal (its `border-bottom` where the top bars used `border-right`);
+       `ctx`   — the settings for the tool in the hand: the brush, the tolerance, the ink, the shape,
+                 what the next wand click does. These are not tools and do not belong in the rail;
+       `base`  — the lowest strip: the two long sliders, then Undo and Redo, as asked;
+       `foot`  — Cancel and Save, which were already there.
+     ================================================================================================== */
+  const body=document.createElement("div"); body.className="sk-edbody";
+  const bar=document.createElement("div"); bar.className="sk-edbar sk-edrail";
+  const bar2=document.createElement("div"); bar2.className="sk-edbar sk-edctx";
+  const bar3=document.createElement("div"); bar3.className="sk-edbar sk-edbase";
   const stage=document.createElement("div"); stage.className="sk-edstage";
   const box=document.createElement("div"); box.className="sk-edwrap";
   const cv=document.createElement("canvas"); cv.className="sk-edcanvas";
@@ -800,10 +821,18 @@ function skEditor(a,opts){
   const bgclip=document.createElement("div"); bgclip.className="sk-edbgclip";
   const bgpat=document.createElement("div"); bgpat.className="sk-edbg";
   bgclip.appendChild(bgpat); box.appendChild(bgclip);
-  box.appendChild(cv); box.appendChild(ov); box.appendChild(ring); stage.appendChild(box);
+  /* 6mu — THE BRUSH RING IS NOT PART OF THE PICTURE. Ced: "bring the size preview of the edit photo
+     tool always in front of ui", with a shot of the ring sliced in half at the top of the canvas.
+     It lived inside `.sk-edwrap`, which sits in a stage that scrolls (`overflow:auto`), so the half
+     of the ring that reached past the picture's edge was clipped away — exactly when it matters,
+     because the edge is where you are being careful. It hangs off the editor's own full-window
+     overlay now and is positioned in client coordinates, so it is never clipped by anything and is
+     over every part of the editor. */
+  box.appendChild(cv); box.appendChild(ov); stage.appendChild(box); card.appendChild(ring);
   const foot=document.createElement("div"); foot.className="sk-edfoot";
-  card.appendChild(head); card.appendChild(bar); card.appendChild(bar2);
-  card.appendChild(stage); card.appendChild(foot);
+  body.appendChild(bar); body.appendChild(stage);
+  card.appendChild(head); card.appendChild(body);
+  card.appendChild(bar2); card.appendChild(bar3); card.appendChild(foot);
   wrap.appendChild(card); document.body.appendChild(wrap);
 
   /* 6gs — the picture AS IT WAS FIRST MADE, kept on the mark so it is saved and reopened with it.
@@ -832,6 +861,12 @@ function skEditor(a,opts){
   SK_ED=wrap;
 }
 function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
+  /* 6n0 — the sliders' row, found rather than passed: this is the far side of the same function
+     boundary the chequer is found across in 6m0, and a fourteenth positional argument for one
+     element is worse than a lookup. Not guarded — if the row is missing the sliders have nowhere to
+     go, and a lookup that fails should be visible rather than quietly putting them back on the
+     tool row. */
+  const bar3=bar2.parentElement.querySelector(".sk-edbase");
   opts=opts||{};
   let tool="erase", brush=18, tol=40, fillCol="#ffffff", done=false;
   /* =================================================================================================
@@ -856,6 +891,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   let drawCol="#fa3237";                 /* the ribbon's redline red, which is what this is for */
   let drawFill=false;                    /* a box or an ellipse: outline, or painted through */
   let drawPt=1.5;                        /* the weight, in POINTS of the mark as it sits on the sheet */
+  let brushBox=false;                    /* 6n4 — the nib: round by default, square when asked for */
   let shapeSelEll=false;                 /* 6la — the shaped selection: a rectangle, or an ellipse */
   let autoMinLen=0;                      /* 6la — 0 means "take it from the picture's size" */
   /* 6gs — Ced: "add should also be the default magic wand setting." Selecting one space and then
@@ -946,7 +982,12 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      through one of them — and the free turn sets `_inFreeTurn` so its own push does not end the run it
      is part of. One flag and two lines, rather than a hook on each of eleven operations. */
   let _inFreeTurn=false;
+  /* 6mh — the pixels the border slider works from, and the same gate keeps them honest: ANY other
+     operation goes through `push`, and anything that changes the picture makes the slider's starting
+     point stale. Its own push is the one exception, so a drag can go up and back down again. */
+  let bordBase=null, bordOrig=null, bordHold=false, bordPushed=false;
   const push=()=>{ try{ if(!_inFreeTurn)endSpinRun();
+                        if(!bordHold){ bordBase=null; bordOrig=null; bordPushed=false; }
                         undo.push(shot()); while(undo.length>HIST_MAX)undo.shift();
                          redo.length=0; syncHist(); }catch(e){} };
   const pushGeo=()=>{ try{ if(!_inFreeTurn)endSpinRun();
@@ -995,10 +1036,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     b.appendChild(gl); b.appendChild(tx);
     b.onclick=fn; where.appendChild(b); return b;
   };
-  const group=where=>{ const d=document.createElement("div"); d.className="sk-edgrp";
+  /* 6n3 — a group may say how it packs: the rail stacks its buttons in a column, but the five zoom
+     controls are small and square and read better as a little block of them, so that one group asks
+     for `sk-edwrapgrp` and wraps. */
+  const group=(where,extra)=>{ const d=document.createElement("div");
+                       d.className="sk-edgrp"+(extra?(" "+extra):"");
                        where.appendChild(d); return d; };
 
-  /* ---- row one: the brushes, then the selection, then the fill ---- */
+  /* ---- the rail, top to bottom: the brushes, the pens, the selection, the fill ---- */
   const gTools=group(bar), gDraw=group(bar), gSel=group(bar), gFill=group(bar);
   let bErase,bRestore,bWipe,bWand,bLasso,bCrop,bCropApply,bInv,bClr,bFill,bErase2,bUndo,bRedo,
       countTag,zoomTag;
@@ -1132,9 +1177,28 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      It is not. It is a crowd detector and three set operations; `skAutoSolid` carries the reasoning
      and the measurements. One press, one undo step, and it says what it took away.
      ================================================================================================= */
-  mkb(gTools,"Auto","✺",()=>{
-    const res=skAutoSolid(g,cv,autoMinLen);
+  /* 6mg — AND THE PRESS IS ANSWERED BEFORE THE WORK STARTS. Even at a fifth of a second this is the
+     one button that goes away and thinks, and at eleven and a half seconds — see `skAutoSolid` — it
+     was indistinguishable from a button that does nothing. The bar says what it is doing and the
+     window is given a frame to paint that before the thread is taken. */
+  let autoBusy=false;
+  mkb(gTools,"Auto","✺",async()=>{
+    if(autoBusy)return;
+    autoBusy=true;
+    setStatus("Auto: reading the picture…");
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r())));
+    let res=null;
+    try{ res=skAutoSolid(g,cv,autoMinLen); } finally { autoBusy=false; }
     if(!res){ setStatus("Nothing to work on — the picture is empty.",true); return; }
+    /* 6mg — it looked and did not find one. The picture is left exactly as it was: there is nothing
+       to undo and nothing to discover afterwards. */
+    if(res.noSubject){
+      setStatus("Auto found no subject in this picture — only "+res.keptPct+"% of the ink hangs "+
+                "together as one closed shape, so taking the rest would have taken the picture. "+
+                "Nothing was changed. Auto is for a drawing with a shape in it; for a region of "+
+                "text or a loose sketch, use Erase line or the Wand.",true);
+      return;
+    }
     push();
     if(res.nStray)skMaskErase(g,cv,res.stray);
     skMaskFill(g,cv,res.solid,fillCol);
@@ -1190,15 +1254,38 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   col.oninput=()=>{ fillCol=col.value; };
   gFill.appendChild(col);
 
-  /* ---- row two: the brush or the tolerance, the view, and the history ---- */
-  const gSet=group(bar2), gView=group(bar2), gHist=group(bar2);
+  /* ---- 6n3 — the settings go to the context strip, the view to the rail, the history to the floor */
+  const gSet=group(bar2), gView=group(bar3,"sk-edview"), gHist=group(bar3,"sk-edhist");
   const brushRow=document.createElement("label"); brushRow.className="sk-edsize";
   brushRow.appendChild(document.createTextNode("Brush"));
   const rng=document.createElement("input");
   rng.type="range"; rng.min="2"; rng.max="120"; rng.step="1"; rng.value=String(brush);
   const num=document.createElement("span"); num.className="sk-ednum"; num.textContent=brush+"px";
   rng.oninput=()=>{ brush=+rng.value; num.textContent=brush+"px"; sizeRing(); };
-  brushRow.appendChild(rng); brushRow.appendChild(num); gSet.appendChild(brushRow);
+  brushRow.appendChild(rng); brushRow.appendChild(num);
+  /* 6n4 — the nib, beside the size, because it is the other half of the same answer to "how wide and
+     what shape is this". Two chips rather than one toggle, so which nib is in hand is readable
+     without hovering — the same pattern the Shape row beside it already uses. */
+  /* 6n4 — its OWN class, not `sk-edmodes`. Reusing the wand-mode row's class put two more
+     chips inside every `.sk-edmodes .sk-edm` lookup, and two cases in `tools.py` read the
+     wand's chips exactly that way — the nib is a different question and gets a different
+     class, dressed the same. */
+  const nibRow=document.createElement("span"); nibRow.className="sk-ednib";
+  [["Round","●",false],["Box","■",true]].forEach(([lbl,gl,sq])=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="sk-edm"+((sq===brushBox)?" on":"");
+    b.textContent=gl+" "+lbl;
+    b.title=sq?("A SQUARE nib — it clears right up to a straight edge and into a corner, "+
+                "which a round one cannot")
+              :"A round nib — the default";
+    b.onclick=()=>{ brushBox=sq;
+      [...nibRow.querySelectorAll(".sk-edm")].forEach(z=>
+        z.classList.toggle("on", /box/i.test(z.textContent)===brushBox));
+      sizeRing(); };
+    nibRow.appendChild(b);
+  });
+  brushRow.appendChild(nibRow);
+  gSet.appendChild(brushRow);
   const tolRow=document.createElement("label"); tolRow.className="sk-edsize";
   tolRow.appendChild(document.createTextNode("Tolerance"));
   const trng=document.createElement("input");
@@ -1300,7 +1387,12 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      photo." A quarter at a time, losslessly — the pixels are redrawn with the sides swapped rather
      than resampled, so four turns are exactly what you started with. It is an editing step like any
      other: Undo puts it back, and the mark on the sheet takes the new proportions when you save. */
-  const gTurn=group(bar2);
+  const gTurn=group(bar);              /* 6n3 — the turns and the crop are tools: they go in the rail */
+  /* 6n3 — the zoom block is NOT in the rail. Measured at 1512x923 with it there: 907px of content
+     in 636px of rail, so Crop, Apply and the zoom itself sat below the fold and had to be scrolled
+     to — a reachability regression on the top bars, which showed everything at once. Zoom is a view
+     control rather than a tool, so it goes to the base strip beside Undo and Redo, which brings the
+     rail to 620px and inside the room there is. */
   const turnPic=dir=>{
     pushGeo();
     const r=skRotCanvas(cv,dir);
@@ -1605,7 +1697,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   ["change","pointerup","pointercancel"].forEach(ev=>
     frng.addEventListener(ev,()=>{ setTimeout(commitFree,0); }));
   freeRow.appendChild(frng); freeRow.appendChild(fnum);
-  gTurn.appendChild(freeRow);
+  bar3.appendChild(freeRow);                      /* 6n0 — on the sliders' own row, not the tool row */
   /* 6iq — and the grips on the picture drive the same turn. The drag previews with the same CSS
      rotation the slider uses, and the release commits it through `turnFree`, so there is one
      definition of what turning the picture means. */
@@ -1639,31 +1731,108 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       window.addEventListener("pointercancel",up);
     });
   });
-  /* 6j4 — A BORDER ON THE PICTURE. Ced: "in edit photos, add a border increase to make the photo
-     pop." This is the MARK's own frame, not pixels painted into the picture — so it stays crisp at any
-     zoom, exports as a frame rather than as a smudge of ink, and can be taken off again by dragging it
-     back to none. The stage shows it live in the picture's own colour. */
+  /* =================================================================================================
+     6mh — THE BORDER IS THE SHAPE'S OWN EDGE, NOT A BOX ROUND IT.
+     Ced: "fix the border tool on edit photo. it should not add a border to the box, it must be border
+     on the transparent shape. so if the transparent shape is final, toggling and adding border should
+     make the edge or outline of the shape thicker."
+
+     6j4 made this the MARK's stroke — `a.sw` — which draws a rectangle round the picture's bounding
+     box. On a photo that is a frame and reads as one; on everything this editor is actually used for
+     it is wrong, because by the time you reach this slider the picture is a cut-out: Auto, the wand
+     and the eraser have taken the paper away and what is left is a silhouette with a shape to it. A
+     rectangle round that silhouette's box is not its outline.
+
+     So the border is pixels now, and it is the silhouette grown and laid BEHIND the picture. Grown by
+     v and painted underneath, every edge of the shape gains v pixels of the picture's own ink — which
+     is exactly "make the edge or outline of the shape thicker" — and nothing is painted over, so a
+     drawing's own detail survives it. One pass of `skMaskGrow`, which is separable, so it is live
+     under the hand on a two-megapixel capture.
+
+     It is reversible the way a slider should be: `bordBase` holds the pixels the drag started from,
+     so going back to 0 removes it, and ANY other operation clears that base through `push` — after
+     which the outline is simply part of the picture, as it must be, because the picture is pixels.
+
+     A picture with no transparent edge — a photograph, opaque to its own corners — has no silhouette
+     to outline and this does nothing to it. That is the honest answer rather than a frame drawn in
+     its place, and the tooltip says so.
+     ================================================================================================= */
   {
     const row=document.createElement("label"); row.className="sk-edsize sk-edborder";
     row.appendChild(document.createTextNode("Border"));
     const brng=document.createElement("input");
-    brng.type="range"; brng.min="0"; brng.max="12"; brng.step="0.5";
-    brng.value=String((a&&a.sw!=null)?a.sw:0);
-    brng.title="A frame round the picture, in points — 0 for none";
+    brng.type="range"; brng.min="0"; brng.max="12"; brng.step="1";
+    brng.value="0";
+    brng.title="Thicken the edge of the cut-out shape, in pixels — 0 for none. "+
+               "A picture with no transparent edge has no outline to thicken.";
     const bnum=document.createElement("span"); bnum.className="sk-ednum";
-    const paintBorder=()=>{
-      const v=+brng.value;
-      bnum.textContent=v?(v+"pt"):"none";
-      try{
-        box.style.setProperty("--sk-bord",(v*Math.max(0.4,zoom))+"px");
-        box.classList.toggle("bordered",v>0);
-        box.style.setProperty("--sk-bordcol",(a&&a.col)||"#fa3237");
-      }catch(e){}
+    let bordRaf=0, bordWant=0;
+    /* 6mk — AND THE PICTURE MAKES ROOM FOR IT. Ced, with a cut-out whose outline is sliced flat
+       along the top and left: "the border seems to get cut. make the space in edit photo expand as
+       border expand too."
+
+       An outline grown by v needs v pixels of paper outside the shape, and a cut-out made with Auto
+       or the wand has none: `skMaskGrow` stops at the canvas edge, so wherever the shape touched it
+       the outline was clipped to nothing. The canvas grows by v on every side instead, exactly as
+       the free turn's canvas grows to hold the corners — and for the same reason, "because a pixel
+       is still worth the same amount of paper", the mark on the sheet grows with it. That part
+       needs no code: `put` already recomputes `nw`/`nh` from `cv.width * pxW` about the mark's
+       centre whenever the canvas has changed size, which is how Crop and the free turn work too.
+
+       `bordBase` and `bordOrig` are the UNPADDED pixels, so the size is rebuilt from scratch at
+       every step of the drag: v=0 returns the canvas to exactly the size it started at, and going
+       6 → 3 does not leave the padding from 6 behind. */
+    const bordDraw=()=>{
+      bordRaf=0;
+      const v=Math.round(bordWant);
+      if(!bordBase){
+        bordBase=g.getImageData(0,0,cv.width,cv.height);
+        if(orig){ bordOrig=document.createElement("canvas");
+                  bordOrig.width=orig.width; bordOrig.height=orig.height;
+                  try{ bordOrig.getContext("2d").drawImage(orig,0,0); }catch(e){} }
+      }
+      /* v+1, not v: at exactly v the outline is complete but lands flush on the new edge, which is
+         the thing that reads as cut. One pixel of paper outside it and it cannot. */
+      const pad=v?v+1:0;
+      const W=bordBase.width+2*pad, H=bordBase.height+2*pad;
+      if(cv.width!==W||cv.height!==H){ cv.width=ov.width=W; cv.height=ov.height=H; }
+      g.clearRect(0,0,W,H);
+      g.putImageData(bordBase,pad,pad);
+      if(v>0){
+        try{
+          const m=skInkMask(g,cv,40);
+          skMaskFill(g,cv,skMaskGrow(m,W,H,v),(a&&a.col)||"#fa3237");
+        }catch(e){}
+      }
+      /* the untouched copy Restore brushes from is padded the same way, or a restored stroke would
+         land v pixels off once the picture has grown */
+      if(bordOrig&&orig){
+        const ow=bordOrig.width+2*pad, oh=bordOrig.height+2*pad;
+        orig.width=ow; orig.height=oh;
+        const oc=orig.getContext("2d"); oc.clearRect(0,0,ow,oh);
+        try{ oc.drawImage(bordOrig,pad,pad); }catch(e){}
+      }
+      mask=null; picChanged=true;
+      try{ skMaskShow(ov,mask); }catch(e){}
+      try{ applyZoom(); }catch(e){}
+      try{ dropBox(); }catch(e){}
     };
-    brng.oninput=()=>{ if(a)a.sw=+brng.value; paintBorder(); picChanged=true; };
-    brng.onchange=()=>{ try{ layoutAnnos(); autosave(); }catch(e){} };
-    paintBorder();
-    row.appendChild(brng); row.appendChild(bnum); gTurn.appendChild(row);
+    brng.oninput=()=>{
+      const v=+brng.value;
+      bnum.textContent=v?(v+"px"):"none";
+      /* one undo step per drag, taken before the first pixel moves */
+      if(!bordPushed){ bordHold=true; push(); bordHold=false; bordPushed=true; }
+      bordWant=v;
+      /* 6mh — one repaint per frame however fast the slider is dragged: the grow is cheap but it is
+         not free, and a range input fires far oftener than the screen redraws. */
+      if(!bordRaf)bordRaf=requestAnimationFrame(bordDraw);
+    };
+    brng.onchange=()=>{ bordPushed=false; try{ autosave(); }catch(e){} };
+    bnum.textContent="none";
+    /* 6n0/6n3 — the border row joins the free one on the base strip, and Undo/Redo are moved to the
+       end of it so the floor reads left to right as Ced asked for it: free, border, undo, redo. */
+    row.appendChild(brng); row.appendChild(bnum); bar3.appendChild(row);
+    bar3.appendChild(gHist); bar3.appendChild(gView);
   }
   /* 6m1 — one button for both halves of the gesture: it opens the box on the picture's edges, and
      once the box is up it is the Apply. Enter does the same from the keyboard, Escape puts it away. */
@@ -1741,6 +1910,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const px=(tool==="pen")?drawPx():brush;
     const d=Math.max(4,px*zoom);
     ring.style.width=d+"px"; ring.style.height=d+"px";
+    /* 6n4 — and the cursor is the nib's own shape, because the whole point of the ring is that it
+       shows you what the sweep will take before you take it. The pen always draws round. */
+    ring.classList.toggle("box", brushBox && tool!=="pen");
   }
   /* 6im — THE RING RIDES A FRAME, NOT AN EVENT. Ced: "the responsiveness of this is too slow, make it
      be more responsive and seamless." A pointer can fire 120 events a second and each one was writing
@@ -1755,8 +1927,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   };
   function moveRing(ev){
     if(!ring||ring.hidden)return;
-    const r=boxNow();
-    _ringAt=[ev.clientX-r.left, ev.clientY-r.top];
+    /* 6mu — client coordinates, because the ring is on the overlay now and not in the picture */
+    _ringAt=[ev.clientX, ev.clientY];
     if(!_ringRaf)_ringRaf=requestAnimationFrame(flushRing);
     if(!ring.classList.contains("on"))ring.classList.add("on");
   }
@@ -1784,7 +1956,30 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      so a brush stroke is a STROKED PATH from the last point to this one — round cap, round join —
      with a dab at the head so a single click still works. Coalesced events are used where the browser
      has them, which is what keeps a fast sweep smooth rather than polygonal. */
+  /* ==================================================================================================
+     6n4 — A BOX BRUSH. Ced: "add a box brush on edit photo."
+
+     A round nib cannot clear up to a straight edge: sweeping along the bottom of a title block leaves
+     a scalloped margin, and getting into a corner means taking a bite out of what you are keeping.
+     A square nib does both, which is why every raster editor has one.
+
+     It is the NIB, not a tool: Erase, Restore and the pen all paint through `strokePath`, so one
+     switch here changes all three and there is no second definition to drift. The square sweep is
+     drawn as a union of squares stepped along the segment rather than as a stroked line, because a
+     stroked line with a square cap is a rectangle PERPENDICULAR to the direction — correct along the
+     axes and too narrow on a diagonal, which is exactly where a gap would open. The step is a third
+     of the nib, so consecutive squares overlap by two thirds; the cap keeps a flung pointer from
+     asking for ten thousand of them, and at that point the squares are still touching because the
+     distance they are spread over is what made the count large.
+     ================================================================================================== */
   const strokePath=(ctx,x0,y0,x1,y1,w)=>{
+    if(brushBox){
+      const d=Math.hypot(x1-x0,y1-y0);
+      const n=Math.max(1,Math.min(2048,Math.ceil(d/Math.max(1,w/3))));
+      for(let i=0;i<=n;i++){ const t=i/n;
+        ctx.fillRect(x0+(x1-x0)*t-w/2, y0+(y1-y0)*t-w/2, w, w); }
+      return;
+    }
     ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
     ctx.beginPath(); ctx.arc(x1,y1,w/2,0,Math.PI*2); ctx.fill();
@@ -2691,6 +2886,64 @@ function skShapeMask(cv,x0,y0,x1,y1,ell){
    and on the test picture at 2.48 against 4.0, while everything belonging to either subject was at
    the median or above. 0.70 of the median sits in the gap on both. */
 const AUTO_LONE_DENS=0.17, AUTO_LONE_THIN=0.70;
+/* ====================================================================================================
+   6mg — AUTO LOOKS AT A SMALLER COPY, AND IT HAS TO. Ced: "auto mode in edit picture is completely
+   broken."
+
+   Every rule in `skAutoPass` is written in units of the picture's own stroke — the comment above says
+   so, deliberately, "so the same rule holds on a capture of the same drawing at twice the
+   resolution". The work, however, was not: `skThin` and `skPruneEnds` both walk the whole picture
+   once per unit of `minLen`, and `minLen` is itself a fraction of the picture, so the cost goes up
+   with the CUBE of the capture's size. Nobody noticed because every test picture is 560x760.
+
+   A real snapshot is not. Dragged over the equipment layout of a 45-page mount analysis the capture
+   is 1410x1369 — 1,930,290 pixels, two and a half times the test picture — and Auto profiled like
+   this, with every function on the path timed:
+
+       skAutoPass    3 calls   8,256 ms
+         skPruneEnds 3 calls   5,401 ms      ← 65% of it, 114 passes over 1.9M pixels each
+         skThin      3 calls   1,595 ms
+         skMaskHoles 6 calls     459 ms
+         skDensity   3 calls     224 ms
+       the whole press                       11,622 ms, on the one thread, with nothing on screen
+
+   Eleven and a half seconds in which the window does not move and the picture does not change. That
+   is indistinguishable from a button that does nothing, which is what it looked like.
+
+   So the ANALYSIS runs on a copy no bigger than this, and the answer is brought back to full size at
+   the end. A cell of the small copy is ink if ANY of the pixels under it is: a leader is the thinnest
+   thing in the picture and the one the whole method turns on, so it must survive the shrink even at
+   the cost of thickening it. Nothing else changes, because nothing else was ever measured in pixels.
+   420k is one quarter of this capture and still four times the resolution every threshold was
+   measured at. */
+const AUTO_MAX_PX=420000;
+/* The small copy is generous — a cell is ink if any pixel under it is — so blowing the answer back
+   up overshoots the subject by up to `f` pixels all round. `skAutoSolid` trims that off against the
+   real ink before anything is erased or filled, which is the same last step the full-size version
+   always did. */
+function skMaskShrink(m,w,h,f){
+  const ws=Math.max(1,Math.ceil(w/f)), hs=Math.max(1,Math.ceil(h/f));
+  const o=new Uint8Array(ws*hs);
+  for(let y=0;y<h;y++){
+    const r=(y/f)|0, row=y*w, orow=r*ws;
+    for(let x=0;x<w;x++)if(m[row+x])o[orow+((x/f)|0)]=1;
+  }
+  return {m:o,w:ws,h:hs};
+}
+function skMaskBlow(m,ws,hs,f,w,h){
+  const o=new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    const srow=(((y/f)|0))*ws, orow=y*w;
+    for(let x=0;x<w;x++)if(m[srow+((x/f)|0)])o[orow+x]=1;
+  }
+  return o;
+}
+/* 6mg — AND IT NEVER TAKES THE PICTURE AWAY. Measured on a snapshot of a page of text — not what Auto
+   is for, but a thing a hand does by accident — the three passes removed 98.7% of the ink and left a
+   blank stage. There is no picture for which "almost all of it was stray" is the right answer: it
+   means no subject was found, and saying so is more use than an empty canvas and an undo to discover.
+   Half is well clear of the worst honest case measured (the mount drawing keeps 80%). */
+const AUTO_MIN_KEEP=0.50;
 function skAutoSolid(g,cv,minLen,rounds){
   const w=cv.width,h=cv.height;
   const ink0=skInkMask(g,cv,40);
@@ -2708,26 +2961,44 @@ function skAutoSolid(g,cv,minLen,rounds){
 
      It stops when a pass finds nothing, so a clean picture costs one pass and nothing else.
      ================================================================================================= */
-  const ink=Uint8Array.from(ink0);
-  const strayAll=new Uint8Array(w*h);
-  let solid=null, nClosed=0, nEnds=0, R=1;
-  const L=minLen>0?minLen:Math.max(12,Math.round(Math.min(w,h)/12));
+  /* 6mg — the copy the passes run on. f=1 on anything already small enough, which is every picture
+     the suite uses, so their numbers are the numbers they always were. */
+  const f=Math.max(1,Math.ceil(Math.sqrt((w*h)/AUTO_MAX_PX)));
+  const small=(f>1)?skMaskShrink(ink0,w,h,f):{m:Uint8Array.from(ink0),w:w,h:h};
+  const sw=small.w, sh=small.h;
+  const ink=small.m;
+  let body=null, nClosed=0, nEnds=0, R=1;
+  const L=(minLen>0?minLen:Math.max(12,Math.round(Math.min(w,h)/12)))/f;
   const N=Math.max(1,Math.min(6,rounds>0?rounds:3));
   for(let pass=0;pass<N;pass++){
-    const got=skAutoPass(ink,w,h,L);
+    const got=skAutoPass(ink,sw,sh,Math.max(4,Math.round(L)));
     if(!got)break;
-    solid=got.solid; nClosed=got.nClosed; nEnds=got.nEnds; R=got.stroke;
+    body=got.solid; nClosed=got.nClosed; nEnds=got.nEnds; R=got.stroke*f;
     let took=0;
     for(let p=0;p<ink.length;p++){
-      if(ink[p]&&!got.solid[p]){ ink[p]=0; strayAll[p]=1; took++; }
+      if(ink[p]&&!got.solid[p]){ ink[p]=0; took++; }
     }
     if(!took)break;
   }
-  if(!solid)return null;
-  let nStray=0; for(let p=0;p<strayAll.length;p++)nStray+=strayAll[p];
-  let nFill=0;
-  for(let p=0;p<solid.length;p++)if(solid[p]&&!ink[p])nFill++;
-  return {stray:strayAll, solid, nStray, nFill, nInk:total, minLen:L, stroke:R, nClosed, nEnds};
+  if(!body)return null;
+  /* back to full size, and trimmed against the real ink — which is the same closing step the pass
+     itself does, and the reason blowing a coarse answer up does not leave a halo round the subject */
+  const bodyUp=(f>1)?skMaskBlow(body,sw,sh,f,w,h):body;
+  const solid=skMaskHoles((function(){
+    const k=new Uint8Array(w*h);
+    for(let p=0;p<ink0.length;p++)k[p]=(ink0[p]&&bodyUp[p])?1:0;
+    return k;
+  })(),w,h);
+  const strayAll=new Uint8Array(w*h);
+  let nStray=0, nKeep=0, nFill=0;
+  for(let p=0;p<ink0.length;p++){
+    if(!ink0[p]){ if(solid[p])nFill++; continue; }
+    if(solid[p])nKeep++; else { strayAll[p]=1; nStray++; }
+  }
+  /* 6mg — a pass that would take most of the picture has not found a subject */
+  if(nKeep<total*AUTO_MIN_KEEP)
+    return {noSubject:true, nInk:total, keptPct:Math.round(100*nKeep/total)};
+  return {stray:strayAll, solid, nStray, nFill, nInk:total, minLen:L*f, stroke:R, nClosed, nEnds};
 }
 
 /* One look: find the shape by the lines with no end, and return the region it encloses. */

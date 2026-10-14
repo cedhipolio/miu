@@ -3627,12 +3627,15 @@ async def main():
                  window.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,pointerId:43}));
                  await nap(300);
                  const ask=document.querySelector(".sb-ask");
-                 const out={ markAsked:!!ask,
-                             title:ask?ask.querySelector(".sb-asktitle").textContent:"" };
-                 if(ask){ const inp=ask.querySelector(".sb-askinput");
-                   inp.value="37"; inp.dispatchEvent(new Event("input",{bubbles:true}));
-                   [...ask.querySelectorAll("button")].find(b=>/Turn/i.test(b.textContent))
-                     .dispatchEvent(new MouseEvent("click",{bubbles:true}));
+                 /* 6ms/6mt — the angle is typed in a chip ON THE MARK now, not in a dialog over
+                    the sheet. This asked for `.sb-ask` until v53; what it asks for is the same
+                    thing one layer up — the press offers somewhere to type, and typing turns it. */
+                 const chip=document.querySelector(".angchip");
+                 const out={ markAsked:!!chip, modalShown:!!ask,
+                             title:chip?"chip":"" };
+                 if(chip){ const inp=chip.querySelector("input");
+                   inp.value="37";
+                   inp.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));
                    await nap(350); }
                  out.markRot=a.rot;
                  /* a STROKE's grip asks too, and turns the run about its middle */
@@ -3651,18 +3654,19 @@ async def main():
                     pointerId:45,button:0}));
                  window.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,pointerId:45}));
                  await nap(300);
-                 const ask2=document.querySelector(".sb-ask");
-                 out.strokeAsked=!!ask2;
-                 if(ask2){ const inp=ask2.querySelector(".sb-askinput");
-                   inp.value="45"; inp.dispatchEvent(new Event("input",{bubbles:true}));
-                   [...ask2.querySelectorAll("button")].find(b=>/Turn/i.test(b.textContent))
-                     .dispatchEvent(new MouseEvent("click",{bubbles:true}));
+                 const chip2=document.querySelector(".angchip");
+                 out.strokeAsked=!!chip2;
+                 out.strokeModal=!!document.querySelector(".sb-ask");
+                 if(chip2){ const inp=chip2.querySelector("input");
+                   inp.value="45";
+                   inp.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));
                    await nap(350); }
                  const a1=ang(L);
                  out.strokeTurned=+(Math.abs(a1-a0)*180/Math.PI).toFixed(1);
                  selectLine(null);
                  res(out); })""")
         ok = (ang["markAsked"] and abs(ang["markRot"] - 37) < 0.01
+              and not ang["modalShown"] and not ang["strokeModal"]   # 6mt — no dialog, for either
               and ang["strokeAsked"] and abs(ang["strokeTurned"] - 45) < 1.5)
         results.append({"tool": "Rotate can be typed", "ok": ok, "why": json.dumps(ang)})
 
@@ -4086,7 +4090,16 @@ async def main():
                  /* and the writer builds a real font dictionary for it */
                  out.bold=tpFaceToggle("jost","bold");
                  res(out); })""")
-        ok = (face["installed"] and len(face["bundled"]) == 4 and face["chip"]
+        # 6n1 — this counted four, which was the whole bundled list when Jost was the only family
+        # that travelled. There are three now, so what the number was standing for is said directly:
+        # every bundled family carries ALL FOUR CUTS, which is the property `tpFaceToggle` depends on
+        # — without a bold italic, asking for italic on a bold mark silently drops the bold (6gf).
+        fams = {}
+        for k in face["bundled"]:
+            fams[k.replace("bolditalic", "").replace("bold", "").replace("ital", "")] = 1
+        full = all(sum(1 for k in face["bundled"] if k.startswith(f)) == 4 for f in fams)
+        face["families"] = sorted(fams)
+        ok = (face["installed"] and full and len(fams) == 3 and face["chip"]
               and "MA Jost" in face["css"] and face["differs"] and face["bold"] == "jostbold")
         results.append({"tool": "A face travels with the file", "ok": ok, "why": json.dumps(face)})
 
@@ -5229,15 +5242,26 @@ async def main():
                            clientY:b.top+b.height*(y/cv.height),
                            bubbles:true,pointerId:57,button:0}; };
                  const a=S.annos.find(z=>z.maKind==="snapshot");
-                 /* --- 6j4: the border slider frames the picture, and is the mark's own stroke --- */
+                 /* --- 6mh: the border thickens the SHAPE's edge, and leaves the box alone ---
+                    This asked for the old rule until v50: `a.sw` set to 6, a `bordered` class on the
+                    stage and a `--sk-bord` in pixels — a frame round the picture's bounding box.
+                    Ced: "it should not add a border to the box, it must be border on the transparent
+                    shape." So what is asked now is what the slider is for: the picture's own ink
+                    grows, the mark's stroke is untouched, and 0 puts every pixel back. */
+                 const inkNow=()=>{ const d=g.getImageData(0,0,cv.width,cv.height).data;
+                   let n=0; for(let i=3;i<d.length;i+=4)if(d[i]>40)n++; return n; };
                  const brng=m.querySelector(".sk-edborder input[type=range]");
                  out.hasBorder=!!brng;
-                 if(brng){ brng.value="6"; brng.dispatchEvent(new Event("input",{bubbles:true}));
-                   out.borderSw=a.sw;
-                   out.bordered=box.classList.contains("bordered");
-                   out.bordPx=parseFloat(getComputedStyle(box).getPropertyValue("--sk-bord"))||0;
+                 if(brng){ const sw0=a.sw, ink0=inkNow();
+                   brng.value="6"; brng.dispatchEvent(new Event("input",{bubbles:true}));
+                   await nap(220);
+                   out.inkGrew=+(inkNow()/Math.max(1,ink0)).toFixed(2);
+                   out.swUntouched=(a.sw===sw0);
+                   out.boxUnframed=!box.classList.contains("bordered");
                    brng.value="0"; brng.dispatchEvent(new Event("input",{bubbles:true}));
-                   out.borderOff=!box.classList.contains("bordered"); }
+                   brng.dispatchEvent(new Event("change",{bubbles:true}));
+                   await nap(220);
+                   out.borderOff=(Math.abs(inkNow()-ink0)<=2); }
                  /* --- a pixel with ink in it, on the band about to be swept --- */
                  const row=Math.round(cv.height*0.5);
                  let mid=[Math.round(cv.width*0.5),row];
@@ -5289,8 +5313,8 @@ async def main():
                  out.closed=!document.querySelector(".sk-edit");
                  res(out); })""")
         same32 = lambda p, q: p[3] == q[3] and (p[3] == 0 or (abs(p[0]-q[0]) < 6 and abs(p[1]-q[1]) < 6))
-        ok = (ed32["hasBorder"] and ed32["borderSw"] == 6 and ed32["bordered"]
-              and ed32["bordPx"] > 0 and ed32["borderOff"]
+        ok = (ed32["hasBorder"] and ed32["inkGrew"] > 1.4 and ed32["swUntouched"]
+              and ed32["boxUnframed"] and ed32["borderOff"]
               and ed32["was"][3] > 200 and ed32["offEdge"][3] == 0
               and same32(ed32["restoredAll"], ed32["was"])
               and ed32["undoOn"] and same32(ed32["afterUndo"], ed32["offEdge"])

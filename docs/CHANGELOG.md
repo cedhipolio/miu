@@ -4,7 +4,463 @@ Per-version working notes — what was asked for, what was measured, why each fi
 is — live alongside this repo in the **MIU (Mark It Up)** Claude project as `claude/vNN-notes.md`,
 back to v11. This file is the summary.
 
-Versions are numbered by release, not semver: v48 is the forty-eighth published build.
+Versions are numbered by release, not semver: v55 is the fifty-fifth published build.
+
+---
+
+## v55
+
+**The grips put right, and the picture editor rebuilt the way Ced drew it.**
+
+**A grip is 22px, centred, and shrinks only to clear the corners** (`6n2`). Ced, at v54's answer:
+*"the top and bottom are off centered. the left and right are now too small or too big"* · *"i did
+not say to make the length bigger. also, if it was smaller, make the side dragger at least like the
+corner dragger."* Both faults were mine, in `6mx`:
+
+- it read *"adjust the length"* as *the box's own height less the corners*, which gave a **288px
+  pill on a 314px shape** and **6px on a 19px note** — measured, both;
+- and it added `right:0` to a rule that already said `left:calc(50% - 11px)`. An absolutely
+  positioned box with a definite left, right and width is over-constrained, and auto margins settle
+  it by splitting the slack **equally** — which put a 22px pill's centre **13.8px** off on the small
+  box and **71.5px** off on the big one. Exactly where the screenshots showed it.
+
+22px is the length again, for every grip on every box. It shrinks only as far as it must to clear
+the corners, and never below the corner's own 11px. On the 19px note that leaves **5.8% of a corner**
+covered — the two things asked for cannot both hold in the 9px the corners leave, and the 11px floor
+is the one Ced chose. On anything larger, **0%**.
+
+**The tools run down the left of the picture** (`6n3`). Ced: *"instead of a top bar, make the tool
+bar on the left of the photo ui for better space management. make the tools be separated by the same
+separator on the ribbon, but horizontally."* The card is landscape and a fitted picture is usually
+tall, so the room going spare was at the sides and the room being spent was at the top. The
+separator is the ribbon's own — 1px dotted — turned from `border-right` to `border-bottom`.
+
+Measured at 1512x923: the stage goes from **under 60% of the card's height to 75%**. The first
+attempt put the zoom block in the rail too, which came to **907px of tools in 636px of rail** — Crop
+and Apply below the fold, and a click aimed at one lands on the backdrop and closes the editor. Zoom
+is a view control, not a tool, so it went to the base strip; with that and a 22px button the rail is
+**622px in 622px**, and nothing is out of reach.
+
+**Free, border, undo and redo at the foot** (`6n3`). As asked. The sliders come out at **409px and
+390px** on the fixture, against 94 before v54.
+
+**A box nib** (`6n4`). Ced: *"add a box brush on edit photo."* A round nib cannot clear up to a
+straight edge or into a corner — it leaves a scalloped margin and a quarter-disc of ink. The nib is
+a property of the brush, not a tool of its own, so Erase, Restore and the pen all take it through
+the one `strokePath`. A square sweep is drawn as a union of squares stepped along the segment rather
+than as a stroked line, because a stroked line with a square cap is a rectangle *perpendicular* to
+the direction — right along the axes and too narrow on a diagonal, which is where a gap would open.
+Measured on one dab in its own 40x40 square: the round nib takes **78.1%** of it (a disc is pi/4,
+78.5%) and leaves all four corners; the square takes **100%** and all four corners. The brush ring
+becomes a square to match.
+
+---
+
+## v54
+
+**A zoom that stays sharp and lands where the pointer is, and the small-box grips untangled.**
+
+**A zoom started off the paper holds the paper's nearest edge** (`6mv`). Ced: *"the tool just goes
+back to the pdf like this if zoomed in from the free space. if zooming on the right most, just zoom
+of the right most of the pdf."* The anchor was the pointer, converted to a fraction of the page —
+and a pointer out in the grey gives a fraction outside 0..1, which the restore then honoured, so the
+sheet flew off to wherever that fraction pointed. The fraction is clamped to the page now, so a zoom
+from the grey on the right holds the page's right edge. Measured, pointer at x=1414 and eight
+notches in: v53 left the right edge at 1098, 502px the wrong side of the pointer; v54 lands it at
+1414, 0px off.
+
+**A zoom stays sharp while the hand is still moving** (`6mw`). Ced: *"zooming in it gets
+pixelated"*, and then, after I offered to oversample: *"I want to measure how long the blur actually
+lasts before picking that factor."* So it was measured first. After the last notch the page is sharp
+again in **76-90 ms** — imperceptible; the softness is entirely *during* the gesture, where it
+reached 1.30x at three notches and 2.00x ten notches in. The canvas is now drawn at up to 1.6x the
+displayed size (`OVER_WANT`), capped at 6 MPx per page so a large sheet steps the factor down rather
+than eating memory. Render cost across factors on the same three sheets was flat — x1.0 5/18/43 ms,
+x1.6 11/21/34 ms, x2.0 15/14/21 ms — at 4.2 MB to 10.7 MB per page. Softness after: **1.00** at
+three notches (was 1.30), 1.25 ten in (was 2.00).
+
+**A side grip never covers a corner grip, however small the box** (`6mx`). Ced: *"when the textbox
+is so small, adjust the length of the left or right dragger and dont overlay or cover the four
+corner circle draggers to not make it hard for the user to click those draggers."* The side pills
+ran the full edge, so on a one-line note they sat on top of all four corners. They are inset by
+26px now — `max(6px, 100% - 26px)` — which on a 19px-tall text box leaves a 6px pill clear of every
+corner, and on a 238px shape still gives a 212px grip.
+
+**Ctrl on a text box's top or corner grows it about the middle** (`6mz`). Ced: *"using ctrl on text
+box if dragged on the top or bottom and corners should just adjust the text on both sides, same idea
+of the ctrl used to adjust the left and right."* v51's rule read the modifier on the two side
+handles only: a top handle moved its own edge, and a corner fell through to the shape rule and
+squared the note off — measured, a Ctrl-drag of `se` left a 280x280 square. One rule now: on a text
+box Ctrl means the centre stays put, and whichever axes the handle touches grow by twice the drag.
+
+**The settle no longer lays everything out twice** (`6my`). Dropping the oversample in pushed
+`layoutAnnos` to 18 calls against a budget of 16 — not the raster's doing: `resharpenSoon`'s tail
+still ran `layoutAnnos()` and `drawAllLines()`, redundant since v51 moved both into `rezoomPages`.
+One definition, not two: 10 calls. The picture editor's brush ring moved from the translucent
+`.sk-edit` to the opaque card in the same change, after a sweep slowed to 36.7 ms against a 33 ms
+budget with the ring repainting the backdrop every frame.
+
+**The free and border sliders get a row of their own** (`6mx`, then `6n0`). Ced, three times:
+*"have the free and border slider longer to have more control in adjustments."* 6mx took every pixel
+the tool row had left — 94px, with 96 the last width that keeps that row to one line and 104
+wrapping it. The row was the limit, so the sliders came off it: they share a row of their own under
+the two tool rows, each track taking what the card has left. Measured in the editor at its own
+width: **623px and 603px** against 94 — a tenth of a degree a pixel on the free turn, where it was
+two thirds of a degree, and 50 pixels a step on the border, where it was eight.
+
+**Two more faces that travel with the file** (`6n1`). Ced: *"add more font options."* **Carlito**,
+which is metric-compatible with Calibri — the face the Word and Excel paperwork around these reports
+is set in, so a note written here and a line pasted out of the tracker are the same document — and
+**Archivo Narrow**, condensed, for the one thing a redliner runs out of: room. A value that will not
+fit a table cell in Arial fits in this at the same point size; measured, a line of it is 0.85 of
+Arial's width. Both are OFL, both ship all four cuts, and both are subset and embedded exactly as
+Jost is, so the screen and the exported file are the same font rather than cousins —
+`textparity.py` holds them to it: with the export falling back to Helvetica the two marks land 13pt
+and 11pt out, and with the faces embedded they are inside the 2.5pt allowance the bundled Jost case
+has. The artifact grows 1.67 MB to 1.81 MB.
+
+---
+
+## v53
+
+**The selection chrome, as Ced drew it — and the grey frame v52 put on every shape taken off again.**
+
+**A shape with no border wears none** (`6mr`). Ced: *"for some reason, shapes with no border are
+showing with grey borders in preview."* My own doing in v52: the light frame on an empty text box
+was written as `.ed:empty`, and a shape's interior is a contenteditable box too — so every
+unlabelled box and ellipse on the sheet wore a frame it had never been given. It hangs off
+`[data-ph]` now, which is the same condition the prompt itself is written under, so the frame and
+the words it frames cannot disagree about whose box they belong to.
+
+**A new text box is the width of its own prompt** (`6mr`). Ced, after v52's 100pt: *"text box is
+again too big, make it one layer and just the width of 'Add text here'."* 100pt was a guess at eight
+characters. It is measured now — what *Add text here* comes to in the face and size the box is about
+to be written in — so it stays right at 6pt and at 24pt. 77px against a 71px prompt on the fixture.
+
+**Delete and drag on the right, the turn alone in the middle** (`6mr`, `6mt`). Ced: *"make the x
+button on the right side of the selected item as well not on upper right"*, then *"rotate should
+always be in the middle of the selected item. so make the x button and drag button both on the
+right and make the rotate solo so its always in the middle"* · *"apply this to all selectable
+items."* 6lw centred the ROW of controls, which put the turn in the middle of the row rather than of
+the mark — and since a picture has three and everything else has two, the turn moved sideways
+depending on what you had selected. It is under the mark's own centre at every count now, measured
+at 0px off on a box, an ellipse and a picture alike.
+
+**The angle is typed on the mark** (`6ms`, `6mt`). Ced, with a screenshot of the dialog: *"this is
+still showing when rotate was clicked, change it to what i asked to be."* 6hb opened a dialog in the
+middle of the window over a dimmed sheet — for two keystrokes, it covers the drawing you are turning
+the mark against and moves your eye away from the mark and back. It is a chip beside the mark now,
+below the turn and drag grips (*"make the input for degree lower than the drag and rotate icon"*),
+focused and selected, Enter turns and Escape leaves. A stroke and a multi-selection get the same
+chip, because *"apply this to all selectable items"*.
+
+**A smaller grow, on every grip there is** (`6mr`). Ced: *"the enlargement of dragger should not be
+too big, just enough to make the user know the part they're using."* 1.45 was a lurch — an 11px grip
+jumping to 16px moves further than the hand does; an eighth reads as an answer without looking like
+a change. And it covers a stroke's point grips too, which needed `transform-box:fill-box` to scale
+about themselves rather than about the page's origin.
+
+**The brush ring is never clipped** (`6mu`). Ced: *"bring the size preview of the edit photo tool
+always in front of ui"*, with the ring sliced in half at the top of the canvas. It lived inside the
+picture's own wrapper, in a stage that scrolls, so the half that reached past the edge was cut away
+— exactly where it matters, because the edge is where you are being careful about what a sweep will
+take. It is on the editor's full-window overlay now, in client coordinates.
+
+**Suite:** 214 checks in `tools.py`, **66** behaviours in `behave.py`, 19 wysiwyg marks, 10 text
+marks, 4 stamp lines, every shortcut, photo reopen, scenarios v19/v14/v12. Four cases proved to fail
+with their own fix reverted. **Three existing cases were corrected rather than relaxed**, and each
+says in its own words what changed and why: `tools.py`'s *Rotate can be typed* asked for the dialog;
+`behave.py`'s *Edit on the left, the turn in the middle, drag on the right* asked for 6lw's row; and
+the first cut of the new border case demanded `0px` of border on a shape — which is wrong, because a
+shape's border IS its own stroke. The thrash case also caught `6mp`'s cursor pass costing 14.7ms
+against its 14ms budget on a 40-mark page; gated on there being a rotation to correct, it is 7.9ms.
+
+---
+
+## v52
+
+**A document on screen in half the time, a quieter view while you are adjusting a mark, and a text
+box that starts the size of what you are about to type.**
+
+**A redlined document opens in 1.7 seconds instead of 3.2** (`6mm`). Ced: *"viewing pdf should also
+be seamless."* Timed from the click to the first page, 1,660ms of the 3.2 seconds was
+`detachOurRedlines` — the step that lifts our own marks out of a file before pdf.js sees it — and
+taken apart it was two lines of that function and nothing else:
+
+```
+PDFDocument.load, as it was called      404 ms      parseSpeed Fastest   115 ms
+save({useObjectStreams:false})        1,164 ms      save()               218 ms   (and 4.2MB, not 4.8)
+recoverPhotoSrcs                          1 ms
+the annotation walk                       0 ms
+```
+
+Both settings bought a property nothing downstream uses: the slow parse is a recovery path whose
+failure case is already handled by leaving the file alone, and those bytes are never a file — they
+go to pdf.js and to the export, both of which read object streams. The export's own save is
+untouched, because that output *is* a file.
+
+**The standing pictures stay out of the way** (`6ml`). v51 rendered one per page in a row with
+nothing but a rAF between, and pdf.js cannot yield: measured over the six seconds after an open,
+**25 long tasks and 4,065ms of them**, in the window where you are scrolling to find your sheet. Two
+changes. A page that has been drawn already has a better picture than the base — shrinking its sharp
+canvas is **0.2ms** against 6–46ms for a second render — so every page you visit now pays nothing.
+What is left waits for a gap: nothing renders within 650ms of a wheel, a scroll, a pointer or a key,
+and an idle slot is asked for where the browser offers one. Measured after: a zoom in that window
+has **no long task at all**, a scroll has one of 54ms.
+
+**A quieter view while you adjust** (`6mn`). Ced: *"the preview should look like this to not cover
+the space being edited and then once the user is not holding the text anymore, go back to the
+previous view"* · *"this adjusting view should apply to all items, redlines, shapes, lines on the
+ui."* A selected mark wears eight grips, a ✕ and four handles, and every one of them sits where the
+edge you are dragging is. For as long as the pointer is down they all go — for a mark, a group and a
+stroke alike — and the mark is backed by a wash the size of its own box. `box-shadow: inset` is the
+one way to lay a colour over a mark's ground and under its ink, so the words stay their own red on
+the wash instead of going through it. One switch, and the release is written once: every gesture
+calls `adjustBegin()`, and the pointer coming up anywhere ends it.
+
+**A new text box is one line, and says what it is for** (`6mo`). Ced: *"don't make the text box big,
+just one layer and small width first."* A click gave 150pt by two lines of leading — a block on the
+drawing before a character had been typed. One line and 100pt now, with a grey *Add text here* and a
+light frame that are a CSS `:empty` state, so they are never in `a.text`, never in the export, and
+gone with the first letter. A box dragged out still keeps exactly the size it was dragged.
+
+**A turned mark's cursors point where its edges now are** (`6mp`). Ced: *"the changes in cursor
+especially when adjusting corners of a rotated item should not be based on the previous orientation.
+it should be based on the current orientation."* The grips carry their cursor in CSS, which is a
+statement about the unrotated box. The right one is the grip's own bearing plus the mark's rotation,
+to the nearest 45°, folded into a half turn — set in `setMarkSpin`, which is the one place a mark's
+rotation is applied.
+
+**The rotation arm, and a grip that answers** (`6mq`). Ced: *"the blue line in the middle when
+rotating should be solid and firm"* — it was a 1.5px hairline at 95% against a drawing made of
+hairlines; it is 3px, opaque and round-capped, so the dashed grey cross reads as the reference and
+the teal line as the hand. And *"when hovering to the dragger of the edit, make the holder get big a
+little"*: every grip grows a little under the pointer, on a transform, suppressed while adjusting
+with the rest of the furniture.
+
+**Suite:** 214 checks in `tools.py`, **62** behaviours in `behave.py`, 19 wysiwyg marks, 10 text
+marks, 4 stamp lines, every shortcut, photo reopen, scenarios v19/v14/v12. Three new cases, each
+proved to fail with its own fix reverted (a two-line 180px box with no prompt; eleven grips still
+showing mid-drag and no wash; all eight cursors unchanged at 45°). A fourth, timing the open, was
+written and then **removed**: it passed on the reverted build too, because the behave fixture is
+five pages where the measurement was taken on forty-five — a case that cannot fail is worse than no
+case, and `reopen.py` already guards what the faster parse could actually break.
+
+---
+
+## v51
+
+**v49 traded the redlines' sharpness for a zoom saving that was never worth having, and v50 shipped
+it twice.**
+
+**The marks are drawn at every notch again, not stretched to it** (`6mi`). Ced, three times: *"the
+loading of pdf is too slow"* → *"zooming in and out is making the preview of the redlines all messed
+up"* → *"zooming in it gets pixelated."* v49's `6mc` gave the marks and strokes the same CSS stretch
+6gr gives the canvas. Their geometry was right and v50's new case proved it — measured through a
+whole ten-notch gesture, the worst any mark moved was **0.0013 of the page** — which is why "still
+messy" was not a positioning bug and why v50 looked for one and found only the run-SVG double scale.
+What Ced was looking at is that a redline drawn at one size and scaled by CSS is a stretched bitmap
+of itself for the length of the gesture: text goes soft, a 2pt rule comes out at 2.2pt, every edge is
+resampled.
+
+It was not even a saving worth having, and the numbers were in the v49 notes all along:
+`layoutAnnos` is **8.2ms at 167 marks** against **61–204ms for one page of pdf.js**, and a notch is
+already frame-bounded because the wheel handler batches to one `setZoom` per rAF. v48's nineteen
+calls came from `resharpenSoon` and from renders landing mid-gesture, never from the one call a
+notch makes. Drawing them every notch, on the 167-mark construction set:
+
+```
+                       v48 (19 calls)   v49/v50 (stretched)   v51 (drawn, once a frame)
+p95 frame                  61.6 ms            24.9 ms                 30.8 ms
+worst frame                85.7 ms            68.3 ms                 48.7 ms
+long tasks               8 (max 90ms)      1 (max 61ms)                  0
+```
+
+Six milliseconds of p95 for crisp redlines at every instant — and a *better* worst frame and no long
+tasks at all. The canvas still softens: that is the part that costs.
+
+**Every page keeps a picture, so none is ever blank** (`6mj`). Ced: *"make the pdf file preload and
+then retain that in the viewer so there will be no lag."* 6m7's queue and the observer's
+`unloadPage` are both right and have the same consequence — at any moment most of the document has
+no pixels, so scrolling to page 30 asks pdf.js for it from nothing and scrolling back pays again.
+The sharp canvases cannot be kept (an 11×17 sheet at 3.5× is 12 megapixels, 48MB, and a site package
+is forty-five of them), so a **second, small, fixed picture** is rendered once per page and kept for
+the life of the document: a 360,000-pixel budget a page, CSS-stretched to the page box at all times,
+sitting under the sharp canvas. Measured on a 45-page site package: every page has one about **ten
+seconds** after the open, **62MB** in all, and a scroll from end to end and back shows **no blank
+page at all** where v50 showed two. The preload runs only while the sharp queue is idle, nearest page
+first, so it can never be the reason the page under your eyes is late.
+
+**The border has room to be a border** (`6mk`). Ced, with a cut-out whose outline is sliced flat
+along the top and left: *"the border seems to get cut. make the space in edit photo expand as border
+expand too."* An outline grown by *v* needs *v* pixels of paper outside the shape and a cut-out has
+none — `skMaskGrow` stops at the canvas edge. The canvas grows by *v*+1 on every side instead,
+exactly as the free turn's canvas grows to hold its corners, and the mark on the sheet grows with it
+with no new code: `put` already recomputes `nw`/`nh` about the mark's centre whenever the canvas has
+changed size. Measured on a shape drawn hard against the corner: 380×320 → 394×334 at 6, with **zero
+ink left on the very edge**, and 0 returns the canvas to exactly 380×320 and the ink to exactly what
+it was.
+
+**Suite:** 214 checks in `tools.py`, **59** behaviours in `behave.py`, 19 wysiwyg marks, 10 text
+marks, 4 stamp lines, every shortcut, photo reopen, scenarios v19/v14/v12. Three cases proved to
+fail with their own fix reverted (3 layers stretched and a 71.5px gap between a mark's painted and
+laid-out width; 0 standing pictures and 2 blank pages; the canvas unchanged with 537 ink pixels on
+its edge). v50's *"A zoom does not rebuild the redlines on every notch"* asked for the rule this
+version reverses, so it is now *"A zoom keeps the redlines crisp, never a stretched copy of
+themselves"* and says why it changed.
+
+---
+
+## v50
+
+**Four things Ced sent a video of, and three of them were measured on the wrong picture.**
+
+**Every stroke slid off its drawing during a zoom** (`6me`). Ced: *"zooming in and out is making the
+preview of the redlines all messed up."* v49's `6mc` stretches the three mark layers with a
+`scale()` while the canvas is soft, and stretches the page's stroke SVGs the same way. But a page
+owns only two `svg.draw` elements; every OTHER one — `svg.draw.run`, which is where ungrouped
+strokes are actually drawn, plus `.ingroup` and `.selui` — lives *inside* one of the layers being
+scaled, and a bare `querySelectorAll("svg.draw")` caught them all. Measured on one notch of
+ctrl-wheel, as a fraction of the page: the run came back **1.1006 wide against a page of 1.0**. Ten
+percent too big, which on a sheet of redlines is every mark at once. `:scope >` is the whole fix.
+
+**A page that has not been drawn says so** (`6mf`). Ced: *"add loading animation on pages not yet
+loaded."* 6m7's queue is right to make a page wait its turn and had no way of saying so — an undrawn
+page is a white rectangle, which is what a blank sheet looks like. It is a ring on the page's own
+`::after`, shown by `.page.near:not([data-rendered="1"])`: `near` is the IntersectionObserver's own
+crossing at 1400px, `data-rendered` is the renderer's, so there is no flag to maintain and nothing
+that can be late. Two wrong versions got there first and `behave.py` caught both:
+
+- a `data-loading` flag written when the queue took a page — **two pages on screen, blank and
+  silent**, because the observer fires on a crossing and the sweep is debounced;
+- a gradient sweeping across the sheet, which animates `background-position` and so **repaints a
+  734x950 element every frame**. It cost enough to change what the renderer did: 21 of 21 page
+  renders that a fast scroll should have dropped went through instead, and a ten-notch zoom laid the
+  marks out nine times rather than three. The 30px ring animates nothing but `transform`, and both
+  of those cases went green again with the animation still on.
+
+**Auto froze the window for eleven and a half seconds, and on the wrong picture erased it**
+(`6mg`). Ced: *"auto mode in edit picture is completely broken."* Every threshold in the pass is
+written in units of the picture's own stroke — deliberately, so the same rule holds at any
+resolution — but the work was not: `skThin` and `skPruneEnds` each walk the whole picture once per
+unit of `minLen`, and `minLen` is a fraction of the picture, so the cost goes up with the **cube** of
+the capture. Nobody noticed because every test picture is 560x760. A snapshot dragged over the
+equipment layout of a real 45-page mount analysis is 1410x1369:
+
+```
+skAutoPass    3 calls   8,256 ms
+  skPruneEnds 3 calls   5,401 ms      65% of it
+  skThin      3 calls   1,595 ms
+  skMaskHoles 6 calls     459 ms
+the whole press        11,622 ms, on the one thread, with nothing on screen
+```
+
+The analysis now runs on a copy of at most 420k pixels and the answer is trimmed back against the
+real ink, which also takes the halo off the fill. **11,622ms → 686ms**, and the subject keeps 92% of
+its ink where it kept 80%. Two more: a press is answered before the thread is taken, so the bar says
+what it is doing instead of going dead; and a pass that would keep less than half the ink has not
+found a subject, so the picture is left exactly as it was and Auto says why — measured on a snapshot
+of a page of text, which went from **98.7% of its ink removed** to not one pixel touched.
+
+**Border outlines the shape, not the box** (`6mh`). Ced: *"it should not add a border to the box, it
+must be border on the transparent shape. so if the transparent shape is final, toggling and adding
+border should make the edge or outline of the shape thicker."* 6j4 made it the mark's own stroke,
+which draws a rectangle round the picture's bounding box — right for a photograph and wrong for
+everything this editor is used on, because by the time you reach the slider the picture is a cut-out
+with a shape to it. It is pixels now: the silhouette grown by *v* and laid behind the picture, so
+every edge gains *v* of the picture's own ink and nothing is painted over. `bordBase` holds the
+pixels the drag started from, so dragging back to none returns every pixel, and any other operation
+clears that base through `push` — after which the outline is part of the picture, as it must be.
+
+**Suite:** 214 checks in `tools.py`, **58** behaviours in `behave.py` (four new, each proved to fail
+with its own fix reverted: the run SVG at 1.1006 of the page; two silent blank pages; Auto keeping
+13% of the ink; the border leaving the picture untouched and framing the box instead), 19 wysiwyg
+marks, 10 text marks, 4 stamp lines, every shortcut, photo reopen, scenarios v19/v14/v12.
+`tools.py`'s border case asked for the old rule and now asks for the new one.
+
+---
+
+## v49
+
+**The sheet could not be scrolled to, and the redlines were rebuilt on every notch of the wheel.**
+
+**Scrolling sideways moved nothing** (`6md`). Ced: *"the pdf is again not in the middle."* This was
+not a centring error of a few pixels. `syncPageCol` positioned the reading column by comparing a
+`getBoundingClientRect()` reading — which is in the VIEWPORT — against the `margin-left` it then
+wrote, which is a DOCUMENT length. Scroll right by N and the rect comes back N smaller, so the margin
+written is N bigger and the column is pushed right by exactly as far as you have just scrolled.
+Measured on a 15-page 11x17 set at 168% in a 1900px window:
+
+```
+scrollX   0 → marginLeft   4px      sheet 78..2134      scrollWidth 2290
+scrollX 156 → marginLeft 160px      sheet 78..2134      scrollWidth 2290
+scrollX 300 → marginLeft 304px      sheet 78..2134      scrollWidth 2434
+```
+
+The sheet never moves. 234px of it sat off the right of the window and there was **no scroll position
+that would show it** — the document just got longer as you tried. Both readings are taken in document
+space now, which is the space the margin lives in. The column then stays put and the document scrolls
+under the fixed rails, the way a canvas is supposed to.
+
+**And a zoom that names no place centres the sheet** (`6md`). Ced: *"always make the the pdf center
+unless zoomed in in specific place."* A ctrl-wheel names a place and the point under the pointer is
+still held exactly. The + and − buttons, a fit and a keyboard zoom name none, so the sheet goes to the
+middle of the window — which, once it is wider than the window, means equal amounts of it off each
+side instead of flush against the left rail. Measured across the zoom range on that same sheet:
+
+```
+          sheet in the window          off-centre   cut left   cut right   left edge
+ 50%      644..1256                       0 px          0           0      reachable
+100%      338..1562                       0 px          0           0      reachable
+120%      216..1684                       0 px          0           0      reachable
+168%      -78..1978                     0.2 px         78          78      reachable
+250%     -580..2480                       0 px        580         580      reachable
+```
+
+Before the fix the same sweep read 104px, 312px and 569px off centre as the sheet outgrew the window.
+
+**A zoom no longer rebuilds every redline on every notch** (`6mc`). Ced: *"the loading of pdf is too
+slow"*, on a construction set carrying 167 redlines — and v48's profile had missed it entirely by
+measuring a document with nothing drawn on it. 6gr's rule is that a zoom shows at once and sharpens
+after: the canvas keeps its pixels and is stretched by CSS until the zooming stops. That was applied
+to the canvas and the text layer and never to the marks, so `rezoomPages` called `layoutAnnos()` on
+every notch, and `layoutAnnos` empties the layer and rebuilds every mark's element from scratch:
+
+```
+layoutAnnos, against the number of marks
+  0 marks   0.2 ms      167 marks   8.2 ms
+ 40 marks   6.0 ms      400 marks  14.4 ms
+```
+
+The mark layers and the stroke SVGs are stretched with the canvas instead — a `scale()` on the layer
+and a `viewBox` on the SVG, both free, both in the compositor — and laid out once when the zoom
+settles. Whichever function does the real work takes its own stand-in off, in the one place it is
+done: `layoutAnnos` clears the transform, `drawPageLines` clears the viewBox. A ten-notch ctrl-wheel
+gesture on the 167-redline sheet, measured against v48 on the same machine in the same session:
+
+```
+                    v48                     v49
+layoutAnnos         16 calls  31.5 ms        7 calls  14.8 ms
+drawAllLines        16 calls  37.3 ms        7 calls  25.9 ms
+drawPageLines       22 calls  57.1 ms       14 calls  44.3 ms
+resizePageBoxes     29 calls  19.4 ms       20 calls  13.5 ms
+p95 frame               61.6 ms                 24.9 ms
+worst frame             85.7 ms                 68.3 ms
+long tasks           8 (longest 90 ms)       1 (longest 61 ms)
+```
+
+A fast scroll on the same sheet goes from one long task to none.
+
+**Three new behaviours in the suite**, each proved to fail with its own fix reverted: a sideways
+scroll moves the sheet and reaches its right edge (with the reverted build the sheet moved 0px while
+the window scrolled 3120px and the document grew from 2800 to 5920); a zoom with no place named puts
+the sheet in the middle (reverted: 569px out); and a zoom leaves the marks where they belong having
+rebuilt them about once rather than once a notch (reverted: 12). `scenario_v12`'s zoom probe claimed
+the sheet's left edge is on screen at every zoom, which has stopped being the rule now that the
+overflow is split evenly — it reports `centredInWindow` instead, and says why.
+
+**Suite:** 214 checks in `tools.py`, **54** behaviours in `behave.py`, 19 wysiwyg marks, 10 text
+marks, 4 stamp lines, every shortcut, photo reopen, and scenarios v19/v14/v12 — all green.
 
 ---
 

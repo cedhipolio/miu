@@ -401,12 +401,47 @@ function maAddShape(pi,shape,nx,ny,nw,nh,opts){
    place from the print; this is the other half — somewhere on a drawing with nothing underneath it,
    sized by what you type, on whatever ground the Text tool's Fill colour is set to. White hides what
    is under it; set it to the page colour, or to nothing, and the drawing reads through. */
+/* 6mr — how wide "Add text here" is, in points, at a given size. One canvas, measured once per
+   size, because a new text box is a thing you make over and over. */
+const MA_PROMPT="Add text here";
+let _promptCv=null, _promptAt={};
+function maPromptPt(size){
+  const k=Math.round((+size||8)*4)/4;
+  if(_promptAt[k]!=null)return _promptAt[k];
+  let w=0;
+  try{
+    if(!_promptCv)_promptCv=document.createElement("canvas").getContext("2d");
+    _promptCv.font=k+"px Arial, Helvetica, sans-serif";
+    w=_promptCv.measureText(MA_PROMPT).width;         /* px at 1px=1pt, which is what pt.x wants */
+  }catch(e){}
+  if(!(w>0))w=k*6.6;                                  /* the same string, measured, if canvas fails */
+  _promptAt[k]=Math.max(20,w+5);                      /* 5pt so the caret is not on the frame */
+  return _promptAt[k];
+}
 function maAddTextBox(pi,x,y,text,wNorm,hNorm){
   const st=maStyleNow();
   const pt=maPt(pi);
-  /* a click rather than a drag gives a box big enough to see and to grab a handle on */
-  let w=(wNorm!=null&&wNorm!==0)?wNorm:pt.x(150);
-  let h=(hNorm!=null&&hNorm!==0)?hNorm:pt.y(st.size*1.22*2+4);
+  /* ==================================================================================================
+     6mo — A NEW TEXT BOX IS ONE LINE, AND NARROW. Ced: "make text typing like this, and don't make
+     the text box big, just one layer and small width first", with a picture of a slim single-line
+     box carrying a caret.
+
+     A click gave 150pt by TWO lines of leading plus 4 — a block, before a single character had been
+     typed, and on a drawing that is a block sitting over whatever you were about to label. What a
+     redline note actually is, nearly always, is one short line. So one line is what it is born as,
+     and it grows down as it wraps, which `growTextBox` has done since 6m4. 100pt is about eight
+     characters at the sizes this tool writes at — enough to aim at and to grab a handle on, and
+     small enough that the sheet underneath is still visible while you type.
+
+     A box DRAGGED out keeps exactly the size it was dragged; 6m5 made that promise and this does not
+     touch it. This is the click. */
+  /* 6mr — AND THE WIDTH IS THE PROMPT'S WIDTH. Ced, after v52's 100pt: "text box is again too big,
+     make it one layer and just the width of 'Add text here'." 100pt was a guess at eight characters;
+     the prompt is thirteen and the right answer is not a guess at all — it is what the prompt
+     measures at the size this box is about to be written in. Measured rather than tabulated, so it
+     stays right at 6pt and at 24pt and in whatever face the ribbon is set to. */
+  let w=(wNorm!=null&&wNorm!==0)?wNorm:pt.x(maPromptPt(st.size));
+  let h=(hNorm!=null&&hNorm!==0)?hNorm:pt.y(st.size*1.22+4);
   if(w<0){ x+=w; w=-w; }
   if(h<0){ y+=h; h=-h; }
   w=Math.max(pt.x(24),w); h=Math.max(pt.y(st.size*1.22+3),h);

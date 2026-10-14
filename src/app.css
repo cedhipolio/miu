@@ -1096,7 +1096,53 @@
 
   #pages{display:flex;flex-direction:column;align-items:center;gap:4px;scroll-behavior:auto}
   .page{position:relative;background:#fff;box-shadow:0 3px 24px var(--page-shadow);border-radius:calc(var(--radius) * 0.5);scroll-margin-top:96px;touch-action:none;margin-bottom:3px}
-  .page canvas.pdf{display:block;border-radius:calc(var(--radius) * 0.5)}
+  .page canvas.pdf{display:block;border-radius:calc(var(--radius) * 0.5);position:relative;z-index:1}
+  /* 6mj — the standing picture. Rendered once per page at a small fixed scale and kept for the life
+     of the document, it is always exactly the size of the page box, so it needs no resizing on a
+     zoom and no bookkeeping: `width:100%` is the whole of it. It sits under the sharp canvas and
+     above nothing, so a page is never blank — not while it waits its turn, not after the observer
+     has thrown its sharp canvas away, and not during a zoom. */
+  .page canvas.pdfbase{position:absolute;left:0;top:0;width:100%;height:100%;
+    border-radius:calc(var(--radius) * 0.5);z-index:0;pointer-events:none}
+  /* ================================================================================================
+     6mf — A PAGE THAT IS COMING LOOKS LIKE A PAGE THAT IS COMING.
+     Ced: "add loading animation on pages not yet loaded."
+
+     A page with no picture in it yet is a page that is still coming — `data-rendered` is "1" only
+     once the canvas is in the tree — and `near` is the IntersectionObserver's own crossing, set
+     1400px outside the window. So there is no flag to maintain and nothing that can be late: the
+     first cut of this DID keep a flag, written when the render queue took a page, and `behave.py`
+     caught it at once with two pages on screen, blank, and saying nothing, because the observer
+     fires on a crossing and the sweep is debounced. Both halves are the page's own pseudo-elements,
+     so nothing is added to the tree and nothing has to be taken away when the canvas lands.
+
+     IT IS A SPINNER AND NOT A SHIMMER, AND THAT IS MEASURED. The first version swept a gradient
+     across the sheet with `background-position`, which is a PAINT property: every frame repainted a
+     734x950 element, on every page in the band. It cost enough to change what the renderer did —
+     `behave.py` went red on two of v48's and v49's own cases, with 21 of 21 page renders that a fast
+     scroll should have dropped going through instead, and a ten-notch zoom laying the marks out nine
+     times rather than three. Removing the sweep and leaving the 30px ring, which animates nothing
+     but `transform`, put both back to green with the animation still on. A still wash marks the
+     paper as not-yet-arrived; the ring is the part that says "working", so the ring is the part that
+     moves. The paper is white in both themes, so these are ink on white rather than theme tokens.
+     ================================================================================================ */
+  /* 6mj — and once the standing picture is in, the page is not waiting on anything you can see, so
+     the ring comes off: `.hasbase` is set when it lands and only ever removed with the document. */
+  .page.near.hasbase::before,.page.near.hasbase::after{display:none}
+  .page.near:not([data-rendered="1"])::before{
+    content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
+    background:rgba(15,18,24,.035)}
+  .page.near:not([data-rendered="1"])::after{
+    content:"";position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;
+    border-radius:50%;pointer-events:none;z-index:2;
+    border:2.5px solid rgba(15,18,24,.13);border-top-color:var(--accent);
+    animation:pgspin .78s linear infinite}
+  @keyframes pgspin{to{transform:rotate(360deg)}}
+  /* turned down rather than off: a page that is still coming has to look like one, and a ring that
+     does not move does not say that. */
+  @media (prefers-reduced-motion:reduce){
+    .page.near:not([data-rendered="1"])::after{animation-duration:2.4s}
+  }
   .pagelabel{position:absolute;top:-20px;left:0;font-size:11px;color:var(--faint);display:none}
   .page.redlined .pagelabel{color:var(--accent);font-weight:700}
   .page.redlined .pagelabel::after{content:" ● redlined"}
@@ -1260,8 +1306,66 @@
      value with a space went to the space: "still by group of characters". `break-all` fills the line and
      breaks at the character that does not fit, which is what the printed form does and what
      `redlineWrapLines` — the one function the stamp, the screen and the export all wrap with — computes. */
+  /* 6mo — the prompt in an empty text box, and the light frame Ced drew round it. `:empty` is
+     exact: both are there before the first character and gone after it, with nothing to clear up
+     and nothing that can reach the file. The frame is an inset shadow rather than a border so the
+     box does not change size when the first letter lands. */
+  .anno .ed[data-ph]:empty::before{content:attr(data-ph);color:rgba(130,136,148,.55);
+    font-style:normal;pointer-events:none;white-space:pre}
+  /* 6mr — AND ONLY ON A TEXT BOX. Ced: "for some reason, shapes with no border are showing with
+     grey borders in preview." A shape's interior is a contenteditable box too (see 6125), and an
+     unlabelled shape has nothing in it — so `:empty` was every box with no caption on the sheet,
+     each wearing a grey frame it was never given. `[data-ph]` is the same condition the prompt
+     itself is written under (`isTextBox(a)` in layoutAnnos), so the frame and the words it frames
+     can no longer disagree about who they belong to. */
+  .anno .ed[data-ph]:empty{box-shadow:inset 0 0 0 1px rgba(130,136,148,.32);border-radius:4px}
   .anno .ed{font-family:Arial,Helvetica,'Liberation Sans',sans-serif;line-height:1.15;color:inherit;outline:none;white-space:pre-wrap;overflow-wrap:normal;word-break:break-all;min-width:14px;resize:horizontal;overflow:hidden;padding:0;margin:0}
   .anno.sel{box-shadow:0 0 0 var(--selw) var(--selink)}
+  /* ================================================================================================
+     6mq — A GRIP GROWS A LITTLE UNDER THE POINTER. Ced: "when hovering to the dragger of the edit,
+     make the holder get big a little." A handle is a small target and the only way to be sure you
+     have the one you meant, before you press, is for it to answer. It is a transform, so it costs
+     a composite and never moves anything around it, and it is suppressed while adjusting along with
+     the rest of the furniture. */
+  .anno .rz,.anno .rot,.anno .mov,.anno .edp,.anno .lup,.anno .ldn,.anno .x,.gframe .ggrip{
+    transition:transform .11s ease}
+  /* 6mr — Ced: "the enlargement of dragger should not be too big, just enough to make the user know
+     the part they're using." 1.45 was a lurch — an 11px grip jumping to 16px moves further than the
+     hand does. An eighth is enough to read as an answer and not enough to look like a change. */
+  .anno .rz:hover{transform:scale(1.18)}
+  .anno .rot:hover,.anno .mov:hover,.anno .edp:hover,.anno .lup:hover,.anno .ldn:hover,
+  .anno .x:hover,.gframe .ggrip:hover{transform:rotate(var(--urot,0deg)) scale(1.12)}
+  /* 6mr — "make it applied to all items being selected, not only on texts" · "please be consistent
+     in every selected item." A STROKE's grips are SVG, so they need `transform-box` to scale about
+     themselves rather than about the page's origin — without it the grip flies off the sheet. */
+  svg.draw.selui .lgrip{transition:transform .11s ease;transform-box:fill-box;transform-origin:center}
+  svg.draw.selui .lgrip:hover{transform:scale(1.18)}
+  /* ================================================================================================
+     6mn — THE ADJUSTING VIEW. See `adjustBegin` in app.js for why; this is all of what it looks
+     like. Everything that is furniture goes, for every kind of mark at once — a resize grip, the ✕,
+     the turn/move/edit grips, a group's grips and a stroke's point grips — and the mark being
+     adjusted gets a wash the size of its own box. `box-shadow: inset` is the one way to lay a colour
+     over a mark's ground and under its ink without touching either, so the text stays its own red on
+     the wash rather than going through it. Nothing here survives the pointer coming up.
+     ================================================================================================ */
+  :root{--adjwash:rgba(141,190,222,.38)}
+  body.adjusting .anno .rz,
+  body.adjusting .anno .x,
+  body.adjusting .anno .rot,
+  body.adjusting .anno .mov,
+  body.adjusting .anno .edp,
+  body.adjusting .anno .lup,
+  body.adjusting .anno .ldn,
+  body.adjusting .gframe .ggrip,
+  body.adjusting svg.draw.selui .lgrip,
+  body.adjusting .deghud{display:none!important}
+  body.adjusting .anno.sel,body.adjusting .anno.selui{box-shadow:none}
+  body.adjusting .anno.adjusting{box-shadow:inset 0 0 0 9999px var(--adjwash)!important}
+  /* and the mark's own ground steps aside for it, or a text box with a white ground would paint
+     over the wash from inside — the ink does not, so the words stay their own colour on it */
+  body.adjusting .anno.adjusting .ed{background:transparent!important}
+  /* a stroke has no box to wash, so what it gets is the same thing the others get: its grips out of
+     the way of the hand that is moving it */
   /* 6lj — while the pixel-aligned frame in `.annoui` is up, the mark under it draws no ring of its
      own and a picture draws no outline: three rings at three fractional positions is what "the blue
      lines are not even" looked like. See `syncSelUI`. */
@@ -1282,7 +1386,11 @@
      ✕ was under a resize handle and a click on it started a resize instead. It is lifted clear above
      the top-right corner, given a couple more pixels of target, a hit area larger than it looks, and a
      z-index above the handles, so the thing you can see is the thing you press. */
-  .anno .x{position:absolute;right:-10px;top:-25px;width:18px;height:18px;border:none;border-radius:50%;background:var(--danger);color:#fff;font-size:11px;line-height:18px;cursor:pointer;padding:0;opacity:0;z-index:11;box-shadow:0 1px 3px rgba(0,0,0,.28)}
+  /* 6mr — Ced: "make the x button on the right side of the selected item as well not on upper
+     right." At the top-right corner it overhung the mark and sat on whatever the mark was labelling;
+     on the right edge, centred, it is clear of the paper above and of the `e` grip beside it (which
+     ends at right:+2, so this starts at -32). */
+  .anno .x{position:absolute;right:-31px;top:calc(50% - 23px);width:18px;height:18px;border:none;border-radius:50%;background:var(--danger);color:#fff;font-size:11px;line-height:18px;cursor:pointer;padding:0;opacity:0;z-index:11;box-shadow:0 1px 3px rgba(0,0,0,.28)}
   .anno .x::after{content:"";position:absolute;inset:-5px;border-radius:50%}
   .anno .x:hover{filter:brightness(1.12)}
   .anno:hover .x,.anno.sel .x{opacity:1}
@@ -2801,7 +2909,30 @@
      keystroke. */
   .anno.sel.editing .rz{display:block}
   .anno .rz.nw,.anno .rz.ne,.anno .rz.se,.anno .rz.sw{width:11px;height:11px;border-radius:50%}
-  .anno .rz.e,.anno .rz.w{width:7px;height:22px;border-radius:6px;top:calc(50% - 11px)}
+  /* ================================================================================================
+     6mx — A SIDE GRIP IS NEVER LONGER THAN THE BOX IT IS ON. Ced: "when the textbox is so small,
+     adjust the length of the left or right dragger and dont overlay or cover the four corner circle
+     draggers to not make it hard for the user to click those draggers."
+
+     The pills were a flat 22px, and a one-line text box is 19px tall — so the side pill covered both
+     corner circles end to end and the only way to get a corner was to guess at the 2px of it that
+     showed.
+
+     6n2 — AND 22px IS STILL THE LENGTH. Ced: "i did not say to make the length bigger. also, if it
+     was smaller, make the side dragger at least like the corner dragger." 6mx read "adjust the
+     length" as "make it the box's height less the corners", which on a 238px shape gave a 212px
+     pill — a grip ten times the reference, which is not what was asked for and does not look like
+     the drawing. The pill's length is 22px, as it has always been; it only SHRINKS, and only as far
+     as it must to clear the corners, and never below the corner's own 11px so there is always at
+     least as much to grab as a corner gives you.
+
+     The 22px to subtract is measured, not guessed: a corner is 11px at -6px, so it covers 5px of the
+     edge at each end — 10px in all — and 6px of clear paper either side of the pill is what makes
+     the three read as three. Centred with auto margins rather than a transform, because the hover
+     grow owns `transform` (6mr) and two rules writing one property is how the grow stopped working.
+     ================================================================================================ */
+  .anno .rz.e,.anno .rz.w{width:7px;border-radius:6px;
+    top:0;bottom:0;margin-block:auto;height:clamp(11px,calc(100% - 22px),22px)}
   .anno .rz.n,.anno .rz.s{display:none!important}   /* reference has no top/bottom mid handles */
   .anno .rz.e{right:-5px}
   .anno .rz.w{left:-5px}
@@ -2824,8 +2955,21 @@
   /* 6lk — three controls under the box now, so they are centred as a row of three rather than as a
      pair: rotate, move, and (on a picture) edit. The offsets are the same 23/3 pattern stepped out by
      one slot, so the set stays centred on the box whichever of the two it is. */
-  .rot{left:calc(50% - 23px);cursor:grab}
-  .mov{left:calc(50% + 3px);cursor:move;font-size:13px}
+  /* ================================================================================================
+     6mt — THE TURN IS ALONE IN THE MIDDLE, AND EVERYTHING ELSE IS ON THE RIGHT.
+     Ced: "rotate should always be in the middle of the selected item. so make the x button and drag
+     button both on the right and make the rotate solo so its always in the middle" · "apply this to
+     all selectable items."
+
+     6lw put three controls in a row under the box and centred the ROW, which means the turn is in
+     the middle of the row and not of the mark — and the row's width depends on how many controls
+     this kind of mark has, so the turn moved sideways depending on what you had selected. It acts
+     on the box as a whole, about its own centre, so the one place it belongs is under that centre,
+     at every count. Delete and drag act on the mark rather than on its geometry, and they stack on
+     the right edge beside the ✕, clear of the layer buttons on the left.
+     ================================================================================================ */
+  .rot{left:calc(50% - 10px);cursor:grab}
+  .mov{bottom:auto;left:auto;right:-30px;top:calc(50% + 3px);cursor:move;font-size:13px}
   .anno.sel .rot,.anno.sel .mov{display:flex}
   .anno.sel.editing .rot,.anno.sel.editing .mov{display:flex}   /* 6ha — see above */
   .anno .edp{position:absolute;bottom:-32px;width:20px;height:20px;border-radius:50%;
@@ -2851,9 +2995,8 @@
      only two controls (anything that is not a picture) the pair keeps rotate first, so the turn is
      always to the left of the drag whichever set you are looking at.
      ================================================================================================ */
-  .anno.haspic .edp{left:calc(50% - 36px)}
-  .anno.haspic .rot{left:calc(50% - 10px)}
-  .anno.haspic .mov{left:calc(50% + 16px)}
+  /* 6mt — and a picture's Edit joins the same stack rather than pushing the turn off centre */
+  .anno .edp{bottom:auto;left:auto;right:-30px;top:calc(50% + 29px)}
   /* ================================================================================================
      6lz — AND EVERY ONE OF THEM IS DRAWN UPRIGHT. The mark carries the turn; `--urot` is its negative,
      written beside the transform by `setMarkSpin`, and each control cancels the turn it inherits. They

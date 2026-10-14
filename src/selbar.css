@@ -209,13 +209,34 @@ body.selbaron #markR{bottom:64px}
    every text box on the page wore two little pills whether or not anything was selected. Ced:
    "the top and bottom adjuster are visible even when the shape is not selected." Scoped to `.sel`
    now, and hidden while the box is being typed into, like every other handle. */
+/* 6n2 — AND THE TOP AND BOTTOM PILLS ARE CENTRED AGAIN, AND SHRINK THE SAME WAY THE SIDES DO.
+   Ced: "the top and bottom are off centered."
+
+   My doing, in 6mx. That rule added `right:0; margin-inline:auto` to every `.rz.n`/`.rz.s`, and this
+   one — four classes, so it wins — still said `width:22px; left:calc(50% - 11px)`. An absolutely
+   positioned box with a definite left, a definite right AND a definite width is over-constrained,
+   and auto margins settle it by splitting what is left EQUALLY between them: measured, that puts a
+   22px pill's left edge at 75% of the box less 16.5px rather than at the middle. Which is exactly
+   where the screenshots show it.
+
+   So the whole of the n/s geometry is written here, in one place, instead of half here and half in
+   app.css: `left:0; right:0; margin-inline:auto` with no second left offset is the centring, and the
+   width is the same clamp the side pills take — 22px, shrinking only to clear the corners, never
+   below the corner's own 11px. */
 .anno.sel.shapemark .rz.n,.anno.sel.shapemark .rz.s,
 .anno.sel.textbox .rz.n,.anno.sel.textbox .rz.s{
-  display:block!important;width:22px;height:7px;border-radius:6px;left:calc(50% - 11px);
+  display:block!important;height:7px;border-radius:6px;
+  width:clamp(11px,calc(100% - 22px),22px);
+  left:0;right:0;margin-inline:auto;
 }
 .anno.sel.shapemark .rz.n,.anno.sel.textbox .rz.n{top:-5px;cursor:ns-resize}
 .anno.sel.shapemark .rz.s,.anno.sel.textbox .rz.s{bottom:-5px;cursor:ns-resize}
 .anno.editing .rz.n,.anno.editing .rz.s{display:none!important}
+/* 6mn — and they go with everything else while the mark is being adjusted. This lives here, beside
+   the rule it has to beat, because that one is four classes of `!important` and the adjusting block
+   in app.css is three — the only honest place for an override is next to what it overrides. */
+body.adjusting .anno.sel.shapemark .rz.n,body.adjusting .anno.sel.shapemark .rz.s,
+body.adjusting .anno.sel.textbox .rz.n,body.adjusting .anno.sel.textbox .rz.s{display:none!important}
 
 /* =================================================================================================
    6g1 — CENTRED AT ANY ZOOM
@@ -420,7 +441,61 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 .sk-edg svg{display:block;width:1.15em;height:1.15em;fill:currentColor}
 .sk-edsize{display:inline-flex;align-items:center;gap:6px;color:#8d96a6;font-size:11px;
   background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:4px 7px;white-space:nowrap}
-.sk-edsize input[type=range]{width:64px}
+/* 6mx/6n0 — Ced, three times: "have the free and border slider longer to have more control in
+   adjustments." 64px for a 60-degree sweep is barely a degree a pixel, and for a 12px border it is
+   five pixels a step. 6mx measured the tool row's slack and took all of it — 96px is the last width
+   that keeps the row to one line, 104 wraps — which is why 94 was as far as it went. The row was
+   the limit, so 6n0 takes the two sliders OFF the tool row and gives them one of their own: 94px
+   stays the floor for a slider sitting inline anywhere else, and on their own row each track takes
+   whatever the card has left over. */
+.sk-edsize input[type=range]{width:94px}
+/* ==================================================================================================
+   6n3 — THE TOOL BAR IS DOWN THE LEFT, AND THE SLIDERS ARE ON THE FLOOR.
+   Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
+   management. make the tools be separated by the same separator on the ribbon, but horizontally.
+   put the free and border undo and redo on the lowest part of the tab in edit photo."
+
+   The separator is the SAME rule as the ribbon's and as the old top bars': 1px dotted #3f4756. It
+   only changes edge — `border-right` between groups laid side by side becomes `border-bottom`
+   between groups stacked down a column, which is what "the same separator, but horizontally" means.
+   ================================================================================================== */
+.sk-edbody{display:flex;gap:10px;flex:1 1 auto;min-height:0;margin-bottom:8px}
+.sk-edrail{display:flex;flex-direction:column;flex:0 0 auto;width:150px;
+  align-items:stretch;justify-content:flex-start;flex-wrap:nowrap;margin:0;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:3px}
+.sk-edrail .sk-edgrp{flex-direction:column;align-items:stretch;gap:4px;padding:8px 2px;
+  border-right:none;border-bottom:1px dotted #3f4756}
+.sk-edrail .sk-edgrp:last-child{border-bottom:none}
+/* a button in the rail is a full-width row: glyph, then the word, left aligned, so the column of
+   them reads as a list of tools rather than as a bag of chips */
+.sk-edrail .sk-edb{width:100%;justify-content:flex-start;text-align:left}
+.sk-edrail .sk-edcol{width:100%}
+/* a tool in the rail is COMPACT: 22px rather than 27px. Measured at 1512x923, the rail has 636px
+   to work with, and the tools came to 907px with the zoom block in it — so the zoom went to the
+   base strip and the buttons lost five pixels each, which brings the column to 620px and inside
+   the room there is. Nothing is below the fold at that size. */
+.sk-edrail .sk-edb{padding:3px 7px;font-size:11px;gap:5px}
+.sk-edrail .sk-edg{font-size:12px}
+.sk-edrail .sk-edgrp{gap:2px;padding:6px 2px}
+
+/* the settings for the tool in the hand — not tools, so not in the rail */
+.sk-edctx{justify-content:flex-start;gap:6px;margin:0 0 8px;min-height:0}
+.sk-edctx .sk-edgrp{border-right:none;padding:0;flex-wrap:wrap;gap:6px}
+
+/* 6n0/6n3 — the floor. The two sliders take an equal share of what is left after Undo and Redo, and
+   inside a slider the track takes everything the label and the reading do not. `min-width:0` is what
+   lets a flex child be narrower than its content wants, which is what keeps a narrow editor from
+   pushing the row wider than the card. */
+.sk-edbase{display:flex;gap:8px;margin:0 0 10px;padding:0;align-items:stretch;flex-wrap:nowrap}
+.sk-edbase .sk-edsize{flex:1 1 0;min-width:0;display:flex}
+.sk-edbase .sk-edsize input[type=range]{flex:1 1 auto;width:auto;min-width:94px}
+.sk-edbase .sk-edhist,.sk-edbase .sk-edview{flex:0 0 auto;border-right:none;padding:0;gap:4px;
+  align-items:center}
+.sk-edbase .sk-edview .sk-edzoom{min-width:44px}
+/* 6n4 — the nib chips sit tight against the brush's reading, dressed as the wand's mode chips are
+   but on a class of their own, so a lookup for one never finds the other. */
+.sk-ednib{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
+  border-radius:8px;padding:2px;margin-left:2px}
 .sk-ednum{color:#e6e9ef;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
 /* 6ha — THE STAGE IS THE ROOM, THE PICTURE SITS IN THE MIDDLE OF IT.
    Ced: "the photo should always be in the middle of edit photo ui." It was pinned to the top and to
@@ -487,12 +562,21 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 .sk-edov{position:absolute;left:0;top:0;display:block;pointer-events:none;image-rendering:auto}
 /* 6gq — the brush, drawn where the pointer is and at the size it will actually rub out. Two rings, one
    light and one dark, so it reads on a white drawing and on a dark one alike. */
-.sk-edring{position:absolute;left:0;top:0;border-radius:50%;pointer-events:none;opacity:0;
+/* 6my — on the CARD, not on the dimmed overlay. 6mu lifted the ring out of the stage so the
+   picture's edge could not cut it in half, and put it on `.sk-edit` — which carries a translucent
+   backdrop over the whole window, so a ring moving across it made that backdrop repaint on every
+   frame of a sweep. `behave.py` caught it at once: the brush's median frame went from under 33ms to
+   36.7, and hiding the ring put it back. The card is opaque and does not clip, so the ring is still
+   whole at the picture's edge and nothing underneath it has to be painted again. */
+.sk-edring{position:fixed;left:0;top:0;z-index:40;contain:layout paint;border-radius:50%;pointer-events:none;opacity:0;
   /* 6im — moved with a transform, written once a frame, so the ring never costs a layout */
   transform:translate(-50%,-50%);will-change:transform;border:1px solid rgba(255,255,255,.95);
   box-shadow:0 0 0 1px rgba(0,0,0,.65) inset,0 0 0 1px rgba(0,0,0,.45);
   transition:opacity .12s ease}
 .sk-edring.on{opacity:1}
+/* 6n4 — the square nib's cursor is a square. A 2px corner radius rather than none, so it reads as a
+   drawn cursor and not as a rendering fault at small sizes. */
+.sk-edring.box{border-radius:2px}
 .sk-edring.restore{border-color:#7ee0a0;box-shadow:0 0 0 1px rgba(0,0,0,.55) inset,0 0 0 1px rgba(0,0,0,.35)}
 /* 6lf — the PEN's ring is a nib, not a rub-out: it is filled in the ink it will draw with (written
    from `--sk-ink`), so what you are about to put down is the thing under the pointer. Kept light

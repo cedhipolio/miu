@@ -69,7 +69,16 @@ const TP_FONT_CHIPS=[
      file, so it reads the same on a machine that does not have it. */
   {k:"jost",       label:"Jost", hint:"A geometric sans in the Century Gothic manner — bundled with "+
                                       "the tool and written into the exported file, so it looks the "+
-                                      "same wherever the PDF is opened"}
+                                      "same wherever the PDF is opened"},
+  /* 6n1 — Ced: "add more font options." Two more bundled families, each for a job: Carlito is
+     Calibri's measure, Archivo Narrow is the one that fits a long correction into a short cell.
+     The B and I chips swap the cut, so only the regular of each family is a chip here. */
+  {k:"carlito",    label:"Carlito", hint:"Calibri's face and Calibri's measure — what the Word and "+
+                                      "Excel paperwork around these reports is set in. Bundled with "+
+                                      "the tool and written into the exported file"},
+  {k:"narrow",     label:"Narrow",  hint:"A condensed sans — a corrected value that will not fit a "+
+                                      "table cell in Arial fits in this at the same size. Bundled "+
+                                      "with the tool and written into the exported file"}
 ];
 /* 6hc — the dash rhythm no longer follows the weight, so the LENGTH is the choice. Six lengths,
    shortest first, then the two dash-dot rules. */
@@ -1262,8 +1271,11 @@ function tpDragHead(head){
    italic, so this function had to choose: asking for italic on a bold mark silently dropped the bold.
    Every family now has all four cuts, so B and I are independent switches and either one can be on,
    off, or both, alongside the underline and the strikethrough. */
+/* 6n1 — the families, longest stem first so a key is matched by its own family and not by a shorter
+   one inside it. A chain of ternaries was fine for four and is not for six. */
+const TP_FAMS=["carlito","courier","narrow","times","jost","arial"];
 function tpFaceToggle(fk,which){
-  const fam=/times/.test(fk)?"times":(/courier/.test(fk)?"courier":(/jost/.test(fk)?"jost":"arial"));
+  const fam=TP_FAMS.find(f=>String(fk).indexOf(f)===0)||"arial";
   const bold=/bold/.test(fk), ital=/ital/.test(fk);
   const wantB=(which==="bold")?!bold:bold, wantI=(which==="ital")?!ital:ital;
   const key=fam+(wantB&&wantI?"bolditalic":(wantB?"bold":(wantI?"ital":"")));

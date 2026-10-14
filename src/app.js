@@ -3322,6 +3322,12 @@ function setupVirtualization(){
   if(vio)vio.disconnect();
   vio=new IntersectionObserver(es=>{
     es.forEach(e=>{ const i=+e.target.dataset.idx;
+      /* 6mf — and the same crossing says whether the loading animation is worth running: see
+         `.page.near:not([data-rendered="1"])` in app.css. The margin is 1400px, so a page wears
+         `near` long before any part of it can be seen — the animation can never be late — and the
+         other thirty sheets of a site package are not each running one off the bottom of the
+         document, which is exactly what this cost when the CSS stood alone. */
+      e.target.classList.toggle("near",e.isIntersecting);
       if(e.isIntersecting) ensurePageRendered(i); else unloadPage(i); });
   },{root:null,rootMargin:"1400px 0px 1400px 0px",threshold:0});
   document.querySelectorAll(".page").forEach(p=>vio.observe(p));
@@ -3385,10 +3391,12 @@ async function renderAll(){
     pg.appendChild(el("div","pagelabel",`Page ${i+1}`));
     attachPagePointer(pg,i);
     root.appendChild(bar); root.appendChild(pg);
+    try{ showBase(i); }catch(e){}   /* 6mj — renderAll replaces the elements; the pictures survive */
   }
   updateRail();
   setupVirtualization();
   try{ syncPageColSoon(); }catch(e){}     /* 6lb — a new document gets the window, not the column */
+  try{ preloadBasesSoon(); }catch(e){}    /* 6mj — and every page gets a picture that stays */
 }
 /* 6gr — the printed text, as clickable boxes over the picture. One function, because the re-sharpen
    after a zoom rebuilds it at the new scale and the two must agree exactly. */
@@ -3410,11 +3418,12 @@ async function resharpenPage(i){
   const P=S.pages[i]; if(!P||!P.page)return;
   const at=S.scale;
   let vp; try{ vp=P.page.getViewport({scale:at}); }catch(e){ return; }
+  const over=overFor(i,at);                                  /* 6mw */
+  let vpR=vp; if(over>1.001){ try{ vpR=P.page.getViewport({scale:at*over}); }catch(e){ vpR=vp; } }
   const cv=el("canvas","pdf");
-  cv.width=vp.width; cv.height=vp.height;
-  cv.style.width=vp.width+"px"; cv.style.height=vp.height+"px";
+  sizePageCanvas(cv,vp,over);
   try{
-    const task=P.page.render({canvasContext:cv.getContext("2d"),viewport:vp});
+    const task=P.page.render({canvasContext:cv.getContext("2d"),viewport:vpR});
     pg._task=task;
     await task.promise;
   }catch(e){ cv.width=cv.height=0; return; }
@@ -3470,6 +3479,25 @@ async function resharpenPage(i){
 const RENDER_REACH=600;            /* a page further than this outside the window is not worth drawing */
 let _rq=new Map();                 /* page index -> {resolve[]} */
 let _rqBusy=false;
+/* ==================================================================================================
+   6mf — A PAGE THAT IS COMING SAYS SO. Ced: "add loading animation on pages not yet loaded."
+
+   Until the canvas lands a page is a blank white rectangle, which is exactly what a genuinely blank
+   sheet looks like — so 6m7's queue, which is right to make you wait your turn, had no way of saying
+   that it was your turn soon rather than never.
+
+   The first cut of this kept a `data-loading` flag, written whenever the queue took a page. It was
+   wrong, and `behave.py` said so before it shipped: measured on a fast scroll, TWO pages were on
+   screen, blank, and saying nothing — because the IntersectionObserver fires on a crossing and the
+   sweep is debounced, so for a moment the eye is on a page the queue has not been told about yet.
+   A flag that is one rAF behind the eye is exactly the flag you do not want here.
+
+   There is no bookkeeping in the rule that is actually true: A PAGE WITH NO PICTURE IN IT YET IS A
+   PAGE THAT IS STILL COMING. `data-rendered` is "1" only once the canvas is in the tree, so the
+   state is already on the element, already correct at every instant, and already written in one
+   place. The whole thing is a CSS selector — see `.page:not([data-rendered="1"])` in app.css — and
+   the only pages that can be seen doing it are the ones you are looking at.
+   ================================================================================================== */
 function _pageWanted(i){
   const pg=document.querySelector(`.page[data-idx="${i}"]`);
   if(!pg)return null;
@@ -3537,6 +3565,204 @@ function sweepPagesSoon(ms){
   }, ms==null?120:ms);
 }
 window.addEventListener("scroll",()=>sweepPagesSoon(),{passive:true});
+/* ==================================================================================================
+   6mj — THE STANDING PICTURE. Ced: "make the pdf file preload and then retain that in the viewer so
+   there will be no lag" · "the loading of pdfs are still slow and zooming in it gets pixelated."
+
+   6m7's queue and the observer's `unloadPage` are both right and both have the same consequence: at
+   any moment most of the document has NO pixels at all. Scroll to page 30 and pdf.js is asked for it
+   from nothing, which on a mount drawing is 61-204ms before anything appears; scroll back to page 2
+   and it has been thrown away, so you pay again. v50 put a spinner on that wait, which is honest and
+   is not what was asked for.
+
+   What is asked for is pixels that do not go away. They cannot be the SHARP ones — a 11x17 sheet at
+   3.5x is 12 megapixels, 48MB, and a site package is forty-five of them — so they are a second,
+   small, fixed picture per page, rendered once and kept for the life of the document:
+
+       budget 360,000 pixels a page     1.4 MB each
+       letter   612x792 at 1.0  ->  525x680    0.36 Mpx
+       11x17   1224x792 at 0.61 ->  744x482    0.36 Mpx
+       a 45-page letter package                 65 MB, once
+
+   It is CSS-stretched to the page box at all times — `width:100%`, so a zoom costs it nothing and
+   there is no bookkeeping to get wrong — and it sits UNDER the sharp canvas. So the sharp render is
+   still what you read, and everything it used to leave blank now shows the page instead: a page
+   waiting its turn, a page whose canvas the observer threw away, and a page mid-zoom. Soft, and
+   soft is what "stretched" means; the point is that it is the page and it is there at once.
+
+   The preload runs only when the sharp queue is idle, nearest page first, one at a time with a frame
+   between — it must never be the reason the page under your eyes is late.
+   ================================================================================================== */
+const BASE_BUDGET_PX=360000;
+let _baseQ=null, _baseBusy=false;
+function _baseScale(i){
+  try{
+    const vp1=S.pages[i].page.getViewport({scale:1});
+    return Math.min(1,Math.sqrt(BASE_BUDGET_PX/Math.max(1,vp1.width*vp1.height)));
+  }catch(e){ return 0.5; }
+}
+function showBase(i){
+  const pg=document.querySelector(`.page[data-idx="${i}"]`); if(!pg)return;
+  const P=S.pages[i]; if(!P||!P.base)return;
+  if(pg.querySelector("canvas.pdfbase")){ pg.classList.add("hasbase"); return; }
+  const c=el("canvas","pdfbase");
+  c.width=P.base.width; c.height=P.base.height;
+  try{ c.getContext("2d").drawImage(P.base,0,0); }catch(e){ return; }
+  const lbl=pg.querySelector(".pagelabel");
+  pg.insertBefore(c, lbl?lbl.nextSibling:pg.firstChild);
+  pg.classList.add("hasbase");
+}
+async function renderBase(i){
+  const P=S.pages[i]; if(!P||!P.page||P.base)return;
+  const s=_baseScale(i);
+  let vp; try{ vp=P.page.getViewport({scale:s}); }catch(e){ return; }
+  const c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(vp.width)); c.height=Math.max(1,Math.round(vp.height));
+  try{ await P.page.render({canvasContext:c.getContext("2d"),viewport:vp}).promise; }
+  catch(e){ c.width=c.height=0; return; }
+  P.base=c;
+  showBase(i);
+}
+/* nearest the middle of the window first, exactly as the sharp queue chooses, so the pages you are
+   about to scroll onto are the ones that are ready */
+/* ==================================================================================================
+   6ml — AND THE PRELOAD GETS OUT OF THE WAY. Ced: "zoom in and out is so slow paced again. make it
+   all seamless" · "viewing pdf should also be seamless. please improve."
+
+   6mj's picture-per-page is right and the way v51 filled them in was not. pdf.js cannot be made to
+   yield — a render is one call that returns when it is finished — so forty-five of them in a row,
+   with nothing but a rAF between, is forty-five blocks of the main thread laid end to end. Measured
+   on the 45-page site package, over the SIX SECONDS after the document opens:
+
+       25 long tasks · 4,065 ms of them · p95 frame 197.8 ms · worst frame 480.6 ms
+
+   Two thirds of the wall clock, in the window where you are scrolling to find the sheet you want.
+   Nothing the hand does in there is seamless, because every frame of it can land behind a quarter
+   of a second of someone else's work.
+
+   Two changes, and the first is the one that matters:
+
+     1. A PAGE THAT HAS BEEN DRAWN ALREADY DOES NOT NEED DRAWING AGAIN. The sharp canvas is a
+        better picture than the base at every size; shrinking it into the base is one `drawImage`
+        on the GPU rather than a pdf.js render. So every page you look at pays nothing at all, and
+        the background pass is left with only the pages you have never been to.
+     2. WHAT IS LEFT WAITS FOR A GAP. The queue idle check stays, and under it there is now a
+        quiet check: nothing is rendered within 650ms of a wheel, a scroll, a pointer or a key.
+        An `idle` slot is asked for where the browser offers one. A page render cannot be split,
+        so the only honest thing to do with it is to put it where nobody is waiting.
+   ================================================================================================== */
+let _lastInput=0;
+function noteInput(){ _lastInput=Date.now(); }
+["wheel","pointerdown","keydown","touchstart"].forEach(t=>
+  window.addEventListener(t,noteInput,{passive:true,capture:true}));
+window.addEventListener("scroll",noteInput,{passive:true});
+const INPUT_QUIET_MS=650;
+/* the sharp canvas, shrunk — the same picture, for the price of a blit */
+function baseFromSharp(i,cv){
+  const P=S.pages[i];
+  if(!P||P.base||!cv||!cv.width)return;
+  const k=Math.min(1,Math.sqrt(BASE_BUDGET_PX/Math.max(1,cv.width*cv.height)));
+  const c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(cv.width*k)); c.height=Math.max(1,Math.round(cv.height*k));
+  const g=c.getContext("2d");
+  g.imageSmoothingQuality="high";
+  try{ g.drawImage(cv,0,0,c.width,c.height); }catch(e){ c.width=c.height=0; return; }
+  P.base=c;
+  showBase(i);
+}
+function _idle(ms){
+  return new Promise(r=>{
+    if(typeof requestIdleCallback==="function")requestIdleCallback(()=>r(),{timeout:ms});
+    else setTimeout(r,ms);
+  });
+}
+function preloadBases(){
+  if(_baseBusy)return;
+  _baseBusy=true;
+  (async()=>{
+    try{
+      for(;;){
+        if(!S.pages||!S.pages.length)break;
+        /* the sharp queue always wins: it is drawing what is on screen now */
+        if(_rq.size||_rqBusy){ await new Promise(r=>setTimeout(r,200)); continue; }
+        /* and so does the hand */
+        const since=Date.now()-_lastInput;
+        if(since<INPUT_QUIET_MS){ await new Promise(r=>setTimeout(r,INPUT_QUIET_MS-since)); continue; }
+        let best=-1,bestD=Infinity;
+        for(let i=0;i<S.pages.length;i++){
+          if(S.pages[i].base)continue;
+          const pg=document.querySelector(`.page[data-idx="${i}"]`);
+          let d=1e9;
+          if(pg){ const r=pg.getBoundingClientRect();
+                  d=Math.abs(r.top+r.height/2-window.innerHeight/2); }
+          if(d<bestD){ bestD=d; best=i; }
+        }
+        if(best<0)break;
+        await _idle(900);
+        if(Date.now()-_lastInput<INPUT_QUIET_MS)continue;   /* the hand moved while we waited */
+        if(_rq.size||_rqBusy)continue;
+        await renderBase(best);
+        await new Promise(r=>requestAnimationFrame(()=>r()));
+      }
+    }catch(e){}
+    _baseBusy=false;
+  })();
+}
+function preloadBasesSoon(){ clearTimeout(_baseQ); _baseQ=setTimeout(preloadBases,500); }
+/* ==================================================================================================
+   6mw — THE SHEET IS DRAWN WITH MORE PIXELS THAN IT IS SHOWN WITH, SO A ZOOM STAYS SHARP WHILE IT
+   MOVES. Ced, with a recording of a native viewer going from deep in to two sheets out and staying
+   crisp the whole way: "this is how seamless zoom in and out should be."
+
+   6gr stretches the canvas it already has and re-renders when the zooming stops, and the part of
+   that which is already right is the part I assumed was wrong. Measured, from the last wheel notch
+   to the sharp canvas landing: **76–90ms**. Nobody sees that. What you see is the gesture itself:
+
+       three notches in   the canvas is stretched 1.30x while you turn the wheel
+       ten notches in                             2.00x
+       ten notches out                            1.83x
+
+   Two megapixels shown through one megapixel's worth of paint, for the second or so your hand is
+   moving — which is exactly the softness in Ced's "pixelated", and no amount of re-rendering SOONER
+   fixes it, because re-rendering during the gesture is the 70–200ms long task v48 spent a version
+   removing.
+
+   What fixes it is having the pixels already. And the thing that makes it affordable is that a page
+   render costs almost nothing extra for them — the time goes into interpreting the content stream,
+   not into filling pixels. The same three sheets, rendered at five oversample factors:
+
+       x1.0   5, 18, 43 ms   1.09 Mpx   4.2 MB     x1.6   11, 21, 34 ms   1.79 Mpx   6.8 MB
+       x1.25  7, 18, 43 ms   1.09 Mpx   4.2 MB     x2.0   15, 14, 21 ms   2.79 Mpx  10.7 MB
+       x1.4   5, 16, 36 ms   1.37 Mpx   5.2 MB
+
+   Flat. So the only real price is memory, and memory is the thing that must be capped: an 11x17
+   sheet at 350% is already 9 megapixels before any oversample, and 1.6x of that would be 94MB of
+   canvas for one page. The factor is therefore a WANT, not a rule — it is given up as the zoom
+   rises, so the oversample lives in the headroom below the budget and nowhere else.
+   ================================================================================================== */
+const OVER_WANT=1.6;               /* covers about six wheel notches before any softness shows */
+const OVER_MAX_PX=6000000;         /* 24MB of canvas, per page, all in */
+function overFor(i,at){
+  try{
+    const vp1=S.pages[i].page.getViewport({scale:1});
+    const px=vp1.width*vp1.height*at*at;
+    if(!(px>0))return 1;
+    return Math.max(1,Math.min(OVER_WANT,Math.sqrt(OVER_MAX_PX/px)));
+  }catch(e){ return 1; }
+}
+/* the one place a page canvas is given its pixels and its size on screen, so the two cannot drift */
+function sizePageCanvas(cv,vpShown,over){
+  cv.width=Math.round(vpShown.width*over); cv.height=Math.round(vpShown.height*over);
+  cv.style.width=vpShown.width+"px"; cv.style.height=vpShown.height+"px";
+  cv.dataset.shown=String(Math.round(vpShown.width));
+}
+/* how far a canvas is being stretched right now: its own displayed width against the width the page
+   wants at this scale. Written off `dataset.shown` rather than `cv.width`, which since 6mw is the
+   number of pixels in it and not the size it is shown at. */
+function canvasStretch(cv,wantW){
+  const shown=+(cv&&cv.dataset&&cv.dataset.shown)||0;
+  return shown>0?(wantW/shown):1;
+}
 async function _renderPageNow(i){
   const pg=document.querySelector(`.page[data-idx="${i}"]`); if(!pg||pg.dataset.rendered==="1"||pg.dataset.rendered==="wip")return;
   pg.dataset.rendered="wip";
@@ -3546,8 +3772,11 @@ async function _renderPageNow(i){
      wrong scale, which is exactly what "broken" looks like. The scale is caught here and checked on
      the way out; a stale render is thrown away and asked for again at the size that is current now. */
   const P=S.pages[i]; const at=S.scale; const vp=P.page.getViewport({scale:at});
-  const cv=el("canvas","pdf"); cv.width=vp.width; cv.height=vp.height; cv.style.width=vp.width+"px"; cv.style.height=vp.height+"px";
-  try{ const task=P.page.render({canvasContext:cv.getContext("2d"),viewport:vp}); pg._task=task; await task.promise; }
+  /* 6mw — shown at `vp`, painted at `over` times that */
+  const over=overFor(i,at);
+  const vpR=(over>1.001)?P.page.getViewport({scale:at*over}):vp;
+  const cv=el("canvas","pdf"); sizePageCanvas(cv,vp,over);
+  try{ const task=P.page.render({canvasContext:cv.getContext("2d"),viewport:vpR}); pg._task=task; await task.promise; }
   catch(err){
     /* ============================================================================================
        6m7 — AND A RENDER THAT DID NOT FINISH ASKS AGAIN. Ced: "some are not loading at all."
@@ -3593,13 +3822,19 @@ async function _renderPageNow(i){
   /* 6is — AND A LAYER FOR THE FURNITURE, above every band. See `paintSelUI`. */
   pg.appendChild(el("div","annoui"));
   pg.dataset.rendered="1";
+  /* 6ml — and this page's standing picture comes FREE, off the canvas that has just landed, rather
+     than from a second pdf.js render that blocks the thread for a tenth of a second. One
+     `drawImage` into a small canvas; see `baseFromSharp`. */
+  try{ baseFromSharp(i,cv); }catch(e){}
   layoutAnnos(); drawPageLines(i); applySuggestions();   /* 6ir — marks first: they build the containers */
 }
 function unloadPage(i){
   const pg=document.querySelector(`.page[data-idx="${i}"]`); if(!pg)return;
   if(pg._task&&pg._task.cancel){ try{pg._task.cancel();}catch(e){} }
   pg.dataset.rendered="";
+  /* 6mj — the sharp canvas goes; the standing picture does not, so the page still shows the page */
   [...pg.querySelectorAll("canvas.pdf,.textlayer,svg.draw,svg.draw.under,.annolayer,.annolayer-under,.annoui")].forEach(n=>{ if(n.tagName==="CANVAS"){n.width=0;n.height=0;} n.remove(); });
+  showBase(i);
 }
 /* --- the ruled lines, read off the page ------------------------------------------------------------
    6ej — THE RULES ARE NOT IN THE TEXT LAYER, and every cell bound before this one was an estimate
@@ -5116,11 +5351,14 @@ function startLineRotate(ev,l,pg){
   const up=()=>{ degHUDHide(hud); try{ rotGuideClose(); }catch(_){}   /* 6lu */ window.removeEventListener("pointermove",move);
                  window.removeEventListener("pointerup",up);
     if(!_turned){
-      askAngle({ title:"Turn this stroke",
-                 hint:"Type how far to turn it, in degrees. Negative turns anticlockwise.",
-                 now:0,
-                 apply:v=>{ rotateLineBy(l,v,pg); drawPageLines(l.page); dimRelayout(l);
-                   autosave&&autosave(); setStatus("Turned "+(Math.round(v*10)/10)+"\u00b0."); } });
+      /* 6mt — the same chip a mark gets, placed on the stroke's own box */
+      angleChipOpen(null,null,pg,{
+        rect:(()=>{ try{ const n=document.querySelector('svg.draw.selui');
+          if(n){ const bb=n.getBoundingClientRect(); if(bb.width||bb.height)return bb; } }catch(e){}
+          return {left:cx-40,top:cy-12,right:cx+40,bottom:cy+12,width:80,height:24}; })(),
+        now:0,
+        apply:v=>{ rotateLineBy(l,v,pg); drawPageLines(l.page); dimRelayout(l);
+          autosave&&autosave(); setStatus("Turned "+(Math.round(v*10)/10)+"\u00b0."); }});
       return;
     }
     autosave&&autosave(); };
@@ -5135,6 +5373,7 @@ function startLineDrag(ev,l,mode,pg){
      actually moves. A click on a stroke leaves it, and the history, exactly as they were. */
   _ldrag={id:l.id,mode,pg,cx:ev.clientX,cy:ev.clientY,o:linePts(l).map(p=>[p[0],p[1]]),
           pre:snapshot(),moved:false};
+  adjustBegin(null);                     /* 6mn — a stroke has grips too, and they are in the way */
   try{pg.setPointerCapture(ev.pointerId);}catch(e){}
 }
 window.addEventListener("pointermove",e=>{
@@ -5900,7 +6139,30 @@ const MARK_FONTS={
   jostital:  {label:"Jost Italic", css:"'MA Jost','Century Gothic',sans-serif",
               ttf:"jostital", ps:"Jost-Italic", style:"italic"},
   jostbolditalic:{label:"Jost Bold Italic", css:"'MA Jost','Century Gothic',sans-serif",
-              ttf:"jostbolditalic", ps:"Jost-BoldItalic", weight:"700", style:"italic"}
+              ttf:"jostbolditalic", ps:"Jost-BoldItalic", weight:"700", style:"italic"},
+  /* 6n1 — Ced: "add more font options." Two more bundled families, chosen for a job rather than for
+     variety. CARLITO is metric-compatible with CALIBRI — the face the Word and Excel paperwork
+     around these reports is set in — so a note added here and a line pasted out of the tracker are
+     the same document; the metric compatibility also means a block copied from Word keeps its
+     measure. ARCHIVO NARROW is a CONDENSED grotesque, for the one thing a redliner runs out of:
+     room. A corrected value that will not fit a table cell in Arial fits in this at the same point
+     size. Both travel inside the export the way Jost does, both are OFL. */
+  carlito:    {label:"Carlito (Calibri)", css:"'MA Carlito',Calibri,'Carlito',sans-serif",
+              ttf:"carlito", ps:"Carlito-Regular"},
+  carlitobold:{label:"Carlito Bold", css:"'MA Carlito',Calibri,'Carlito',sans-serif",
+              ttf:"carlitobold", ps:"Carlito-Bold", weight:"700"},
+  carlitoital:{label:"Carlito Italic", css:"'MA Carlito',Calibri,'Carlito',sans-serif",
+              ttf:"carlitoital", ps:"Carlito-Italic", style:"italic"},
+  carlitobolditalic:{label:"Carlito Bold Italic", css:"'MA Carlito',Calibri,'Carlito',sans-serif",
+              ttf:"carlitobolditalic", ps:"Carlito-BoldItalic", weight:"700", style:"italic"},
+  narrow:     {label:"Archivo Narrow", css:"'MA Narrow','Arial Narrow',sans-serif",
+              ttf:"narrow", ps:"ArchivoNarrow-Regular"},
+  narrowbold: {label:"Archivo Narrow Bold", css:"'MA Narrow','Arial Narrow',sans-serif",
+              ttf:"narrowbold", ps:"ArchivoNarrow-Bold", weight:"700"},
+  narrowital: {label:"Archivo Narrow Italic", css:"'MA Narrow','Arial Narrow',sans-serif",
+              ttf:"narrowital", ps:"ArchivoNarrow-Italic", style:"italic"},
+  narrowbolditalic:{label:"Archivo Narrow Bold Italic", css:"'MA Narrow','Arial Narrow',sans-serif",
+              ttf:"narrowbolditalic", ps:"ArchivoNarrow-BoldItalic", weight:"700", style:"italic"}
 };
 const MARK_FONT_DEFAULT="arial";
 function markFontKey(a){
@@ -6771,6 +7033,12 @@ function layoutAnnos(){
       im.style.opacity=String(a.fillOp!=null?a.fillOp:1);
     } else {
     ed.contentEditable="true"; ed.textContent=a.text;
+    /* 6mo — AND AN EMPTY ONE SAYS WHAT IT IS FOR. A box with nothing in it is a rectangle of
+       nothing: on a drawing full of ink you cannot tell a text box you have just placed from a
+       stray selection. The prompt is a CSS `::before` on an `:empty` box rather than text in the
+       element, so it is not in `a.text`, not in the export, and not something the caret can be put
+       inside — it is gone the instant the first character lands. */
+    if(isTextBox(a))ed.dataset.ph="Add text here";
     ed.style.color=_rgbaOf(markCol(a),markColOp(a));
     /* 6i7 — THE GROUND, AT ITS OWN OPACITY. Ced: "text box of lengths are also moving down in the
        render" — the reading had not moved at all: on screen its white ground covered the run behind
@@ -7528,6 +7796,49 @@ function syncSelUI(){
   /* the mark may have gained or lost a class since the frame was built (a shape typed into, say) */
   [...c.d.classList].forEach(k=>{ if(!/^(anno|sel|multi|dragging|editing|hasselui)$/.test(k))f.classList.add(k); });
 }
+/* ==================================================================================================
+   6mn — WHILE YOU ARE ADJUSTING IT, YOU CAN SEE IT. Ced: "when adjusting the text size, the preview
+   should look like this to not cover the space being edited and then once the user is not holding
+   the text anymore, go back to the previous view" · "this adjusting view should apply to all items,
+   redlines, shapes, lines on the ui."
+
+   Selecting a mark puts a great deal round it — eight resize grips, a ✕ at the corner, the turn and
+   move and edit grips hanging under it, a ring on the box and, for a stroke, a grip at every point.
+   All of that is what you want when you are DECIDING what to touch, and all of it is in the way the
+   moment you are touching it: the grips sit exactly where the edge you are dragging is, and what you
+   are trying to judge is the edge.
+
+   So for as long as the pointer is down on a mark the furniture goes, and the mark is backed by a
+   pale wash the size of its own box — which says what is being adjusted, in the one way that cannot
+   cover it, because an inset shadow paints over the mark's ground and UNDER its ink. Let go and
+   everything comes back exactly as it was. The wash is on the box, so a shape shows the box it is
+   being fitted into, which is the thing a shape resize is actually about.
+
+   ONE switch, and the release is written once: every gesture that adjusts a mark calls
+   `adjustBegin()`, and the pointer coming up anywhere ends it. A gesture that forgets to turn it off
+   cannot exist, which matters more here than anywhere — a stuck `adjusting` would leave the user
+   with no handles at all.
+   ================================================================================================== */
+let _adjOn=false;
+function adjustEnd(){
+  if(!_adjOn)return;
+  _adjOn=false;
+  document.body.classList.remove("adjusting");
+  document.querySelectorAll(".anno.adjusting").forEach(n=>n.classList.remove("adjusting"));
+}
+/* the wash belongs on the MARK, not on whatever element the grip hung off: since 6is a selected
+   mark's handles live on a frame in `.annoui`, which sits ABOVE every band, and a wash painted
+   there would be over the ink rather than under it. The id is the one thing both have. */
+function adjustBegin(id){
+  _adjOn=true;
+  document.body.classList.add("adjusting");
+  if(id==null)return;
+  const m=document.querySelector('.anno[data-id="'+id+'"]');
+  if(m)m.classList.add("adjusting");
+}
+window.addEventListener("pointerup",adjustEnd,true);
+window.addEventListener("pointercancel",adjustEnd,true);
+window.addEventListener("blur",adjustEnd);
 function startAnnoResize(ev,a,d,ed,pg,pos){
   /* 6fb — a LOCKED mark does not move. The lock is checked at the gesture, not in the renderer,
      so the mark still selects and still shows its bar — you just cannot shift it by accident. */
@@ -7537,6 +7848,7 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
   const _pre=snapshot(); let _rsMoved=false;
   selectAnno(a.id);
   try{d.setPointerCapture(ev.pointerId);}catch(e){}
+  adjustBegin(a&&a.id);                /* 6mn — the furniture is in the way of this gesture */
   const w=pg.offsetWidth, cx=ev.clientX, cy=ev.clientY;
   /* 6dt — the modifier is read at the START of the drag as well as during it. Reading it only from the
      move events makes the behaviour depend on the browser still reporting the key on a captured pointer,
@@ -7608,12 +7920,21 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          into a square: measured on a 240x29px box, one Ctrl-drag of the `e` handle took it to 331x331.
          So Ctrl on a text box's SIDE handle grows the width about the middle and leaves the height
          exactly where it was, and Ctrl on a corner is left to the shape rule, where it still squares. */
+      /* 6mz — AND NOW EVERY HANDLE ON A TEXT BOX, NOT ONLY THE TWO SIDES.
+         Ced: "using ctrl on text box if dragged on the top or bottom and corners should just adjust
+         the text on both sides, same idea of the ctrl used to adjust the left and right which
+         adjusts both sides the same time." 6lc read the modifier on `e` and `w` only, so a top
+         handle moved its own edge and a corner fell through to the shape rule and squared the note
+         off. The rule is one rule: on a text box, Ctrl means the CENTRE stays put, and whichever
+         axes the handle touches grow by twice the drag — a side touches width, a top or bottom
+         touches height, a corner touches both. An axis the handle does not touch is left alone. */
       const _ctrl=(startCtrl||e.ctrlKey||e.metaKey);
-      const _tbSide=isTextBox(a)&&!isImg&&(pos==="e"||pos==="w");
-      if(_ctrl&&_tbSide){
-        const grow=(pos==="e"?dx:-dx);                   /* outward on either side is positive */
-        nw=Math.max(FW,startW+grow*2);
-        nh=startH;                                       /* the height is not in this gesture */
+      const _tbMid=isTextBox(a)&&!isImg;
+      if(_ctrl&&_tbMid){
+        const _ex=pos.indexOf("e")>=0, _wx=pos.indexOf("w")>=0;
+        const _sy=pos.indexOf("s")>=0, _ny=pos.indexOf("n")>=0;
+        nw=(_ex||_wx)?Math.max(FW,startW+(_ex?dx:-dx)*2):startW;
+        nh=(_sy||_ny)?Math.max(FH,startH+(_sy?dy:-dy)*2):startH;
       }
       else if(_ctrl&&!isImg){
         const side=Math.max(nw,nh); nw=side; nh=side;
@@ -7621,8 +7942,8 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
       /* 6lc — growing about the middle means the CENTRE is what stays put, not the opposite edge, so
          this one gesture places itself rather than asking `place()`, which holds the far edge. The
          box turns about its centre, so a rotated box needs no extra correction here. */
-      let [nl,nt]=(_ctrl&&_tbSide)
-        ? [startLeft+(startW-nw)/2, startTop]
+      let [nl,nt]=(_ctrl&&_tbMid)
+        ? [startLeft+(startW-nw)/2, startTop+(startH-nh)/2]
         : place(nw,nh);
       ed.style.width=nw+"px"; ed.style.height=nh+"px";
       d.style.left=nl+"px"; d.style.top=nt+"px";
@@ -7684,9 +8005,12 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
        centre stays put. A redline sits centred over the value it covers, so widening it from one side
        walks it off that value and you then have to drag it back — which is the whole reason this was
        asked for. Without the modifier the handle behaves as it always did, moving its own edge. */
-    const fromMiddle=(startCtrl||e.ctrlKey||e.metaKey)&&(pos==="e"||pos==="w");
+    /* 6mz — a corner counts too: it holds an east or west edge, so under Ctrl that edge's growth is
+       shared with the one opposite it, the same as a bare side handle. The type still scales with
+       the vertical part of the corner drag, below. */
+    const fromMiddle=(startCtrl||e.ctrlKey||e.metaKey)&&(pos.indexOf("e")>=0||pos.indexOf("w")>=0);
     if(fromMiddle){
-      const grow=(pos==="e"?dx:-dx);                     // outward on either side is positive
+      const grow=(pos.indexOf("e")>=0?dx:-dx);           // outward on either side is positive
       const nw=Math.max(markMinPx(w),startW+grow*2);          /* 6k0 */
       ed.style.width=nw+"px"; a.nw=nw/w; a.manualW=true;
       const nl=startLeft-(nw-startW)/2;                  // half the growth off each edge
@@ -7969,6 +8293,7 @@ function dragBody(e,d,a,pg){
   const pre=snapshot();
   let _dragPt=null;
   d.classList.add("dragging");
+  adjustBegin(a&&a.id);                  /* 6mn */
   const targets=(S.magnet)?buildSnapTargets(pg,[a.id]):null;
   const move=ev=>{ const w=pg.offsetWidth,h=pg.offsetHeight; let nl=ox+(ev.clientX-sx),nt=oy+(ev.clientY-sy);
     /* 6gt — A CLICK IS NOT A DRAG. Ced: "adjusting redlines/photos and then clicking them should not
@@ -8225,12 +8550,15 @@ function startGroupRotate(ev,pg,bb){
     degHUDHide(hud);
     if(!_turned){
       /* 6hb — a click on the grip types the angle instead of turning by eye */
-      askAngle({ title:"Turn the selection",
-                 hint:"Type how far to turn everything selected, in degrees. Negative turns anticlockwise.",
-                 now:0,
-                 apply:v=>{ rotateSelectionBy(v,pg,bb);
-                   layoutAnnos(); drawAllLines(); paintMulti();
-                   autosave&&autosave(); setStatus("Turned the selection "+(Math.round(v*10)/10)+"\u00b0."); } });
+      /* 6mt — and the same chip for a selection, on the selection's own box */
+      angleChipOpen(null,null,pg,{
+        rect:(()=>{ try{ const f=document.querySelector('.gframe');
+          if(f){ const r=f.getBoundingClientRect(); if(r.width||r.height)return r; } }catch(e){}
+          return {left:cx-40,top:cy-12,right:cx+40,bottom:cy+12,width:80,height:24}; })(),
+        now:0,
+        apply:v=>{ rotateSelectionBy(v,pg,bb);
+          layoutAnnos(); drawAllLines(); paintMulti();
+          autosave&&autosave(); setStatus("Turned the selection "+(Math.round(v*10)/10)+"\u00b0."); }});
       return;
     }
   };
@@ -8495,8 +8823,33 @@ function syncPageCol(){
     }
     const r=host.getBoundingClientRect(); if(!(r.width>0))return;
     const cs=getComputedStyle(host);
-    const cl=r.left +(parseFloat(cs.paddingLeft )||0)+(parseFloat(cs.borderLeftWidth )||0);
-    const cr=r.right-(parseFloat(cs.paddingRight)||0)-(parseFloat(cs.borderRightWidth)||0);
+    /* ================================================================================================
+       6md — THE COLUMN IS PLACED IN THE DOCUMENT, AND THE BAND IT IS PLACED AGAINST IS THE WINDOW AT
+       REST. Ced: "the pdf is again not in the middle."
+
+       `getBoundingClientRect()` is a VIEWPORT reading and `margin-left` is a DOCUMENT length, and this
+       function was comparing one against the other. Scroll right by N and `cl` comes back N smaller,
+       so `dl` is N more negative and the margin written is N bigger — the column is pushed right by
+       exactly as far as you just scrolled. It is a treadmill, and it is measurable: on the 11x17 set
+       at 168% in a 1900px window,
+
+           scrollX   0 → marginLeft   4px      sheet 78..2134
+           scrollX 156 → marginLeft 160px      sheet 78..2134
+           scrollX 300 → marginLeft 304px      sheet 78..2134   (scrollWidth 2290 → 2434, growing)
+
+       The sheet never moves. 234px of it is off the right of the window and there is NO scroll
+       position that will show it — the document just gets longer as you try. That is what "not in the
+       middle" is: not a centring error of a few pixels, a sheet nailed to the left rail with a quarter
+       of it unreachable.
+
+       Adding the scroll back makes both readings document-space, which is the space the margin is in.
+       The band (`wantL`/`wantR`) stays a window measurement because the chrome it clears is fixed to
+       the window; taken at rest it is the document band, and the column then stays put while the
+       document scrolls under the rails, which is what a scrollable canvas is supposed to do.
+       ================================================================================================ */
+    const _sx=window.scrollX||0;
+    const cl=r.left +_sx+(parseFloat(cs.paddingLeft )||0)+(parseFloat(cs.borderLeftWidth )||0);
+    const cr=r.right+_sx-(parseFloat(cs.paddingRight)||0)-(parseFloat(cs.borderRightWidth)||0);
     const ins=_chromeInset();
     const freeL=ins.left, freeR=window.innerWidth-ins.right;
     /* ==============================================================================================
@@ -9863,13 +10216,44 @@ function softenPages(){
     let vp; try{ vp=P.page.getViewport({scale:S.scale}); }catch(e){ return; }
     const cv=pg.querySelector("canvas.pdf");
     if(cv&&cv.width){
-      const k=vp.width/cv.width;
+      /* 6mw — against what it is SHOWN at. `cv.width` is how many pixels were painted into it,
+         which since the oversample is a different number. */
+      const k=canvasStretch(cv,vp.width);
       if(Math.abs(k-1)<0.001)return;                       /* already at this size */
       cv.style.width=vp.width+"px"; cv.style.height=vp.height+"px";
+      cv.dataset.shown=String(Math.round(vp.width));      /* 6mw — it is shown at this now */
       const tl=pg.querySelector(".textlayer");
       if(tl){ tl.style.transformOrigin="0 0"; tl.style.transform="scale("+k+")"; }
-      pg.querySelectorAll("svg.draw").forEach(svg=>{     /* 6ia — both layers */
+      pg.querySelectorAll(":scope > svg.draw").forEach(svg=>{     /* 6ia — both layers */
         svg.setAttribute("width",vp.width); svg.setAttribute("height",vp.height); });
+      /* ==========================================================================================
+         6mi — AND THE MARKS ARE NOT SOFTENED. Ced, twice: "zooming in and out is making the preview
+         of the redlines all messed up" · "zooming in it gets pixelated."
+
+         v49's `6mc` gave the marks and the strokes the same stretch as the canvas, to save the
+         `layoutAnnos` and `drawAllLines` a notch used to cost. Their POSITIONS were right — measured
+         through a whole ten-notch gesture, the worst any mark moved was 0.0013 of the page — and
+         that was never what Ced was looking at. What he was looking at is that a redline drawn at
+         one size and then scaled by CSS is a stretched bitmap of itself: the text in a box goes
+         soft, a 2pt rule comes out at 2.2pt, and every edge is resampled. For the whole gesture,
+         and on a sheet of redlines that is everything on it.
+
+         It was a bad trade and the measurement says so plainly. Re-laying the marks is NOT the
+         expensive part of a zoom — that is pdf.js, 61-204ms a page, which is why 6gr softens the
+         canvas and why that half stays. Against it, on the 167-mark construction set:
+
+             layoutAnnos    8.2 ms      the whole of what softening the marks was saving,
+             drawAllLines   0.5 ms      per notch, and a notch is already frame-bounded because
+             drawPageLines  2.6 ms      the wheel handler batches to one setZoom per rAF
+
+         about 12ms a frame to have every redline crisp and exactly where it belongs at every
+         instant of the gesture. v48's nineteen calls were the real fault, and they came from
+         `resharpenSoon` and from renders landing mid-gesture, not from the one call a notch makes.
+
+         So: the canvas and the text layer are stretched, and the marks and strokes are drawn. 6mc's
+         two stand-in removers in `layoutAnnos` and `drawPageLines` go with it — nothing sets them
+         now, and a rule nothing uses is a rule that rots.
+         ========================================================================================== */
       pg.dataset.soft="1";
     }
   });
@@ -9927,8 +10311,12 @@ function resharpenSoon(ms){
         await new Promise(res=>requestAnimationFrame(()=>res()));
       }
     })();
-    try{ layoutAnnos(); }catch(e){}
-    try{ drawAllLines(); }catch(e){}
+    /* 6my — and the marks are NOT laid out here. This pair arrived with 6mc, when `rezoomPages` had
+       stopped doing it and the settle was the only place left; 6mi put it back on every notch and
+       left this as a second copy of the same work, firing once per debounce — which on a long
+       gesture is several times. Measured on a ten-notch zoom, `layoutAnnos` went from 18 calls to
+       10 with these two lines gone, and nothing needs them: a page the resharpen re-renders goes
+       through `_renderPageNow`, which lays the marks out itself. */
   }, (ms==null?110:ms));
 }
 function rezoomPages(settle){
@@ -9954,6 +10342,8 @@ function rezoomPages(settle){
      that is where the other two calls are.
      ============================================================================================== */
   resharpenSoon(settle);                   /* and comes back crisp when the zooming stops */
+  /* 6mi — and the redlines are DRAWN at the new scale, not stretched to it. ~12ms on a 167-mark
+     sheet, once per frame because the wheel handler batches, and every mark is crisp throughout. */
   try{ layoutAnnos(); }catch(e){}
   try{ drawAllLines(); }catch(e){}
   /* 6ji — the page list does not change with the zoom, and rebuilding it on every notch of a wheel
@@ -9982,10 +10372,28 @@ async function setZoom(z,anchor,settle){
       const p=el&&el.closest&&el.closest(".page");
       if(p)return +p.dataset.idx; }catch(e){}
     try{ return currentPageIdx(); }catch(e){ return 0; } })();
+  /* ================================================================================================
+     6mv — ZOOMING FROM THE PAPER'S EDGE ZOOMS THE PAPER'S EDGE.
+     Ced: "the tool just goes back to the pdf like this if zoomed in from the free space. if zooming
+     on the right most, just zoom of the right most of the pdf, and vice versa to the left. on the
+     left, just make sure the zoom is only showing to the page list and not overlaying the pages
+     list."
+
+     The anchor is a point on the sheet, as a fraction of it — and over the grey beside the sheet
+     that fraction is outside 0..1. Putting an off-paper point back under the cursor drags the sheet
+     across by however far off the paper you were, which is why a zoom started in the free space
+     threw the view somewhere else entirely; and the further out you were, the further it threw.
+
+     Clamped, the nearest point ON the paper is held instead. Zoom from the grey on the right and
+     the right edge stays under the cursor; from the grey on the left, the left edge does — which
+     also means the sheet cannot be driven in under the page list, because the edge is pinned to a
+     pointer that is to the right of it.
+     ================================================================================================ */
   const _zfrac=(()=>{ const p=document.querySelector(`.page[data-idx="${_zpi}"]`);
     if(!p)return null; const r=p.getBoundingClientRect();
     if(!r.width||!r.height)return null;
-    return {fx:(_zax-r.left)/r.width, fy:(_zay-r.top)/r.height}; })();
+    const cl=(v)=>Math.max(0,Math.min(1,v));
+    return {fx:cl((_zax-r.left)/r.width), fy:cl((_zay-r.top)/r.height)}; })();
   /* 6iw — Ced: "do not also limit the zoom to just 350%." On a 34x22 drawing sheet 350% is barely
      enough to read a part number off a detail, let alone put a mark on one. The ceiling is 12x, which
      is as far as a page canvas can be rendered before the memory it needs stops being reasonable, and
@@ -10016,7 +10424,15 @@ async function setZoom(z,anchor,settle){
       if(before&&p){
         const r=p.getBoundingClientRect();
         const maxX=Math.max(0,(document.documentElement.scrollWidth||0)-window.innerWidth);
-        const wantX=Math.max(0,Math.min(maxX,window.scrollX+(r.left+before.fx*r.width)-ax));
+        /* 6md — "unless zoomed in in specific place". A ctrl-wheel names a place and the point under
+           it is held; the + and − buttons, a fit, a keyboard zoom name none, so the sheet is put in
+           the middle of the window instead of wherever the previous scroll left it. When the sheet
+           fits, the column's `margin:auto` has already centred it and this asks for the scroll it is
+           already at; when it does not fit, this is the only thing that can centre it. */
+        const _mid=window.scrollX+(r.left+r.width/2)-window.innerWidth/2;
+        const wantX=anchor
+          ? Math.max(0,Math.min(maxX,window.scrollX+(r.left+before.fx*r.width)-ax))
+          : Math.max(0,Math.min(maxX,_mid));
         const wantY=Math.max(0,window.scrollY+(r.top+before.fy*r.height)-ay);
         window.scrollTo(wantX,wantY);
         /* 6gq — and the ribbon goes with it in the same frame, not on the scroll event after */
@@ -11586,7 +12002,27 @@ const TF_SPLIT_RE=/\((?:design|as-?built)\)/i;
 async function detachOurRedlines(u8){
   if(!window.PDFLib)return null;
   let doc=null;
-  try{ doc=await PDFLib.PDFDocument.load(u8); }
+  /* ================================================================================================
+     6mm — AND IT READS THE FILE THE QUICK WAY. Ced: "viewing pdf should also be seamless."
+
+     Timed on a 45-page site package, from the click to the first page on screen: 3.2 seconds, of
+     which `detachOurRedlines` is **1,660ms** and all of it happens before anything is drawn. Taken
+     apart, the whole of that is this one line — pdf-lib parsing the file — and nothing else in the
+     function is measurable:
+
+         PDFDocument.load, as it was called      404 ms
+         load, parseSpeed Fastest                115 ms
+         recoverPhotoSrcs                          1 ms
+         the annotation walk                       0 ms
+
+     `parseSpeed` is how far pdf-lib looks ahead when it meets something it does not understand.
+     Fastest means it does not go hunting, which costs nothing at all on a well-formed file and on
+     a malformed one throws instead of recovering — and a throw here is already handled, three
+     lines down, by leaving the file exactly as it came in. So the slow setting was buying a
+     recovery path for a case where the fast setting's failure is the same answer.
+     ================================================================================================ */
+  try{ doc=await PDFLib.PDFDocument.load(u8,{updateMetadata:false,
+          parseSpeed:(PDFLib.ParseSpeeds&&PDFLib.ParseSpeeds.Fastest)||Infinity}); }
   catch(e){ LOG("detachOurRedlines: could not read the PDF, leaving it alone —",e&&e.message); return null; }
   const {PDFName}=PDFLib;
   const str=v=>{ try{ if(!v)return null;
@@ -11848,7 +12284,20 @@ async function detachOurRedlines(u8){
   if(removed){
     try{
       doc.setSubject("");        /* nothing stale to read next time; the export writes a fresh payload */
-      bytes=await doc.save({useObjectStreams:false});
+      /* ============================================================================================
+         6mm — AND IT WRITES THEM BACK THE QUICK WAY TOO. These bytes are not a file: they are handed
+         straight to pdf.js and kept as `S.docBytes` for the export to build on, and both of those
+         read object streams perfectly well. The export's own save keeps `useObjectStreams:false`,
+         because that output IS a file and our tags are meant to be legible in it. Measured on the
+         45-page package, the same document written both ways:
+
+             save({useObjectStreams:false})   1,164 ms   4.8 MB
+             save()                             218 ms   4.2 MB
+
+         Nine hundred and fifty milliseconds, before the first page is on screen, for a property
+         nothing downstream of here uses.
+         ============================================================================================ */
+      bytes=await doc.save();
     }catch(e){
       LOG("detachOurRedlines: the rewrite failed, so the marks stay on the page —",e&&e.message);
       return null;              /* better the old behaviour than a broken document */
@@ -13447,12 +13896,49 @@ window.addEventListener("pointercancel",()=>{ try{ lenHUDHide(document.getElemen
    it. The controls still ORBIT the box — they stay attached to the edge they belong to, which is what
    says which box they act on — and each one is drawn upright wherever it has landed.
    ================================================================================================== */
+/* ==================================================================================================
+   6mp — THE CURSOR ON A TURNED MARK POINTS WHERE THE EDGE ACTUALLY IS.
+   Ced: "the changes in cursor especially when adjusting corners of a rotated item should not be
+   based on the previous orientation. it should be based on the current orientation."
+
+   The eight grips carry their cursor in CSS — `.rz.nw{cursor:nwse-resize}` and so on — which is a
+   statement about the UNROTATED box. Turn a mark 45° and the grip that is now at the top of the
+   screen still says it resizes along the old diagonal: the arrow points one way and the edge under
+   it runs another. On a mount drawing, where a redline is turned to lie along a member, that is
+   every mark.
+
+   A resize cursor only has four directions, 45° apart, so the right one is simply the grip's own
+   compass bearing plus the mark's rotation, taken to the nearest 45° and folded into a half turn
+   (an edge has no up or down: `ns-resize` serves both n and s).
+   ================================================================================================== */
+const GRIP_BEARING={n:0,ne:45,e:90,se:135,s:180,sw:225,w:270,nw:315};
+const GRIP_CURSOR=["ns-resize","nesw-resize","ew-resize","nwse-resize"];
+function gripCursor(pos,deg){
+  const b=GRIP_BEARING[pos];
+  if(b==null)return "";
+  let a=(b+(+deg||0))%180; if(a<0)a+=180;
+  return GRIP_CURSOR[Math.round(a/45)%4];
+}
 function setMarkSpin(el,rot){
   if(!el)return;
   const r=+rot||0;
   el.style.transformOrigin="center center";
   el.style.transform=r?("rotate("+r+"deg)"):"";
   try{ el.style.setProperty("--urot",(-r)+"deg"); }catch(e){}
+  /* 6mp — the one place a mark's rotation is applied is the one place its cursors are set.
+     Guarded on there being something to correct: `layoutAnnos` calls this for every mark on the
+     page and nearly all of them are square on, so an unturned mark that has never been turned does
+     no DOM work at all. `tools.py`'s thrash case measured the ungated version at 14.7ms against its
+     14ms budget on a 40-mark page, which is what the guard is worth. */
+  if(r||el.dataset.spun){
+    try{
+      el.querySelectorAll(":scope > .rz").forEach(h=>{
+        const c=gripCursor(h.dataset.pos,r);
+        if(c)h.style.cursor=c;
+      });
+    }catch(e){}
+    if(r)el.dataset.spun="1"; else delete el.dataset.spun;
+  }
 }
 /* 6fa — the angle readout that follows a rotate handle. One element, made once and reused. */
 function degHUD(){
@@ -13701,13 +14187,9 @@ function startAnnoRotate(ev,a,d,pg){
     degHUDHide(hud);
     try{ rotGuideClose(); }catch(_){}        /* 6lu */
     if(!_rotMoved){
-      /* 6hb — a press that went nowhere is a request to type the angle */
-      askAngle({ title:"Rotate this mark",
-                 hint:"Type the angle in degrees \u2014 0 puts it back square on. Negative turns anticlockwise.",
-                 now:Math.round((a.rot||0)*10)/10,
-                 apply:v=>{ pushHistory(); a.rot=v;
-                   layoutAnnos(); drawAllLines(); selectAnno(a.id); autosave();
-                   setStatus("Turned to "+(Math.round(v*10)/10)+"\u00b0."); } });
+      /* 6hb — a press that went nowhere is a request to type the angle. 6ms — and it is typed on
+         the mark, not in a dialog over the drawing: see `angleChipOpen`. */
+      angleChipOpen(a,d,pg);
       return;
     }
     try{ autosave(); }catch(_){}
@@ -13715,6 +14197,80 @@ function startAnnoRotate(ev,a,d,pg){
   window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
 }
 
+/* ==================================================================================================
+   6ms — TYPING AN ANGLE HAPPENS ON THE MARK. Ced, with a screenshot of the modal: "this is still
+   showing when rotate was clicked, change it to what i asked to be", beside his own picture of a
+   small rounded chip carrying a rotate glyph and an editable `-45°`.
+
+   6hb made a click on the rotate grip open `askAngle` — a dialog in the middle of the window, over
+   a dimmed sheet. For a thing as small as an angle that is the wrong size of gesture twice over: it
+   covers the drawing you are turning the mark against, and it moves your eye and your hand away
+   from the mark and back again for two keystrokes.
+
+   The chip is the readout that is already there while you drag (`degHUD`), with the number made
+   editable and put beside the mark. Enter turns it, Escape leaves it, clicking anywhere else leaves
+   it. It is the same shape and the same place your eye is already looking, so the angle is typed
+   where the turning is happening.
+   ================================================================================================== */
+let _angChip=null;
+function angleChipClose(){
+  if(!_angChip)return;
+  const c=_angChip; _angChip=null;
+  try{ document.removeEventListener("pointerdown",c._away,true); }catch(e){}
+  try{ c.el.remove(); }catch(e){}
+}
+/* 6mt — and it serves EVERY selectable thing, not only a mark. Ced: "apply this to all selectable
+   items." A stroke and a multi-selection turn by a DELTA rather than to an absolute angle, so what
+   differs between them is the starting value and what the number means; the chip itself does not
+   care. `opts` is {rect, now, apply, note}. */
+function angleChipOpen(a,d,pg,opts){
+  angleChipClose();
+  opts=opts||{};
+  if(!a&&!opts.rect)return;
+  const el=document.createElement("div");
+  el.className="angchip";
+  const g=document.createElement("span"); g.className="ac-g"; g.textContent="\u21bb";
+  const inp=document.createElement("input");
+  inp.type="text"; inp.className="ac-in"; inp.spellcheck=false;
+  inp.setAttribute("aria-label","Angle in degrees");
+  inp.value=String(Math.round(((opts.now!=null?opts.now:(a&&a.rot)||0))*10)/10);
+  const deg=document.createElement("span"); deg.className="ac-d"; deg.textContent="\u00b0";
+  el.appendChild(g); el.appendChild(inp); el.appendChild(deg);
+  document.body.appendChild(el);
+  /* beside the mark, below its box, and never off the window — the same clamp 6ly gave the HUD */
+  try{
+    const r=opts.rect||(d||document.querySelector('.anno[data-id="'+a.id+'"]')).getBoundingClientRect();
+    const w=el.offsetWidth||120, h=el.offsetHeight||26, M=8;
+    /* 6ms — below the turn and drag grips, not on top of them. Ced: "make the input for degree
+       lower than the drag and rotate icon." They hang `BAR_HANDLE_DROP` (52px) under the box, so
+       the chip starts past that. */
+    let L=r.left+r.width/2, Tp=r.bottom+BAR_HANDLE_DROP+14+h/2;
+    if(Tp+h/2>window.innerHeight-M)Tp=Math.max(M+h/2,r.top-18-h/2);
+    L=Math.min(Math.max(L,w/2+M), window.innerWidth-w/2-M);
+    el.style.left=L+"px"; el.style.top=Tp+"px";
+  }catch(e){}
+  const commit=()=>{
+    const v=parseFloat(String(inp.value).replace(/[^0-9.+-]/g,""));
+    angleChipClose();
+    if(!isFinite(v))return;
+    try{ pushHistory(); }catch(e){}
+    if(opts.apply){ try{ opts.apply(Math.round(v*10)/10); }catch(e){} return; }
+    a.rot=Math.round(v*10)/10;
+    try{ layoutAnnos(); drawAllLines(); selectAnno(a.id); autosave(); }catch(e){}
+    setStatus("Turned to "+(Math.round(v*10)/10)+"\u00b0.");
+  };
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key==="Enter"){ e.preventDefault(); commit(); }
+    else if(e.key==="Escape"){ e.preventDefault(); angleChipClose(); }
+  });
+  /* a press anywhere else leaves the angle as it was — the next frame, so the press that opened
+     this one does not immediately close it */
+  const away=e=>{ if(!el.contains(e.target))angleChipClose(); };
+  _angChip={el,_away:away};
+  setTimeout(()=>{ if(_angChip&&_angChip.el===el)document.addEventListener("pointerdown",away,true); },0);
+  requestAnimationFrame(()=>{ try{ inp.focus(); inp.select(); }catch(e){} });
+}
 function openPageOrg(){ renderPageOrg(); reflectLocked(); const m=$("#pageOrg"); if(m)m.classList.add("show"); }
 
 /* Join the fragments of one wrapped cell back into a single value. */

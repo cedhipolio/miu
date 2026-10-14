@@ -13,9 +13,15 @@
       col:getComputedStyle(document.documentElement).getPropertyValue("--col-w").trim(),
       /* the column itself always fits the window — the body never scrolls sideways because of it */
       colFits:wrap.getBoundingClientRect().width<=window.innerWidth+1,
-      /* the sheet is centred in the column and its left edge is on screen after the zoom */
+      /* While the sheet FITS the column it is centred in it by `margin:auto`, and its left edge is
+         on screen. Once it is wider than the column neither can be true, and since 6md neither is
+         claimed: the sheet is flush left IN THE COLUMN and centred IN THE WINDOW by the scroll, so
+         half the overflow hangs off each side and both edges are reachable. `pageCentred` and
+         `pageLeftVisible` therefore read false at 3x and that is the right answer — what has to
+         hold at every zoom is the last one. */
       pageCentred:Math.abs((pg.left-ps.left)-(ps.right-pg.right))<3,
       pageLeftVisible:pg.left>=-1,
+      centredInWindow:Math.abs((pg.left+pg.width/2)-window.innerWidth/2)<3,
       chromeVisible:tb.left>=0&&tb.left<window.innerWidth};
   }
   await setZoom(1); await sleep(400);

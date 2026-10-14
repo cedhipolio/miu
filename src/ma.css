@@ -212,6 +212,17 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
   white-space:nowrap;writing-mode:horizontal-tb;text-orientation:mixed;direction:ltr;
   display:flex;align-items:center;gap:7px}
 .deghud.show{opacity:1}
+/* 6ms — the angle, typed on the mark. The same pill the drag readout uses, light rather than dark
+   because this one is a field and a field has to look like somewhere you can put a caret. */
+.angchip{position:fixed;z-index:4400;transform:translate(-50%,-50%);
+  background:#fff;color:#1b1f27;border:1px solid rgba(20,24,32,.22);
+  border-radius:999px;padding:4px 10px;font:600 12px/1 var(--sans);
+  box-shadow:0 3px 14px rgba(0,0,0,.18);display:flex;align-items:center;gap:6px;
+  white-space:nowrap;writing-mode:horizontal-tb;direction:ltr}
+.angchip .ac-g{color:#2f6fd0;font-size:13px;line-height:1}
+.angchip .ac-in{width:52px;border:0;outline:0;background:transparent;color:inherit;
+  font:inherit;text-align:right;padding:0;font-variant-numeric:tabular-nums}
+.angchip .ac-d{opacity:.6}
 .deghud.caught{background:#0b7a4b;border-color:#13a866}
 /* 6lu/6ly — TWO READINGS WHILE TURNING: where it is, and how far it has come, side by side. The change
    keeps its own darker chip so the two never read as one number; `tabular-nums` so neither jitters as
@@ -225,8 +236,12 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
 /* 6lu — the cross, the arm and the pale ground, over the page for the length of the turn */
 .annoui > svg.rotguide{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:1}
 svg.rotguide .rg-ax{stroke:#9aa2ae;stroke-width:1;stroke-dasharray:5 5;opacity:.75}
-svg.rotguide .rg-arm{stroke:#12b5c9;stroke-width:1.5;opacity:.95}
-svg.rotguide .rg-hub{fill:#12b5c9;opacity:.95}
+/* 6mq — Ced: "the blue line in the middle when rotating should be solid and firm." It was 1.5px at
+   95% — a hairline, and against a drawing made of hairlines it read as one more of them rather than
+   as the thing being turned. Three pixels, fully opaque, round-capped: the dashed grey cross is the
+   reference and this is the hand, and the two should not be the same weight. */
+svg.rotguide .rg-arm{stroke:#12b5c9;stroke-width:3;opacity:1;stroke-linecap:round}
+svg.rotguide .rg-hub{fill:#12b5c9;opacity:1}
 svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stroke-width:1}
 
 /* 6g1 — the measurement readout: the same chip as the angle, following the pointer */
