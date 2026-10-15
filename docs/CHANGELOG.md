@@ -8,6 +8,87 @@ Versions are numbered by release, not semver: v59 is the fifty-ninth published b
 
 ---
 
+## v60
+
+**A tool for the whole company: it fails safely, says what happened, and looks like one program.**
+
+Ced: *"Make this build much more stable. think of it as an actual tool that will be used by users
+across the company so the stability should be there. also perfect the design language, make it
+consistent across all tools, all tabs, all drop downs etc."* — and, while it was being built: a
+glowing, theme-coloured Auto; a heavier lasso; a new Invert, Select and Pan; filled redline icons; a
+callout that is not a chat bubble; one stamp button that stamps or updates; redline text that is a
+real text box; every font that can be added; the preloaded markup drawings; the editor's pressed
+keys lit from the upper left.
+
+### Stability
+
+- **`guard.js`, first in the app.** Every uncaught error and rejected promise is caught; the
+  browser's harmless notices (ResizeObserver, cancelled renders) are recorded but never shown; a real
+  one raises ONE calm notice per problem — what happened, that the redlines are saved, and **Copy
+  details**, which puts a support report (version, browser, document size, the last problems and log
+  lines, never the document's contents) on the clipboard. The pending autosave is flushed first.
+- **The close guard.** Closing the tab inside autosave's half-second debounce lost the last edit. It
+  now warns only then, and the save is forced through on hide and on close.
+- **Opening a file.** Real PDFs with an empty or odd MIME type (Outlook, network shares) were turned
+  away — a file is judged by its `%PDF-` header now. A second drop mid-load no longer runs two loads
+  into one state. Password-protected, damaged, empty and non-PDF files each get a plain sentence of
+  what to do. One unreadable page no longer refuses the whole document. A failed open leaves the
+  document that was already open exactly as it was — including the export name and the bytes the
+  export is built from, which it used to overwrite.
+- **Export.** One at a time (a double-click ran two into the same pdf-lib document); a failure says
+  the redlines are safe and to try again, instead of "see the browser console".
+- **`harden.js`, last in the app.** The context menu had no Escape and stayed above any dialog
+  opened under it; now Escape closes it first and every modal closes menus as it opens. A
+  non-numeric coordinate can no longer reach a mark (and from there storage): it is repaired at layout
+  and reported.
+- **Boot.** A browser that cannot inflate the bundle, or an error while the app script runs, used to
+  leave the loading screen up forever. It now shows "Mark It Up couldn't start", what to try, the
+  details, and Reload.
+- **`test/chaos.py`** — seeded sessions of hundreds of real mouse and keyboard actions, checking
+  after every one that nothing threw, every coordinate is finite and on a real page, ids are unique,
+  and no modal sits under a menu. Twenty sessions × 300 actions held.
+- **CI was broken and never ran the suites.** The build job read `public/app.html`, which has not
+  existed since v38; the audit job only ran with a client fixture configured, so never. Now:
+  `tools/make_fixture.py` writes a synthetic mount analysis, and every push runs behave, keys,
+  reopen, flatten and chaos against it (audit and parity report alongside).
+- `src/manifest.json` is the one list of what goes into each blob — `build.mjs` and `build.py` each
+  had their own. `src/app.rfds.js` (980 KB, referenced by nothing) is gone. `release-check` also
+  asserts the version the tool reports equals `package.json`'s. `tools/traceicon.py` runs on NumPy 2.
+
+### Design language
+
+- **`ds.css`, last in the CSS.** Five radius steps and six type steps; 441 literal radii and sizes in
+  the four older sheets now read them (marks on the page are left exactly as they were).
+- **Surfaces, as Ced set them:** Ontel keeps v59's surfaces, Day and Night. Every other theme hangs its
+  tool panels, menus, dropdowns, selection bar, Assist and the picture editor on the PAGE's surface —
+  they were a fixed navy from the first theme, so a Day theme hung black panels on a white page. The
+  panels' colours are one token family (`--fp-*`) shared by the tool panel, the selection bar, every
+  menu and the ask dialogs.
+- One look for every **select** (drawn chevron, sunk well), **menu row** hover, **segmented tab**
+  (Night/Day/System and Top/Right join the tool panel's), section label and focus ring.
+
+### Asked for along the way
+
+- **Auto** glows, and its iridescence is a sweep around the THEME's accent. **Lasso** is a heavier
+  dotted loop with a solid arrow. **Invert**, **Select** and **Pan** are Ced's artwork. The redline
+  tools are **heavier and filled**; the **callout** is a text box on a leader with an arrowhead.
+- **Stamp**: one full-width button with the stamp's mark, pinned under the card — it stamps the pages
+  in range that have none and updates the ones that do, in place, and says which.
+- **Redline text is a Text box**: placed and sized over the printed value, red, resized by its
+  handles, wrapping at words.
+- **Fonts**: 30 open families (OFL / Apache) — office look-alikes, sans, condensed, serif, mono,
+  handwriting — subset to WinAnsi and embedded on export by the existing TrueType writer
+  (`tools/addfonts.py` → `src/fonts-extra.js`). The font chips became a searchable picker.
+- **Preloaded markups**: Ced's ten equipment drawings ship with the tool (`assets/markups/`,
+  `tools/addmarkups.py`), never touch browser storage, and an edit saves a copy.
+- The editor's **pressed and sunk** controls take their shadow from the upper left, like the ribbon.
+
+Build 4.30 MB (fonts 2.25 MB of it). Suites on the synthetic fixture: tools 6 failing — all six
+fail identically on v59 and are fixture- or rasteriser-specific (see the v60 notes); behave, keys,
+reopen, flatten, stampparity, colparity, chaos green; wysiwyg and textparity at their v59 baseline.
+
+---
+
 ## v59
 
 **The picture editor becomes two columns, the border grows smoothly, and the two tools nobody had

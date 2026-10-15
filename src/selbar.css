@@ -15,10 +15,10 @@
   position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
   z-index:4100; display:flex; align-items:stretch; gap:2px;
   max-width:calc(100vw - 24px); overflow-x:auto; overflow-y:visible;
-  background:#1f232b; color:#e6e9ef;
-  border:1px solid #363c48; border-radius:999px;
+  background:var(--fp-card); color:var(--fp-ink);
+  border:1px solid var(--fp-line); border-radius:var(--r-pill);
   box-shadow:0 14px 40px rgba(0,0,0,.45);
-  padding:6px 10px; font-size:12px;
+  padding:6px 10px; font-size:var(--fs-4);
 }
 .selbar[hidden]{display:none}
 /* ==================================================================================================
@@ -44,8 +44,8 @@
   display:inline-flex;align-items:center;justify-content:center;
   align-self:center;
   min-width:24px;height:24px;padding:0 6px;margin-right:6px;
-  border-radius:999px;background:#2f3541;color:#fff;
-  font:700 12px/1 var(--sans);flex:0 0 auto;
+  border-radius:var(--r-pill);background:var(--fp-btn-hi);color:var(--fp-ink-strong);
+  font:700 var(--fs-4)/1 var(--sans);flex:0 0 auto;
 }
 /* =================================================================================================
    6li — EVERY BUTTON SAYS WHAT IT IS.
@@ -68,12 +68,12 @@
      words. `min-width` rather than a fixed width: a name wider than the column is allowed to set it,
      and `flex-basis:0` with `flex-grow:1` then shares any slack evenly. */
   flex:1 0 auto; min-width:68px;
-  background:transparent;border:0;border-radius:9px;color:#cfd6e2;
-  padding:5px 4px 4px;cursor:pointer;font-size:12px;line-height:1;
+  background:transparent;border:0;border-radius:var(--r-md);color:var(--fp-btn-ink);
+  padding:5px 4px 4px;cursor:pointer;font-size:var(--fs-4);line-height:1;
 }
-.sb-b:hover{background:#2b313b;color:#fff}
-.sb-b.on{background:#2f7be0;color:#fff}
-.sb-i{font-size:14px;line-height:1;opacity:.92}
+.sb-b:hover{background:var(--fp-btn-hi);color:var(--fp-ink-strong)}
+.sb-b.on{background:var(--fp-accent);color:#fff}
+.sb-i{font-size:var(--fs-6);line-height:1;opacity:.92}
 /* 6jo — the drawn icons: the same optical weight as the words beside them, and they take the
    button's colour, so hover and the pressed state need no second copy. */
 .sb-i.sb-svg{display:inline-flex;align-items:center;justify-content:center;
@@ -101,7 +101,7 @@
 /* 6jf/6li — these were the wordless ones. They are not any more; the class now only says that their
    glyph is a drawing rather than a letter, and the padding matches. */
 .sb-ico{padding:5px 7px}
-.sb-ico .sb-i{font-size:13px}
+.sb-ico .sb-i{font-size:var(--fs-5)}
 /* 6li — THE LOCK IS RED WHILE IT IS ON. Ced: "on the lock and unlock, make the icon red when it is
    locked." A locked mark refuses every gesture, so the one state you have to be able to read across
    the room is that one — the same red the delete control uses, on the glyph alone so the button does
@@ -110,10 +110,10 @@
 .sb-b.sb-locked .sb-l{color:#ff5a5a;opacity:1}
 .sb-b.sb-locked:hover .sb-i,.sb-b.sb-locked:hover .sb-l{color:#ff7b7b}
 /* 6jg — the delete control, the same red disc in a rounded box the floating bars now carry */
-.sb-del{margin-left:4px;padding:5px 6px;border-radius:9px}
+.sb-del{margin-left:4px;padding:5px 6px;border-radius:var(--r-md)}
 .sb-del .sb-i{display:flex;align-items:center;justify-content:center;
-  width:17px;height:17px;border-radius:999px;background:#e03131;color:#fff;
-  font:700 10px/1 var(--sans);opacity:1}
+  width:17px;height:17px;border-radius:var(--r-pill);background:#e03131;color:#fff;
+  font:700 var(--fs-2)/1 var(--sans);opacity:1}
 .sb-del:hover{background:#3a2229}
 .sb-del:hover .sb-i{background:#f03e3e}
 /* the back-to-top mark sits in the same corner, so it steps up while the bar is out */
@@ -122,30 +122,30 @@ body.selbaron #markR{bottom:64px}
 /* the drop-up menus */
 .sb-menu{
   position:fixed;z-index:4400;min-width:190px;padding:5px;
-  background:#1f232b;color:#e6e9ef;border:1px solid #3a414f;border-radius:9px;
+  background:var(--fp-card);color:var(--fp-ink);border:1px solid var(--fp-line);border-radius:var(--r-md);
   box-shadow:0 14px 36px rgba(0,0,0,.5);
 }
-.sb-mi{display:block;width:100%;text-align:left;background:transparent;border:0;color:#cfd6e2;
-  padding:7px 9px;border-radius:6px;font-size:12px;cursor:pointer}
-.sb-mi:hover{background:#2f7be0;color:#fff}
+.sb-mi{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--fp-btn-ink);
+  padding:7px 9px;border-radius:var(--r-sm);font-size:var(--fs-4);cursor:pointer}
+.sb-mi:hover{background:var(--fp-accent);color:#fff}
 /* 6jc — a layer row: the name, how many marks are on it, and the eye that switches it off */
 .sb-mrow{display:flex;align-items:center;gap:2px}
 .sb-mrow > .sb-mi{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb-mi.tick{color:#fff;font-weight:600}
-.sb-mnote{flex:0 0 auto;padding:0 2px;color:#7f8899;font:600 10px/1 var(--sans)}
+.sb-mi.tick{color:var(--fp-ink-strong);font-weight:600}
+.sb-mnote{flex:0 0 auto;padding:0 2px;color:var(--fp-muted);font:600 var(--fs-2)/1 var(--sans)}
 .sb-maux{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
-  background:transparent;border:0;border-radius:6px;color:#6f7889;font-size:12px;cursor:pointer}
-.sb-maux.on{color:#cfd6e2}
-.sb-maux:hover{background:#2b313b;color:#fff}
+  background:transparent;border:0;border-radius:var(--r-sm);color:var(--fp-muted);font-size:var(--fs-4);cursor:pointer}
+.sb-maux.on{color:var(--fp-btn-ink)}
+.sb-maux:hover{background:var(--fp-btn-hi);color:var(--fp-ink-strong)}
 /* 6jf — the bar's layer button wears the layer's name, so it is readable at a glance */
 .sb-lay .sb-l{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb-sep{height:1px;background:#2f3541;margin:4px 2px}
+.sb-sep{height:1px;background:var(--fp-sep);margin:4px 2px}
 /* 6j7 — the right-click menu: the same card, opened at a point, with a heading it can carry */
-.sb-menu.sb-ctx{min-width:230px;max-height:78vh;overflow:auto;border-radius:12px;padding:5px}
-.sb-mh{padding:7px 12px 5px;color:#8d96a6;font:700 9.5px/1 var(--sans);
+.sb-menu.sb-ctx{min-width:230px;max-height:78vh;overflow:auto;border-radius:var(--r-lg);padding:5px}
+.sb-mh{padding:7px 12px 5px;color:var(--fp-muted);font:700 var(--fs-1)/1 var(--sans);
   letter-spacing:.12em;text-transform:uppercase}
 .sb-mi.off{opacity:.4;cursor:default}
-.sb-mi.off:hover{background:transparent;color:#cfd6e2}
+.sb-mi.off:hover{background:transparent;color:var(--fp-btn-ink)}
 
 /* a locked mark says so, and a flattened one is marked as going into the page */
 .anno.locked{outline:1.5px dashed rgba(255,176,46,.85);outline-offset:1px}
@@ -154,8 +154,8 @@ body.selbaron #markR{bottom:64px}
 
 /* a saved selection in the markup library has no picture, so it shows what it holds */
 .ma-mk .ma-mkgrp{display:flex;align-items:center;justify-content:center;width:100%;height:56px;
-  border-radius:6px;background:var(--panel2,#20242c);color:var(--muted,#8d96a6);
-  font:600 11px/1 var(--sans);letter-spacing:.03em}
+  border-radius:var(--r-sm);background:var(--panel2,#20242c);color:var(--muted,#8d96a6);
+  font:600 var(--fs-3)/1 var(--sans);letter-spacing:.03em}
 
 /* =================================================================================================
    6f8 — A BIGGER TARGET ON THE HANDLES
@@ -172,30 +172,30 @@ body.selbaron #markR{bottom:64px}
    ================================================================================================= */
 .sb-ask{position:fixed;inset:0;z-index:4600;display:flex;align-items:center;justify-content:center;
   background:rgba(8,10,14,.55);backdrop-filter:blur(2px)}
-.sb-askcard{width:420px;max-width:calc(100vw - 40px);background:#1f232b;color:#e6e9ef;
-  border:1px solid #3a414f;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.6);padding:16px 16px 14px}
-.sb-asktitle{font:700 15px/1.2 var(--sans);margin-bottom:6px}
-.sb-askhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:0 0 11px}
-.sb-askinput{width:100%;box-sizing:border-box;background:#262b34;border:1px solid #3a414f;
-  border-radius:8px;color:#e6e9ef;font-size:13px;padding:9px 10px;outline:none}
-.sb-askinput:focus{border-color:#6ea8ff}
-.sb-asklabel{display:block;color:#8d96a6;font-size:11px;letter-spacing:.04em;
+.sb-askcard{width:420px;max-width:calc(100vw - 40px);background:var(--fp-card);color:var(--fp-ink);
+  border:1px solid var(--fp-line);border-radius:var(--r-lg);box-shadow:0 22px 60px rgba(0,0,0,.6);padding:16px 16px 14px}
+.sb-asktitle{font:700 var(--fs-6)/1.2 var(--sans);margin-bottom:6px}
+.sb-askhint{color:var(--fp-muted);font-size:var(--fs-3);line-height:1.5;margin:0 0 11px}
+.sb-askinput{width:100%;box-sizing:border-box;background:var(--fp-btn);border:1px solid var(--fp-line);
+  border-radius:var(--r-md);color:var(--fp-ink);font-size:var(--fs-5);padding:9px 10px;outline:none}
+.sb-askinput:focus{border-color:var(--fp-accent)}
+.sb-asklabel{display:block;color:var(--fp-muted);font-size:var(--fs-3);letter-spacing:.04em;
   text-transform:uppercase;margin:0 0 5px}
 .sb-askselect{display:block;width:100%;box-sizing:border-box;margin:5px 0 10px;
-  background:#262b34;border:1px solid #3a414f;border-radius:8px;color:#e6e9ef;
-  font-size:13px;padding:9px 10px;outline:none;cursor:pointer;
+  background:var(--fp-btn);border:1px solid var(--fp-line);border-radius:var(--r-md);color:var(--fp-ink);
+  font-size:var(--fs-5);padding:9px 10px;outline:none;cursor:pointer;
   appearance:none;-webkit-appearance:none;
-  background-image:linear-gradient(45deg,transparent 50%,#8d96a6 50%),
-                   linear-gradient(135deg,#8d96a6 50%,transparent 50%);
+  background-image:linear-gradient(45deg,transparent 50%,var(--fp-muted) 50%),
+                   linear-gradient(135deg,var(--fp-muted) 50%,transparent 50%);
   background-position:calc(100% - 17px) 17px,calc(100% - 12px) 17px;
   background-size:5px 5px,5px 5px;background-repeat:no-repeat}
-.sb-askselect:focus{border-color:#6ea8ff}
+.sb-askselect:focus{border-color:var(--fp-accent)}
 .sb-askrow{display:flex;justify-content:flex-end;gap:8px;margin-top:13px}
-.sb-askb{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:8px;
-  padding:7px 14px;font-size:12px;cursor:pointer}
-.sb-askb:hover{background:#2f3541}
-.sb-askb.primary{background:#2f7be0;border-color:#2f7be0;color:#fff}
-.sb-askb.primary:hover{background:#3d88ec}
+.sb-askb{background:var(--fp-btn);border:1px solid var(--fp-line);color:var(--fp-btn-ink);border-radius:var(--r-md);
+  padding:7px 14px;font-size:var(--fs-4);cursor:pointer}
+.sb-askb:hover{background:var(--fp-btn-hi)}
+.sb-askb.primary{background:var(--fp-accent);border-color:var(--fp-accent);color:#fff}
+.sb-askb.primary:hover{background:var(--fp-accent)}
 
 /* =================================================================================================
    6g1 — THE VERTICAL HANDLES COME BACK
@@ -299,12 +299,12 @@ body.adjusting .anno.sel.cellmark .rz.n,body.adjusting .anno.sel.cellmark .rz.s{
 .gframe.up .ggrip.grot{bottom:auto;top:-32px}
 .gframe .ggrip.gdrag{right:-30px;top:calc(50% + 3px);left:auto;bottom:auto}
 .gframe .ggrip.gdel{right:-31px;top:calc(50% - 23px);left:auto;bottom:auto;
-  width:18px;height:18px;font-size:11px}
+  width:18px;height:18px;font-size:var(--fs-3)}
 /* 6nb — and the four side pills, on the mark's own clamp: 22px, shrinking only to clear the
    corners, never under the corner's 11px. One rule, written the same way as `.anno .rz`. */
-.gframe .gh.e,.gframe .gh.w{width:7px;border-radius:6px;top:0;bottom:0;margin-block:auto;
+.gframe .gh.e,.gframe .gh.w{width:7px;border-radius:var(--r-sm);top:0;bottom:0;margin-block:auto;
   height:clamp(11px,calc(100% - 22px),22px);cursor:ew-resize}
-.gframe .gh.n,.gframe .gh.s{height:7px;border-radius:6px;left:0;right:0;margin-inline:auto;
+.gframe .gh.n,.gframe .gh.s{height:7px;border-radius:var(--r-sm);left:0;right:0;margin-inline:auto;
   width:clamp(11px,calc(100% - 22px),22px);cursor:ns-resize}
 .gframe .gh.e{right:-5px} .gframe .gh.w{left:-5px}
 .gframe .gh.n{top:-5px}   .gframe .gh.s{bottom:-5px}
@@ -327,7 +327,7 @@ body.adjusting .anno.sel.cellmark .rz.n,body.adjusting .anno.sel.cellmark .rz.s{
    ================================================================================================== */
 .gframe .ggrip{width:20px;height:20px;border-radius:50%;background:#fff;
   border:1px solid var(--ctl-line,#b9bfc9);color:var(--ctl-ink,#6b7280);
-  font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
+  font-size:var(--fs-4);line-height:1;display:flex;align-items:center;justify-content:center;
   padding:0;pointer-events:auto;cursor:pointer;touch-action:none;
   box-shadow:0 1px 2px rgba(0,0,0,.14);
   transition:background .1s ease,border-color .1s ease,color .1s ease}
@@ -348,9 +348,9 @@ body.adjusting .anno.sel.cellmark .rz.n,body.adjusting .anno.sel.cellmark .rz.s{
 .sk-menu{min-width:250px;padding:6px}
 .sk-mi{display:flex;align-items:center;gap:10px;padding:8px 9px}
 .sk-mi.on{background:#2f3541;color:#fff}
-.sk-g{width:18px;text-align:center;opacity:.85;font-size:13px;line-height:1}
+.sk-g{width:18px;text-align:center;opacity:.85;font-size:var(--fs-5);line-height:1}
 .sk-l{flex:1;white-space:nowrap}
-.sk-k{color:#7f8a9c;font-size:11px;letter-spacing:.02em}
+.sk-k{color:#7f8a9c;font-size:var(--fs-3);letter-spacing:.02em}
 
 /* the printed runs a text-select drag is over */
 .tspan.sk-on{background:rgba(18,104,209,.26);border-radius:2px}
@@ -434,12 +434,12 @@ html.light .sk-edit{
    once, with a small margin; the picture scrolls inside the stage. */
 .sk-edcard{position:relative;   /* 6ne — the hover chip is placed against the CARD */
   background:var(--ske-card);color:var(--ske-ink);border:1px solid var(--ske-line);
-  border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.35);padding:14px;
+  border-radius:var(--r-lg);box-shadow:0 22px 60px rgba(0,0,0,.35);padding:14px;
   width:calc(100vw - 48px);height:calc(100vh - 48px);
   max-width:1480px;max-height:1000px;
   display:flex;flex-direction:column;box-sizing:border-box}
 /* 6j9 — headings in caps */
-.sk-edtitle{font:800 12px/1.2 var(--sans);letter-spacing:.11em;text-transform:uppercase}
+.sk-edtitle{font:800 var(--fs-4)/1.2 var(--sans);letter-spacing:.11em;text-transform:uppercase}
 /* 6ng — the hint paragraph is gone; the heading keeps a little air under it on its own. */
 .sk-edhead{margin-bottom:10px}
 /* 6n5 — what the editor has just said. The page's own status strip is behind this dialog, so every
@@ -450,9 +450,9 @@ html.light .sk-edit{
    long message is still in the activity log and in the page's own status strip. */
 .sk-edsay{position:absolute;left:50%;transform:translateX(-50%);top:46px;z-index:30;
   max-width:min(70%,760px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  font-size:11.5px;line-height:1.4;
+  font-size:var(--fs-3);line-height:1.4;
   color:var(--ske-btn-ink);background:var(--ske-card);border:1px solid transparent;
-  border-left:3px solid #4b94e6;border-radius:var(--radius,12px);padding:8px 14px;
+  border-left:3px solid #4b94e6;border-radius:var(--radius,var(--r-lg));padding:8px 14px;
   box-shadow:0 10px 26px rgba(0,0,0,.34), 0 2px 6px rgba(0,0,0,.18)}
 .sk-edsay.err{border-left-color:#fa3237;color:#b3161c}
 html:not(.light) .sk-edsay.err{color:#ffd9da}
@@ -493,23 +493,23 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
 .sk-edzoom{min-width:40px;text-align:center}
 /* 6gk — what the next wand click does to the selection: new, add, subtract */
 .sk-edmodes{display:inline-flex;gap:2px;background:var(--ske-sunk);border:1px solid transparent;
-  border-radius:11px;padding:2px}
-.sk-edm{background:transparent;border:0;color:var(--ske-chip-ink);border-radius:9px;padding:4px 7px;
-  font:600 11px/1 var(--sans);cursor:pointer;white-space:nowrap}
+  border-radius:var(--r-lg);padding:2px}
+.sk-edm{background:transparent;border:0;color:var(--ske-chip-ink);border-radius:var(--r-md);padding:4px 7px;
+  font:600 var(--fs-3)/1 var(--sans);cursor:pointer;white-space:nowrap}
 .sk-edm:hover{background:var(--ske-btn-hi);color:var(--ske-ink)}
 .sk-edm.on{background:var(--ske-accent);color:var(--ske-accent-ink)}
 .sk-edb{display:inline-flex;align-items:center;gap:5px;background:var(--ske-btn);border:1px solid var(--ske-line);
-  color:var(--ske-btn-ink);border-radius:9px;padding:6px 7px;font-size:11px;cursor:pointer;
+  color:var(--ske-btn-ink);border-radius:var(--r-md);padding:6px 7px;font-size:var(--fs-3);cursor:pointer;
   white-space:nowrap;line-height:1.1}
 .sk-edb:hover{background:var(--ske-btn-hi)}
 .sk-edb.on{background:var(--ske-accent);border-color:var(--ske-accent);color:var(--ske-accent-ink)}
-.sk-edg{font-size:13px;line-height:1}
+.sk-edg{font-size:var(--fs-5);line-height:1}
 /* 6lf — a drawn glyph sits on the text's own line and takes the button's ink. 1.15em rather than 1em
    because the bucket's artwork is taller than it is wide, so matched by WIDTH it reads smaller than
    the typed glyphs beside it. */
 .sk-edg svg{display:block;width:1.15em;height:1.15em;fill:currentColor}
-.sk-edsize{display:inline-flex;align-items:center;gap:6px;color:var(--ske-muted);font-size:11px;
-  background:var(--ske-btn);border:1px solid var(--ske-line);border-radius:8px;padding:4px 7px;white-space:nowrap}
+.sk-edsize{display:inline-flex;align-items:center;gap:6px;color:var(--ske-muted);font-size:var(--fs-3);
+  background:var(--ske-btn);border:1px solid var(--ske-line);border-radius:var(--r-md);padding:4px 7px;white-space:nowrap}
 /* 6mx/6n0 — Ced, three times: "have the free and border slider longer to have more control in
    adjustments." 64px for a 60-degree sweep is barely a degree a pixel, and for a 12px border it is
    five pixels a step. 6mx measured the tool row's slack and took all of it — 96px is the last width
@@ -540,7 +540,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
    which is the unevenness, measured. 54 is the tallest of them, so it is the height of all of
    them, and everything inside centres in what is left. */
 .sk-eddock .sk-edpanel{height:54px;box-sizing:border-box;
-  background:var(--ske-card);border:1px solid var(--ske-line);border-radius:13px;
+  background:var(--ske-card);border:1px solid var(--ske-line);border-radius:var(--r-lg);
   box-shadow:0 10px 30px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.16)}
 .sk-eddock .sk-edsize.sk-edpanel{padding:19px 12px 7px;align-items:center}
 .sk-eddock .sk-edgrp.sk-edpanel{padding:0 12px;gap:6px;align-items:center;border-right:none}
@@ -549,18 +549,18 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
   padding:0;min-height:0}
 .sk-eddock .sk-edctx .sk-edgrp{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
 /* a control inside one of those panels is ON the panel, so it keeps its own plate small */
-.sk-eddock .sk-edmodes,.sk-eddock .sk-ednib{padding:3px;border-radius:11px}
+.sk-eddock .sk-edmodes,.sk-eddock .sk-ednib{padding:3px;border-radius:var(--r-lg)}
 .sk-eddock .sk-edcount{margin:0}
 
 /* ---- 6ni — the slider itself -------------------------------------------------------------------
    A native range paints no filled portion on WebKit, so the fill is a gradient on the track sized
    by `--v`, written by `edSyncRange`. The thumb is the one Ced drew: a white disc on a grey ring
    with a soft shadow, a touch larger than the track so it reads as sitting on top of it. */
-.sk-edsize{position:relative;padding-top:19px;align-items:center;border-radius:var(--radius,12px)}
+.sk-edsize{position:relative;padding-top:19px;align-items:center;border-radius:var(--radius,var(--r-lg))}
 .sk-edsize input[type=range]{width:94px;-webkit-appearance:none;appearance:none;
   background:transparent;height:18px;margin:0;cursor:pointer}
 .sk-edsize input[type=range]::-webkit-slider-runnable-track{
-  height:16px;border-radius:9px;
+  height:16px;border-radius:var(--r-md);
   background:
     linear-gradient(90deg,var(--ske-fill-a),var(--ske-fill-b)) left/var(--v,0%) 100% no-repeat,
     var(--ske-trk);
@@ -570,9 +570,9 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
   background:var(--ske-thumb);border:1px solid var(--ske-thumb-line);
   box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .sk-edsize input[type=range]:active::-webkit-slider-thumb{background:#fff}
-.sk-edsize input[type=range]::-moz-range-track{height:16px;border-radius:9px;background:var(--ske-trk);
+.sk-edsize input[type=range]::-moz-range-track{height:16px;border-radius:var(--r-md);background:var(--ske-trk);
   box-shadow:inset 0 1px 2px rgba(0,0,0,.26)}
-.sk-edsize input[type=range]::-moz-range-progress{height:16px;border-radius:9px;
+.sk-edsize input[type=range]::-moz-range-progress{height:16px;border-radius:var(--r-md);
   background:linear-gradient(90deg,var(--ske-fill-a),var(--ske-fill-b))}
 .sk-edsize input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
   background:var(--ske-thumb);border:1px solid var(--ske-thumb-line);
@@ -581,11 +581,11 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
    thumb's centre never reaches the track's own ends */
 .sk-edsize .sk-ednum{position:absolute;top:0;left:var(--bx,50%);transform:translateX(-50%);
   min-width:0;background:var(--ske-bub);color:var(--ske-bub-ink);
-  border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;line-height:1.3;
+  border-radius:var(--r-pill);padding:2px 9px;font-size:var(--fs-2);font-weight:700;line-height:1.3;
   box-shadow:0 1px 3px rgba(0,0,0,.26);pointer-events:none;white-space:nowrap}
 /* 6ni — the rows that carry a reading but no track (the zoom percentage) keep the old inline look */
 .sk-edview .sk-ednum,.sk-edzoom{position:static;transform:none;background:none;box-shadow:none;
-  color:var(--ske-ink);padding:0;font-weight:400;font-size:11px}
+  color:var(--ske-ink);padding:0;font-weight:400;font-size:var(--fs-3)}
 /* ==================================================================================================
    6n3 — THE TOOL BAR IS DOWN THE LEFT, AND THE SLIDERS ARE ON THE FLOOR.
    Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
@@ -625,7 +625,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
 /* a TAB: the tool grid, the brush, the turn, the border, the history, the zoom. No border at all —
    the emboss is the edge. */
 .sk-edcol-l>*,.sk-edcol-r>*,.sk-eddock .sk-edpanel{
-  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,12px);
+  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,var(--r-lg));
   box-shadow:var(--emb-d,4px) var(--emb-d,4px) calc(var(--emb-b,10px)*1.5) var(--emb-lo,rgba(0,0,0,.5)),
              calc(var(--emb-d,4px)*-1) calc(var(--emb-d,4px)*-1) calc(var(--emb-b,10px)*1.5) var(--emb-hi,rgba(255,255,255,.05));
   box-sizing:border-box}
@@ -638,7 +638,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
   justify-content:center;border-right:none;border-bottom:1px dotted var(--ske-sep)}
 .sk-edrail .sk-edgrp:last-child{border-bottom:none}
 .sk-edrail .sk-edb{width:38px;height:38px;padding:0;gap:0;justify-content:center;
-  align-items:center;text-align:center;border-radius:11px}
+  align-items:center;text-align:center;border-radius:var(--r-lg)}
 .sk-edrail .sk-edb .sk-edt{display:none}          /* the word is on the tooltip */
 .sk-edrail .sk-edg{font-size:16px}
 .sk-edrail .sk-edg svg{width:1.15em;height:1.15em}
@@ -651,7 +651,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
 .sk-edctx .sk-edgrp{display:flex;flex-direction:column;gap:8px;align-items:stretch;
   border-right:none;padding:0;background:none;box-shadow:none}
 .sk-edcol-l .sk-edpanel{width:100%;display:flex;box-sizing:border-box;
-  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,12px);
+  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,var(--r-lg));
   box-shadow:var(--emb-d,4px) var(--emb-d,4px) calc(var(--emb-b,10px)*1.5) var(--emb-lo,rgba(0,0,0,.5)),
              calc(var(--emb-d,4px)*-1) calc(var(--emb-d,4px)*-1) calc(var(--emb-b,10px)*1.5) var(--emb-hi,rgba(255,255,255,.05))}
 .sk-edcol-l .sk-edsize.sk-edpanel{flex-wrap:wrap;padding:10px 12px 9px;row-gap:0}
@@ -703,10 +703,10 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
    A chip rather than a `::after`, because the rail scrolls and would clip one. It takes no pointer
    events, so moving onto it cannot make it flicker away.
    ================================================================================================== */
-.sk-edtip{position:absolute;z-index:40;pointer-events:none;white-space:nowrap;border-radius:9px;
+.sk-edtip{position:absolute;z-index:40;pointer-events:none;white-space:nowrap;border-radius:var(--r-md);
   background:var(--ske-ink);color:var(--ske-card);
-  font:600 11px/1 var(--sans);letter-spacing:.02em;
-  padding:6px 9px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+  font:600 var(--fs-3)/1 var(--sans);letter-spacing:.02em;
+  padding:6px 9px;border-radius:var(--r-md);box-shadow:0 4px 14px rgba(0,0,0,.28)}
 
 /* 6nd — the two marks Ced sent in COLOUR keep it, from here rather than from the path, so the
    selected state can take it back: a blue glyph on a blue button would disappear. Auto is an
@@ -721,7 +721,7 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
 /* 6n4 — the nib chips sit tight against the brush's reading, dressed as the wand's mode chips are
    but on a class of their own, so a lookup for one never finds the other. */
 .sk-ednib{display:inline-flex;gap:2px;background:var(--ske-sunk);border:1px solid transparent;
-  border-radius:11px;padding:2px;margin-left:2px}
+  border-radius:var(--r-lg);padding:2px;margin-left:2px}
 .sk-ednum{color:var(--ske-ink);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
 /* 6ha — THE STAGE IS THE ROOM, THE PICTURE SITS IN THE MIDDLE OF IT.
    Ced: "the photo should always be in the middle of edit photo ui." It was pinned to the top and to
@@ -730,7 +730,7 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
    auto` on the picture is the one way that centres BOTH ways and still scrolls correctly when the
    picture is larger than the stage; `justify-content:center` alone clips the top-left in that case. */
 .sk-edstage{position:relative;background:var(--ske-stage);
-  border:1px solid var(--ske-line);border-radius:9px;padding:8px;display:flex;
+  border:1px solid var(--ske-line);border-radius:var(--r-md);padding:8px;display:flex;
   justify-content:safe center;align-items:safe center;
   /* it fills whatever the card has left, whatever the picture inside it is doing */
   flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
@@ -784,7 +784,7 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
    picture both ways and nothing has to make room below. */
 .sk-edrot{position:absolute;bottom:-11px;left:calc(50% - 10px);width:20px;height:20px;
   border-radius:50%;background:#fff;border:var(--selbw) solid var(--selink);color:var(--selink);
-  font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;
+  font-size:var(--fs-4);line-height:1;display:flex;align-items:center;justify-content:center;
   padding:0;cursor:grab;z-index:6;touch-action:none;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .sk-edrot:hover{background:var(--selink);color:#fff}
 .sk-edrot:active{cursor:grabbing}
@@ -807,7 +807,7 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
 .sk-edring.on{opacity:1}
 /* 6n4 — the square nib's cursor is a square. A 2px corner radius rather than none, so it reads as a
    drawn cursor and not as a rendering fault at small sizes. */
-.sk-edring.box{border-radius:2px}
+.sk-edring.box{border-radius:var(--r-xs)}
 .sk-edring.restore{border-color:#7ee0a0;box-shadow:0 0 0 1px rgba(0,0,0,.55) inset,0 0 0 1px rgba(0,0,0,.35)}
 /* 6lf — the PEN's ring is a nib, not a rub-out: it is filled in the ink it will draw with (written
    from `--sk-ink`), so what you are about to put down is the thing under the pointer. Kept light
@@ -820,16 +820,16 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
 /* 6nj — Ced: "make the fill color rounded as well". The swatch is an `input[type=color]`, whose
    inner well is a shadow part of its own: rounding the control alone leaves a square of colour
    sitting inside a rounded box, which is what his capture shows. Both are rounded here. */
-.sk-edcol{width:30px;height:26px;padding:2px;border:1px solid transparent;border-radius:11px;
+.sk-edcol{width:30px;height:26px;padding:2px;border:1px solid transparent;border-radius:var(--r-lg);
   background:var(--ske-btn);cursor:pointer;overflow:hidden}
 .sk-edcol::-webkit-color-swatch-wrapper{padding:0}
-.sk-edcol::-webkit-color-swatch{border:none;border-radius:9px}
-.sk-edcol::-moz-color-swatch{border:none;border-radius:7px}
-.sk-edcount{color:var(--ske-muted);font-size:11.5px;margin-left:2px;font-variant-numeric:tabular-nums}
+.sk-edcol::-webkit-color-swatch{border:none;border-radius:var(--r-md)}
+.sk-edcol::-moz-color-swatch{border:none;border-radius:var(--r-md)}
+.sk-edcount{color:var(--ske-muted);font-size:var(--fs-3);margin-left:2px;font-variant-numeric:tabular-nums}
 .sk-edb[disabled]{opacity:.45;cursor:default}
 .sk-edfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
-.sk-edfb{background:var(--ske-btn);border:1px solid var(--ske-line);color:var(--ske-btn-ink);border-radius:8px;
-  padding:7px 16px;font-size:12px;cursor:pointer}
+.sk-edfb{background:var(--ske-btn);border:1px solid var(--ske-line);color:var(--ske-btn-ink);border-radius:var(--r-md);
+  padding:7px 16px;font-size:var(--fs-4);cursor:pointer}
 .sk-edfb:hover{background:var(--ske-btn-hi)}
 .sk-edfb.primary{background:var(--ske-accent);border-color:var(--ske-accent);color:var(--ske-accent-ink)}
 .sk-edfb.primary:hover{background:#3d88ec}

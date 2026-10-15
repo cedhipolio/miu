@@ -23,7 +23,9 @@ var _echoConsole=false;
     };
   });
 })();
-window.addEventListener("error",ev=>{ try{ const s=document.getElementById("status"); if(s){ s.textContent="⚠ "+(ev.message||"error")+" — your work is autosaved; refresh to recover if needed."; s.className="err"; } try{ LOG("runtime error",ev.message||String(ev.error)); }catch(_){}
+/* v60 — the user-facing half of this moved to guard.js (one notice, benign errors dropped, autosave
+   flushed first). This keeps only the console echo for whoever asked for it. */
+window.addEventListener("error",ev=>{ try{
   if(_echoConsole)console.error("[MA] runtime error",ev.error||ev.message); }catch(_){} });
 window.addEventListener("unhandledrejection",ev=>{
   try{ LOG("promise rejection",(ev.reason&&ev.reason.message)||String(ev.reason)); }catch(e){}
@@ -1263,11 +1265,17 @@ function _shedNote(shed){
          (shed.length===1?"y was":"ies were")+" cleared to make room.";
 }
 let _saveT=null;
-function autosave(){
+/* v60 — `now` skips the half-second debounce: guard.js passes it when the tab is being hidden or
+   closed, or when something has just gone wrong. `S._savePending` is what the close warning reads. */
+function autosave(now){
   if(!S.doc)return;
   clearTimeout(_saveT);
+  S._savePending=true;
   _saveT=setTimeout(async()=>{
-    const r=await saveObj(saveKey(), savePayload());
+    let r;
+    try{ r=await saveObj(saveKey(), savePayload()); }
+    catch(e){ r={ok:false, err:e, shed:[]}; }
+    finally{ S._savePending=false; }
     if(r.ok){
       markSaved();
       if(r.shed.length){ _pill("✓",1600,"warn","Saved — but this browser was nearly full."+_shedNote(r.shed));
@@ -1285,7 +1293,7 @@ function autosave(){
             "redlines, or use Clear saved markings to free space.");
       LOG&&LOG("Autosave: this browser has no room left ("+(r.err&&r.err.message||r.err)+")");
     }
-  },500);
+  },now===true?0:500);
 }
 /* Version backups, capped by SIZE and not only by a count of 20. Twenty backups of a heavily marked
    document ran to 310KB on their own — a rollback safety net that eats the quota takes away the thing
@@ -1474,7 +1482,8 @@ const setStatus=(t,isErr)=>{
 };
 const toast=t=>{const e=$("#toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),1600);};
 const keyOf=(pi,it)=>pi+"|"+it.nx.toFixed(4)+"|"+it.ny.toFixed(4);
-window.addEventListener("error",e=>setStatus("Error: "+(e.message||e.error),true));
+/* v60 — this wrote "Error: …" over the status strip for every error, including the browser's
+   harmless ResizeObserver notices. guard.js reports errors now, once, in words. */
 
 /* ---------- night / day mode ---------- */
 const THEME_KEY="ma_theme";
@@ -2416,15 +2425,58 @@ drop.ondragleave=()=>drop.classList.remove("over");
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])loadPdf(e.dataTransfer.files[0]);};
 fileInput.onchange=e=>{if(e.target.files[0])loadPdf(e.target.files[0]);};
 
-async function loadPdf(file){
+/* ==================================================================================================
+   v60 — OPENING A FILE, MADE SAFE FOR PEOPLE WHO DID NOT WRITE THE TOOL.
+   Four ways this failed for someone other than the person who built it:
+     · `file.type!=="application/pdf"` turned real PDFs away. Windows hands a dragged attachment from
+       Outlook, a file from some network shares and anything with an odd extension over with an EMPTY
+       type, or "application/x-pdf". The file is now judged by its first bytes, which is what a PDF is.
+     · a second drop while the first was still reading ran two loads into the same state at once. A
+       load now carries a ticket; a newer load retires the older one, and the older one stops.
+     · a password-protected or damaged file said "Couldn't open PDF: No password given" or
+       "Invalid PDF structure" — true, and no use to anyone. It now says what happened and what to do.
+     · a failure part-way left half a document on screen. It now goes back to the opening screen
+       unless a document was already open, in which case that one stays as it was.
+   ================================================================================================== */
+let _loadTicket=0;
+async function _looksLikePdf(file){
   try{
-    if(typeof pdfjsLib==="undefined"){setStatus("PDF library failed to load — check network.",true);return;}
-    if(file.type!=="application/pdf"){setStatus("Please choose a PDF.",true);return;}
+    const head=new Uint8Array(await file.slice(0,1024).arrayBuffer());
+    const s=String.fromCharCode.apply(null,head);
+    return s.indexOf("%PDF-")>=0;          /* the header may follow a little junk; readers allow 1KB */
+  }catch(e){ return /\.pdf$/i.test(file.name||""); }
+}
+function _openErrorText(err){
+  const n=(err&&err.name)||"", m=String((err&&err.message)||err||"");
+  if(n==="PasswordException"||/password/i.test(m))
+    return "This PDF is password-protected. Open it in Acrobat, save a copy without the password, and open that copy here.";
+  if(n==="InvalidPDFException"||/Invalid PDF|bad XRef|startxref/i.test(m))
+    return "This file is damaged or is not a real PDF. Try re-downloading it, or open and re-save it in Acrobat first.";
+  if(n==="MissingPDFException")return "The file could not be read. Check that it still exists and try again.";
+  if(/memory|allocation|Array buffer/i.test(m))
+    return "This PDF is too large for this browser to open. Close other tabs and try again, or split the PDF.";
+  return "Couldn't open this PDF ("+m.slice(0,160)+").";
+}
+async function loadPdf(file){
+  if(!file)return;
+  const ticket=++_loadTicket;
+  const stale=()=>ticket!==_loadTicket;
+  const hadDoc=!!S.doc;
+  /* what a failed open must put back: the name the export uses and the bytes it is built from are
+     both written BEFORE pdf.js has accepted the new file, so a refused file used to leave the open
+     document's export pointing at the refused file's bytes */
+  const prev={name:S.name, docBytes:S.docBytes, detached:(typeof _detached!=="undefined")?_detached:null};
+  try{
+    if(typeof pdfjsLib==="undefined"){setStatus("The PDF engine did not load. Reload the page; if it keeps happening, use another browser.",true);return;}
+    if(!file.size){ setStatus("That file is empty (0 bytes).",true); return; }
+    if(!(await _looksLikePdf(file))){ setStatus("“"+(file.name||"That file")+"” is not a PDF. Choose a .pdf file.",true); return; }
+    if(stale())return;
     S.name=file.name.replace(/\.pdf$/i,"");
     setStatus("Starting…");
     await ensureWorker();
     setStatus("Reading PDF…");
     const buf=await file.arrayBuffer();
+    if(stale())return;
     /* 6fe — OURS COME OFF BEFORE pdf.js EVER SEES THE FILE. pdf.js paints annotation appearance streams
        into the page canvas, so a redlined RFDS opened here used to show its old marks as part of the
        PAGE — nothing the tool could select, move or delete. They are detached first and handed back as
@@ -2438,7 +2490,10 @@ async function loadPdf(file){
       if(det){ _detached=det; base=det.bytes; }
     }catch(e){ LOG("detach step skipped",e&&e.message); }
     S.docBytes=(base===buf)?buf.slice(0):base.slice(0);   // clean copy for vector export / re-edit
-    S.doc=await pdfjsLib.getDocument({data:(base===buf)?buf:base.slice(0)}).promise;
+    const _doc=await pdfjsLib.getDocument({data:(base===buf)?buf:base.slice(0)}).promise;
+    if(stale()){ try{ _doc.destroy(); }catch(e){} return; }
+    if(!_doc.numPages)throw new Error("Invalid PDF structure (no pages)");
+    S.doc=_doc;
     S.pages=[]; S.annos=[]; S.lines=[]; S.suggestions=new Set(); S.sel=null; S.selLine=null; S.selMulti=new Set(); S.selMultiL=new Set(); S.clip=null; S.discrepancies=[]; S._zMerged=0;   /* 6ln */
     /* 6ga — a new document has its own save history. Carrying the previous one's time across would put
        a confident "Last saved 6:53 PM" beside work that has never been saved at all. */
@@ -2447,9 +2502,13 @@ async function loadPdf(file){
     showProg("Loading pages…");
     LOG("Opening",file.name,"·",S.doc.numPages,"pages");
     for(let p=1;p<=S.doc.numPages;p++){
+      if(stale())return;
       const page=await S.doc.getPage(p);
       const vp1=page.getViewport({scale:1});
-      const tc=await page.getTextContent();
+      /* v60 — one page whose text layer will not parse no longer refuses the whole document: that page
+         is still drawn and markable, it just has nothing for Find or Analyze to read. */
+      let tc={items:[]};
+      try{ tc=await page.getTextContent(); }catch(e){ LOG("page "+p+": text layer unreadable — "+(e&&e.message||e)); }
       const items=[];
       for(const it of tc.items){
         if(!it.str||!it.str.trim())continue;
@@ -2511,8 +2570,21 @@ async function loadPdf(file){
        Ced: "remove some texts on the ui, like sentences that are self explanatory." */
     setStatus(`${S.doc.numPages} PAGES`);
   }catch(err){
-    $("#bar").style.display="none";
-    setStatus("Couldn't open PDF: "+(err&&err.message?err.message:err),true);
+    if(stale())return;
+    try{ $("#bar").style.display="none"; hideProg(); }catch(e){}
+    LOG("open failed",(err&&err.name)||"",(err&&err.message)||String(err));
+    /* nothing usable was opened: go back to the opening screen rather than leave half a document up */
+    if(hadDoc && S.pages.length){
+      S.name=prev.name; S.docBytes=prev.docBytes; try{ _detached=prev.detached; }catch(e){}
+    }
+    if(!hadDoc || !S.pages.length){
+      try{ S.doc=null; S.docBytes=null; S.name=""; S.pages=[]; S.annos=[]; S.lines=[];
+           const pg=$("#pages"); if(pg)pg.innerHTML="";
+           $("#dropWrap").classList.remove("hidden"); document.documentElement.classList.add("nodoc"); }catch(e){}
+    }
+    const msg=_openErrorText(err);
+    setStatus(msg,true);
+    try{ MIU_GUARD.notice("Couldn't open "+(file.name||"this file"), msg, "warn"); }catch(e){}
     if(_echoConsole)console.error(err);
   }
 }
@@ -4133,13 +4205,15 @@ function onCell(i,it){
       /* addText laid the element out before stampWholeCell set wrap/height, so re-render it now —
          otherwise the mark keeps the single-line styling and the value never breaks onto line two */
       layoutAnnos(); _needRelayout=false;
+      redlineAsTextBox(id);
       LOG("Redline: whole cell over",blk.lines,"lines →",blk.text);
       setTimeout(()=>{ const ed=document.querySelector(`.anno[data-id="${id}"] .ed`);
         if(ed){ selectAnno(id); ed.focus(); try{document.getSelection().selectAllChildren(ed);}catch(e){} } },0);
       toolDone();
       return;
     }
-    addText(i,it.nx,it.ny,it.str,{cell:it});
+    const rid=addText(i,it.nx,it.ny,it.str,{cell:it});
+    redlineAsTextBox(rid);
   }
   else if(S.mode==="cross"){ const id=addLine(i,it.nx,it.ny+it.nh/2,it.nx+it.nw,it.ny+it.nh/2); selectLine(id); }
   else if(S.mode==="strikerow"){ const id=strikeRow(i,it); selectLine(id); }
@@ -4154,6 +4228,45 @@ function onCell(i,it){
      `toolDone` knows which tools stay in the hand, so Callout and Text — which also arrive here when
      they are started from a printed value — are untouched by this line. */
   toolDone();
+}
+
+/* ==================================================================================================
+   v60 — A REDLINE IS A TEXT BOX. Ced: "make the redline tool text box behave like the actual text
+   box" — and, asked which parts: handles resize the box, wrap at words, and fully a Text box.
+   The Redline click still does what made it worth having: it finds the printed value, covers it, and
+   pre-fills the correction box with it, in the redline's colour and at the printed size. What it
+   leaves behind is now a TEXT BOX laid exactly where the cell mark would have been — so it is
+   resized by its handles (the type stays the size you set), wraps between words, keeps the size you
+   drag it to, and has the same caret, alignment and properties as one drawn with the Text tool.
+   The fields that made it a cell mark (fit to the column, type sized by height) are dropped; the
+   printed value it covered is kept in `orig`, which Analyze reads.
+   ================================================================================================== */
+function redlineAsTextBox(id){
+  try{
+    const a=S.annos.find(z=>z.id===id); if(!a||a.kind==="img"||isShape(a))return;
+    const d=markEl(id), pg=d&&d.closest(".page");
+    const P=S.pages[a.page]||{w1:612,h1:792};
+    if(d&&pg){
+      const r=d.getBoundingClientRect(), pr=pg.getBoundingClientRect();
+      if(r.width>0&&pr.width>0){
+        a.nx=(r.left-pr.left)/pr.width; a.ny=(r.top-pr.top)/pr.height;
+        a.nw=r.width/pr.width; a.nh=r.height/pr.height;
+      }
+      /* the type the cell fit chose, in points, becomes the box's own size */
+      const ed=d.querySelector(".ed");
+      if(ed){ const px=parseFloat(getComputedStyle(ed).fontSize)||0;
+              const z=pr.width/(P.w1||612); if(px>0&&z>0)a.size=Math.round(px/z*2)/2; }
+    }
+    a.maKind="text";
+    a.wrap=true; a.nowrap=false; a.manualW=true;
+    a.wrapMode="words";                 /* Ced: "wrap at words" — a correction breaks between its words */
+    a.align=a.align||"center"; a.alignSet=true; a.valign=a.valign||"middle";
+    a.lineNh=(a.size||10)*1.22/(P.h1||792);
+    a.lines=Math.max(1,Math.round((a.nh||a.lineNh)/a.lineNh)); a.pLines=1;
+    ["onCell","fullcell","cw","tx0","cellL","cellR","topR","topY","x2","y2","pstr","pw","fitW"].forEach(k=>{ delete a[k]; });
+    a.onCell=false; a.fullcell=false;
+    layoutAnnos();
+  }catch(e){ LOG&&LOG("redline → text box skipped",e&&e.message); }
 }
 
 /* strike the full equipment row: find text items sharing this row's vertical band */
@@ -10640,11 +10753,23 @@ $("#copyBtn").onclick=async()=>{
 async function runExport(){
   const btn=$("#dlPdf");
   if(btn&&btn.disabled){ setStatus("Open a PDF first — then the export button will save the marked-up copy."); return; }
+  /* v60 — one export at a time. A double-click on Export, or Ctrl+Shift+E pressed while the first was
+     still writing, ran two exports into the same pdf-lib document and the same download name. */
+  if(runExport._busy){ setStatus("Already exporting — one moment."); return; }
+  runExport._busy=true;
+  try{ if(btn)btn.setAttribute("aria-busy","true"); }catch(e){}
   try{ await exportPdf(); }
   catch(err){
-    LOG("export failed",err&&err.message||String(err)); if(_echoConsole)console.error("[MA] export failed:",err);
-    setStatus("Export failed: "+((err&&err.message)||err)+" — see the browser console for details.");
-    try{ toast("Export failed — "+((err&&err.message)||err)); }catch(e){}
+    const m=(err&&err.message)||String(err);
+    LOG("export failed",m); if(_echoConsole)console.error("[MA] export failed:",err);
+    /* the redlines are untouched by a failed export — say that first, then what to try */
+    try{ autosave(true); }catch(e){}
+    setStatus("Export failed ("+m.slice(0,140)+"). Your redlines are still here and saved — try Export again.",true);
+    try{ MIU_GUARD.notice("Export failed",
+      "Your redlines are still here and saved in this browser. Try Export again; if it fails twice, use Copy details and send it on.","warn"); }catch(e){}
+  }finally{
+    runExport._busy=false;
+    try{ if(btn)btn.removeAttribute("aria-busy"); }catch(e){}
   }
 }
 $("#dlPdf").onclick=runExport;
@@ -13998,10 +14123,14 @@ const RIBBON_SHAPES={
   groupBtn:"--i-group", markupsBtn:"--i-library", stampBtn:"--i-stamp",  /* 6k9 */
   photoBtn:"--i-photofile"                                               /* 6mb */
 };
-const MODE_SHAPES={ select:"--i-arrow", redline:"--i-pen", crossout:"--i-cross",
-                    strikerow:"--i-strikerow", cross:"--i-striketext", line:"--i-line",
+/* v60 — select and pan take the marks Ced sent (see ds.css §6) */
+const MODE_SHAPES={ select:"--i-select", pan:"--i-hand", redline:"--i-pen",
+                    /* v60 — the heavier, filled set (ds.css §8) */
+                    text:"--i-t-text", fix:"--i-t-fix", crossout:"--i-t-crossout",
+                    strikerow:"--i-t-strikerow", cross:"--i-t-striketext", line:"--i-t-line",
+                    arrow:"--i-t-arrow", dim:"--i-t-dim", poly:"--i-t-poly", box:"--i-t-box", circle:"--i-t-circle",
                     /* 6fh — the callout, drawn as what it makes: a box of text, a stub, a leader, an arrow */
-                    callout:"--i-callout",
+                    callout:"--i-t-callout",
                     /* 6mb — the bracketed camera, in place of U+25A3 */
                     snapshot:"--i-snapshot" };
 function iconifyRibbon(){

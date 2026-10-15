@@ -4,7 +4,7 @@
 Mirrors the packer the RFDS tool used: each asset is gzipped + base64'd into a
 <script type="text/plain"> block and inflated at load by the boot script.
 """
-import base64, gzip, os, subprocess, sys
+import base64, gzip, json, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "src")
@@ -12,13 +12,10 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "mount-analysis-r
 
 # Each blob may be several source files, concatenated in order. The engine and the mount-analysis
 # layer are separate files to work on and one script to run, which is what keeps them in one scope.
-ASSETS = [
-    ("pk-css", ["app.css", "ma.css", "toolpop.css", "selbar.css"]),
-    ("pk-pdf", ["pdfjs.js"]),
-    ("pk-wrk", ["pdfworker.js"]),
-    ("pk-lib", ["pdflib.js"]),
-    ("pk-app", ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"]),
-]
+with open(os.path.join(SRC, "manifest.json"), encoding="utf-8") as _f:
+    _M = json.load(_f)
+ASSETS = [tuple(b) for b in _M["blobs"]]   # the one list, shared with build.mjs
+OURS = _M["ours"]
 
 
 def check_js(path):
@@ -35,7 +32,7 @@ def pack(names):
 
 
 def main():
-    for name in ("fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"):
+    for name in OURS:
         check_js(os.path.join(SRC, name))
     parts = [open(os.path.join(SRC, "shell.html"), "rb").read().decode("utf-8")]
     for sid, names in ASSETS:

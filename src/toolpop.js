@@ -641,6 +641,70 @@ function tpRow(label,node){
   return r;
 }
 /* a row of small buttons where exactly one is chosen */
+/* =================================================================================================
+   v60 — THE FONT PICKER. Ced: "add all possible fonts you can add as well."
+   Seven faces fitted in a row of chips; thirty-seven do not. The row became one control in the
+   panel's own language — a pill naming the face, set IN that face, with a ▾ — and the list it opens
+   is the same menu every other ▾ in the panel opens: grouped, each entry drawn in its own face, with a
+   filter at the top so "rob" finds Roboto, Roboto Mono and Roboto Condensed in one keystroke. Picking
+   a family keeps the bold and italic you had, where the family has that cut.
+   ================================================================================================= */
+const TP_FONT_GROUP={arial:"Standard",times:"Standard",courier:"Standard",jost:"Bundled",carlito:"Office look-alikes",narrow:"Condensed"};
+function tpFontFamOf(k){ return (TP_FAMS.slice().sort((a,b)=>b.length-a.length).find(f=>String(k).indexOf(f)===0))||"arial"; }
+function tpFontPicker(current,onPick){
+  const fam=tpFontFamOf(current);
+  const famLabel=(TP_FONT_CHIPS.find(f=>f.k===fam)||{label:(MARK_FONTS[fam]||{}).label||"Arial"}).label;
+  const btn=tpEl("button","tp-pill tp-fontpick"); btn.type="button";
+  btn.title="Choose a font — every face here is written into the exported PDF or is one every PDF viewer has";
+  const nm=tpEl("span","tp-fontname",famLabel); nm.style.fontFamily=(MARK_FONTS[fam]||MARK_FONTS.arial).css;
+  btn.appendChild(nm); btn.appendChild(tpEl("span","tp-fontcaret","\u25be"));
+  btn.onclick=ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    document.querySelectorAll(".tp-vmenu").forEach(n=>n.remove());
+    const m=tpEl("div","sb-menu tp-vmenu tp-fontmenu");
+    const q=tpEl("input","tp-fontq"); q.type="text"; q.placeholder="Find a font…"; q.setAttribute("aria-label","Find a font");
+    const list=tpEl("div","tp-fontlist");
+    m.appendChild(q); m.appendChild(list);
+    const seen=new Set(), rows=[];
+    TP_FONT_CHIPS.forEach(f=>{ const k=tpFontFamOf(f.k); if(seen.has(k)||!MARK_FONTS[k])return; seen.add(k);
+      rows.push({k, label:(f.k===k?f.label:(MARK_FONTS[k].label||f.label)), group:f.group||TP_FONT_GROUP[k]||"Other", hint:f.hint}); });
+    const order=["Standard","Bundled","Office look-alikes","Sans serif","Condensed","Serif","Monospace","Handwriting","Other"];
+    rows.sort((a,b)=>(order.indexOf(a.group)-order.indexOf(b.group))||a.label.localeCompare(b.label));
+    const draw=filter=>{
+      list.innerHTML=""; let g=null, any=false;
+      rows.forEach(r=>{
+        if(filter&&r.label.toLowerCase().indexOf(filter)<0)return;
+        if(r.group!==g){ g=r.group; list.appendChild(tpEl("div","sb-mh",g)); }
+        const b=tpEl("button","sb-mi tp-vmi tp-fontitem"+(r.k===fam?" on":""),r.label); b.type="button";
+        b.style.fontFamily=MARK_FONTS[r.k].css; if(r.hint)b.title=r.hint;
+        b.onclick=()=>{
+          const bold=/bold/.test(String(current).slice(fam.length)), ital=/ital/.test(String(current).slice(fam.length));
+          const want=r.k+(bold&&ital?"bolditalic":bold?"bold":ital?"ital":"");
+          m.remove(); onPick(MARK_FONTS[want]?want:r.k); tpRender();
+        };
+        list.appendChild(b); any=true;
+      });
+      if(!any)list.appendChild(tpEl("div","tp-fontnone","No font by that name"));
+    };
+    draw("");
+    q.addEventListener("input",()=>draw(q.value.trim().toLowerCase()));
+    q.addEventListener("keydown",e=>{
+      e.stopPropagation();
+      if(e.key==="Escape"){ m.remove(); }
+      if(e.key==="Enter"){ const first=list.querySelector(".tp-fontitem"); if(first)first.click(); }
+    });
+    document.body.appendChild(m);
+    const r=btn.getBoundingClientRect();
+    m.style.left=Math.min(window.innerWidth-m.offsetWidth-8,Math.max(8,r.left))+"px";
+    m.style.top=Math.max(8,Math.min(window.innerHeight-m.offsetHeight-8,r.bottom+4))+"px";
+    const on=list.querySelector(".on"); if(on)on.scrollIntoView({block:"center"});
+    setTimeout(()=>q.focus(),0);
+    const away=e2=>{ if(!m.contains(e2.target)){ m.remove();
+      document.removeEventListener("pointerdown",away,true); } };
+    setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
+  };
+  return btn;
+}
 function tpChoice(items,current,onPick,cls){
   const row=tpEl("div","tp-choice"+(cls?" "+cls:""));
   items.forEach(it=>{
@@ -888,13 +952,7 @@ function tpBuild(){
     }else{
       sec._body.appendChild(opSlider());
     }
-    sec._body.appendChild(tpRow("Font",tpChoice(
-      TP_FONT_CHIPS.map(f=>({k:f.k,t:f.hint||f.label,label:f.label,
-        draw:b=>{ b.textContent=f.label; b.style.fontFamily=MARK_FONTS[f.k].css;
-                  b.style.fontWeight=MARK_FONTS[f.k].weight||"400";
-                  b.style.fontStyle=MARK_FONTS[f.k].style||"normal"; }})),
-      st.font||"arial",
-      k=>tpApply("font",k),"tp-fonts")));
+    sec._body.appendChild(tpRow("Font",tpFontPicker(st.font||"arial",k=>tpApply("font",k))));
     /* 6he — Ced: "in text settings across all tools, add the ability to change the spacing per letter
        and per line." Tracking is in POINTS, the same unit the size is in, and runs from a little
        tighter than the face's own to well open; leading is a MULTIPLE of the normal pitch, so 1 is
@@ -1078,13 +1136,7 @@ function tpBuild(){
        a text mark's controls — and with a measurement selected they land on its reading, because the
        run and the reading answer as one. */
     const rsec=tpSection("Reading",true);
-    rsec._body.appendChild(tpRow("Font",tpChoice(
-      TP_FONT_CHIPS.map(f=>({k:f.k,t:f.label,label:f.label,
-        draw:b=>{ b.textContent=f.label; b.style.fontFamily=MARK_FONTS[f.k].css;
-                  b.style.fontWeight=MARK_FONTS[f.k].weight||"400";
-                  b.style.fontStyle=MARK_FONTS[f.k].style||"normal"; }})),
-      st2.font||"arial",
-      k=>tpApply("font",k),"tp-fonts")));
+    rsec._body.appendChild(tpRow("Font",tpFontPicker(st2.font||"arial",k=>tpApply("font",k))));
     rsec._body.appendChild(tpRow("Size",tpSlider({min:2,max:48,step:0.5,value:st2.size||10,
       choices:[2,3,4,5,6,7,8,10,12,16,24,48],
       ticks:TP_SIZE_TICKS, suffix:"pt", log:true, onInput:v=>tpApply("size",v)})));
@@ -1273,7 +1325,7 @@ function tpDragHead(head){
    off, or both, alongside the underline and the strikethrough. */
 /* 6n1 — the families, longest stem first so a key is matched by its own family and not by a shorter
    one inside it. A chain of ternaries was fine for four and is not for six. */
-const TP_FAMS=["carlito","courier","narrow","times","jost","arial"];
+let TP_FAMS=["carlito","courier","narrow","times","jost","arial"];   /* v60 — extended by fonts-extra.js */
 function tpFaceToggle(fk,which){
   const fam=TP_FAMS.find(f=>String(fk).indexOf(f)===0)||"arial";
   const bold=/bold/.test(fk), ital=/ital/.test(fk);

@@ -1,5 +1,9 @@
 # Test fixtures
 
+**v60:** `npm run fixture` writes `synthetic-mount-analysis.pdf` here — invented names and numbers in
+the shape of a mount analysis. CI runs every suite against it. The notes below are about using a REAL
+package, which is still the better pre-release test.
+
 The Playwright suite drives the real tool against a real document, so it needs a mount analysis PDF
 to open. **None is committed here, and none should be.** The documents we test with are live site
 packages — site numbers, addresses, carrier and vendor names, engineers' signatures — and they are

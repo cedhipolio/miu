@@ -3617,7 +3617,12 @@ async def t_editor_icons(T):
                const sv=b.querySelector('svg'); if(!sv)return true;
                return (parseFloat(sv.getAttribute('stroke-width'))||0)<3; });
              /* the traced marks carry real contours, not a token path */
-             const tiny=named.filter(k=>{ const g=drawn(k); return !g||g.len<200; });
+             /* v60 — Lasso and Invert are DRAWN from Ced's artwork as a few exact shapes (a dotted loop
+                and a solid arrow; a tile, a panel and a split disc), not traced: short path data is
+                their nature, so they are held to having two or more shapes instead */
+             const DRAWN=["lasso","invert"];
+             const tiny=named.filter(k=>{ const g=drawn(k); if(!g)return true;
+               return DRAWN.includes(k)?g.shapes<2:g.len<200; });
              const all=[...document.querySelectorAll('.sk-edrail .sk-edb')];
              return { missing:miss, thin, tiny,
                       named:named.length, buttons:all.length,
@@ -3628,7 +3633,7 @@ async def t_editor_icons(T):
                       autoFill:(by('auto').querySelector('svg path')||{getAttribute:()=>''})
                                  .getAttribute('fill')||'',
                       autoStops:[...by('auto').querySelectorAll('stop')]
-                                 .map(n=>n.getAttribute('stop-color')),
+                                 .map(n=>n.getAttribute('stop-color')||n.style.stopColor||null),   /* v60 — theme-driven, as a style */
                       penFill:(by('pen').querySelector('svg path')||{getAttribute:()=>''})
                                  .getAttribute('fill')||'' }; }""",
         [NAMED, SHAPES])
@@ -3649,7 +3654,7 @@ async def t_editor_icons(T):
           and got["withName"] == got["buttons"]
           and got["withTitle"] == got["buttons"]
           and got["autoFill"].startswith("url(")       # the one Ced sent holographic keeps it
-          and len(got["autoStops"]) >= 6
+          and len([c for c in got["autoStops"] if c]) >= 6
           and got["penFill"] == "currentColor"
           and tip and not tip["hidden"] and tip["text"] == "Lasso"
           and tip["beside"] and tip["clear"])

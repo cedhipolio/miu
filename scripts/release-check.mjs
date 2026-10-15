@@ -51,6 +51,15 @@ if (first && Number(first) !== Number(major)) {
             `a newer section was written above an older one, or the bump was missed.`);
 }
 
+/* v60 — the version the TOOL reports (guard.js, shown in Help and in every "Copy details" report)
+   is the version the repo says it is. Two numbers that can drift will; this one is checked. */
+{
+  const g = read("src/guard.js").match(/MIU_VERSION\s*=\s*"([^"]+)"/);
+  if (!g) fail.push("src/guard.js has no MIU_VERSION — the tool would not be able to say what version it is.");
+  else if (g[1] !== pkg.version)
+    fail.push(`src/guard.js says MIU_VERSION ${g[1]} but package.json says ${pkg.version} — bump both.`);
+}
+
 /* ---- 2. both targets exist, and they are the two different shapes ------------------------------ */
 const web = "public/index.html", art = "dist/mark-it-up.artifact.html";
 for (const f of [web, art]) {

@@ -12,7 +12,7 @@
    `maPlacePanel`. */
 #maPanel{position:fixed;top:76px;left:auto;right:16px;width:360px;max-width:94vw;
   max-height:min(76vh,720px);background:var(--pop,var(--panel));
-  border:1px solid var(--line);border-radius:12px;z-index:64;display:none;flex-direction:column;
+  border:1px solid var(--line);border-radius:var(--r-lg);z-index:64;display:none;flex-direction:column;
   box-shadow:0 14px 42px var(--shadow);color:var(--ink);overflow:hidden}
 #maPanel.show{display:flex}
 html.booting #maPanel{visibility:hidden}
@@ -20,25 +20,25 @@ body.maon .wrap{padding-right:0}
 
 #maPanel .mk-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
 /* 6j9 — headings in caps, like the rest of the tool */
-#maPanel .mk-head b{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+#maPanel .mk-head b{font-size:var(--fs-3);font-weight:800;letter-spacing:.11em;text-transform:uppercase}
 #maPanel .mk-head .btn{margin-left:auto}
-#maPanel .ma-site{font-size:11px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
+#maPanel .ma-site{font-size:var(--fs-3);color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
 
-#maPanel .ma-body{flex:1;min-height:0;overflow:auto;padding:14px;font:12px/1.45 var(--sans)}
+#maPanel .ma-body{flex:1;min-height:0;overflow:auto;padding:14px;font:var(--fs-4)/1.45 var(--sans)}
 /* 6iz — a section's fields sit one step in from its heading, the way the tool panels read */
 #maPanel .ma-sec > *:not(h4){margin-left:10px}
 #maPanel .ma-sec > h4{margin-left:0}
-#maPanel h4{margin:0 0 8px;font:600 11px/1 var(--sans);letter-spacing:.08em;
+#maPanel h4{margin:0 0 8px;font:600 var(--fs-3)/1 var(--sans);letter-spacing:.08em;
   text-transform:uppercase;color:var(--faint)}
 #maPanel .ma-sec{margin:0 0 20px}
-#maPanel .ma-hint{color:var(--muted);font-size:11px;line-height:1.5;margin:6px 0 0}
+#maPanel .ma-hint{color:var(--muted);font-size:var(--fs-3);line-height:1.5;margin:6px 0 0}
 #maPanel label.ma-f{display:block;margin:0 0 9px}
-#maPanel label.ma-f > span{display:block;font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+#maPanel label.ma-f > span{display:block;font-size:var(--fs-2);letter-spacing:.07em;text-transform:uppercase;
   color:var(--faint);margin:0 0 3px}
 #maPanel input[type=text],#maPanel input[type=date],#maPanel input[type=number],
 #maPanel select,#maPanel textarea{width:100%;box-sizing:border-box;background:var(--panel2);
-  color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 11px;
-  font:12px/1.35 var(--sans)}
+  color:var(--ink);border:1px solid var(--line);border-radius:var(--r-md);padding:8px 11px;
+  font:var(--fs-4)/1.35 var(--sans)}
 #maPanel textarea{min-height:70px;resize:vertical}
 #maPanel input:focus,#maPanel select:focus,#maPanel textarea:focus{outline:2px solid var(--accent);
   outline-offset:-1px;border-color:transparent}
@@ -46,8 +46,8 @@ body.maon .wrap{padding-right:0}
 #maPanel .ma-row > *{flex:1;min-width:0}
 #maPanel .ma-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 /* 6iz — the same rounded language the tool panels use */
-#maPanel .ma-go{appearance:none;border:0;border-radius:999px;background:var(--accent);color:#fff;
-  font:600 12px/1 var(--sans);padding:10px 16px;cursor:pointer;letter-spacing:.02em}
+#maPanel .ma-go{appearance:none;border:0;border-radius:var(--r-pill);background:var(--accent);color:#fff;
+  font:600 var(--fs-4)/1 var(--sans);padding:10px 16px;cursor:pointer;letter-spacing:.02em}
 #maPanel .ma-go:hover{filter:brightness(1.08)}
 #maPanel .ma-go.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
 #maPanel .ma-go:disabled{opacity:.45;cursor:default;filter:none}
@@ -55,23 +55,23 @@ body.maon .wrap{padding-right:0}
 /* a saved note or a part: one line you can click to use, with its own small controls */
 #maPanel .ma-list{display:flex;flex-direction:column;gap:6px}
 #maPanel .ma-item{display:flex;align-items:flex-start;gap:8px;background:var(--panel2);
-  border:1px solid var(--line);border-radius:11px;padding:8px 10px}
+  border:1px solid var(--line);border-radius:var(--r-lg);padding:8px 10px}
 #maPanel .ma-item .t{flex:1;min-width:0;cursor:pointer}
-#maPanel .ma-item .t b{display:block;font-size:12px;font-weight:600;color:var(--ink-strong);
+#maPanel .ma-item .t b{display:block;font-size:var(--fs-4);font-weight:600;color:var(--ink-strong);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#maPanel .ma-item .t small{display:block;color:var(--muted);font-size:10.5px;margin-top:2px;
+#maPanel .ma-item .t small{display:block;color:var(--muted);font-size:var(--fs-2);margin-top:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #maPanel .ma-item .x{appearance:none;background:transparent;border:0;color:var(--faint);cursor:pointer;
-  font-size:13px;line-height:1;padding:2px 3px}
+  font-size:var(--fs-5);line-height:1;padding:2px 3px}
 #maPanel .ma-item .x:hover{color:var(--pop)}
-#maPanel .ma-empty{color:var(--faint);font-size:11px;padding:10px 2px}
+#maPanel .ma-empty{color:var(--faint);font-size:var(--fs-3);padding:10px 2px}
 
 /* the as-built comparison: one row per value that disagrees */
-#maPanel .ma-diff{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;
+#maPanel .ma-diff{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-md);padding:9px 10px;
   margin:0 0 7px}
-#maPanel .ma-diff .h{display:flex;align-items:baseline;gap:6px;font-size:10px;letter-spacing:.06em;
+#maPanel .ma-diff .h{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-2);letter-spacing:.06em;
   text-transform:uppercase;color:var(--faint)}
-#maPanel .ma-diff .v{margin-top:4px;font-size:12px;color:var(--ink-strong)}
+#maPanel .ma-diff .v{margin-top:4px;font-size:var(--fs-4);color:var(--ink-strong)}
 #maPanel .ma-diff .v s{color:var(--muted);text-decoration-color:var(--pop)}
 #maPanel .ma-diff .v b{color:var(--accent)}
 #maPanel .ma-diff .go{margin-top:7px}
@@ -95,20 +95,20 @@ body.maplacing .page{cursor:crosshair}
 
 /* the markup library: a small grid of what you have uploaded */
 #maPanel .ma-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-#maPanel .ma-mk{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+#maPanel .ma-mk{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-md);
   padding:6px;cursor:pointer;display:flex;flex-direction:column;gap:5px;align-items:center}
 #maPanel .ma-mk:hover{border-color:var(--accent)}
 /* 6gr — a checker behind the thumbnail, not a white card: a markup with a transparent background
    should LOOK transparent in the library, and line art still reads over it. */
-#maPanel .ma-mk img{max-width:100%;max-height:88px;object-fit:contain;display:block;border-radius:4px;
+#maPanel .ma-mk img{max-width:100%;max-height:88px;object-fit:contain;display:block;border-radius:var(--r-sm);
   background-color:#f3f4f6;
   background-image:linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%),
                    linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%);
   background-size:12px 12px;background-position:0 0,6px 6px}
-#maPanel .ma-mk .nm{font-size:10.5px;color:var(--muted);text-align:center;white-space:nowrap;
+#maPanel .ma-mk .nm{font-size:var(--fs-2);color:var(--muted);text-align:center;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-width:100%}
 #maPanel .ma-mk .x{position:absolute;top:2px;right:2px;appearance:none;background:var(--panel);
-  border:1px solid var(--line);border-radius:5px;color:var(--faint);font-size:11px;line-height:1;
+  border:1px solid var(--line);border-radius:var(--r-sm);color:var(--faint);font-size:var(--fs-3);line-height:1;
   padding:2px 4px;cursor:pointer;opacity:0;transition:opacity .12s}
 #maPanel .ma-mk:hover .x{opacity:1}
 #maPanel .ma-mk .x:hover{color:var(--pop)}
@@ -125,38 +125,38 @@ body.maplacing .page{cursor:crosshair}
   background:rgba(0,0,0,.45);padding:16px}
 #maAnalyze.show{display:flex}
 #maAnalyze .az-box{background:var(--panel);color:var(--ink);border:1px solid var(--line);
-  border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
+  border-radius:var(--r-lg);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
 #maAnalyze .az-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
 #maAnalyze .az-head > div:first-child{flex:1;min-width:0}
-#maAnalyze .az-title{font:800 12px/1.2 var(--sans);color:var(--ink-strong);
+#maAnalyze .az-title{font:800 var(--fs-4)/1.2 var(--sans);color:var(--ink-strong);
   letter-spacing:.11em;text-transform:uppercase}
-#maAnalyze .az-sub{font:400 11.5px/1.4 var(--sans);color:var(--muted);margin-top:2px}
+#maAnalyze .az-sub{font:400 var(--fs-3)/1.4 var(--sans);color:var(--muted);margin-top:2px}
 #maAnalyze .az-body{flex:1;overflow:auto;padding:14px 16px}
 #maAnalyze .az-foot{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--line)}
-#maAnalyze .az-count{flex:1;font:400 11.5px/1 var(--sans);color:var(--muted);
+#maAnalyze .az-count{flex:1;font:400 var(--fs-3)/1 var(--sans);color:var(--muted);
   letter-spacing:.04em;text-transform:uppercase}
 #maAnalyze .az-chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
 #maAnalyze .az-chip{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--faint);
-  border-radius:20px;padding:4px 10px;font:600 10.5px/1 var(--sans);cursor:pointer;
+  border-radius:var(--r-xl);padding:4px 10px;font:600 var(--fs-2)/1 var(--sans);cursor:pointer;
   letter-spacing:.04em;text-transform:uppercase}
 #maAnalyze .az-chip.on{background:var(--accent);border-color:transparent;color:#fff}
-#maAnalyze .az-tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-#maAnalyze table.az-table{border-collapse:collapse;width:100%;font:12px/1.3 var(--sans)}
+#maAnalyze .az-tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-md)}
+#maAnalyze table.az-table{border-collapse:collapse;width:100%;font:var(--fs-4)/1.3 var(--sans)}
 #maAnalyze .az-table th{position:sticky;top:0;background:var(--panel2);color:var(--faint);
-  font:600 10px/1.25 var(--sans);letter-spacing:.06em;text-transform:uppercase;
+  font:600 var(--fs-2)/1.25 var(--sans);letter-spacing:.06em;text-transform:uppercase;
   text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:normal;min-width:88px}
 #maAnalyze .az-table th.pg,#maAnalyze .az-table td.pg{min-width:0;width:38px;text-align:center;
   color:var(--faint);font-variant-numeric:tabular-nums}
 #maAnalyze .az-table td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
 #maAnalyze .az-table tr:last-child td{border-bottom:0}
 #maAnalyze .az-table input{width:100%;box-sizing:border-box;background:transparent;color:var(--ink);
-  border:1px solid transparent;border-radius:6px;padding:5px 6px;font:12px/1.3 var(--sans)}
+  border:1px solid transparent;border-radius:var(--r-sm);padding:5px 6px;font:var(--fs-4)/1.3 var(--sans)}
 #maAnalyze .az-table input:hover{border-color:var(--line)}
 #maAnalyze .az-table input:focus{outline:none;border-color:var(--accent);background:var(--panel2)}
 #maAnalyze .az-table input.blank{color:var(--faint);font-style:italic}
 #maAnalyze .az-table input.edited{background:rgba(250,50,55,.12);border-color:rgba(250,50,55,.5);
   color:var(--ink-strong);font-weight:600}
-#maAnalyze .ma-empty{color:var(--faint);font-size:12px;padding:24px 4px;max-width:60ch;line-height:1.55}
+#maAnalyze .ma-empty{color:var(--faint);font-size:var(--fs-4);padding:24px 4px;max-width:60ch;line-height:1.55}
 
 /* the Style group: three short rows rather than seven stacked controls.
    The columns are `max-content`, not `1fr`: the ribbon measures a group by what is inside it to decide
@@ -171,7 +171,7 @@ body.maplacing .page{cursor:crosshair}
   max-width:none!important;width:max-content}
 #toolbar .grp-style .stylegrid label.mini{display:flex;align-items:center;gap:5px;justify-content:flex-start;
   white-space:nowrap;min-width:0}
-#toolbar .grp-style .stylegrid label.mini > span{font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+#toolbar .grp-style .stylegrid label.mini > span{font-size:var(--fs-2);letter-spacing:.04em;text-transform:uppercase;
   color:var(--faint);flex:0 0 auto}
 #toolbar .grp-style .stylegrid input[type=number]{width:54px;min-width:0}
 #toolbar .grp-style .stylegrid label.wide{grid-column:1 / -1}
@@ -207,7 +207,7 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
    it inside the window. */
 .deghud{position:fixed;z-index:4300;transform:translate(-50%,-50%);pointer-events:none;
   background:rgba(17,20,26,.92);color:#fff;border:1px solid rgba(255,255,255,.18);
-  border-radius:999px;padding:3px 9px;font:700 11.5px/1 var(--sans);
+  border-radius:var(--r-pill);padding:3px 9px;font:700 var(--fs-3)/1 var(--sans);
   letter-spacing:.02em;opacity:0;transition:opacity .1s;
   white-space:nowrap;writing-mode:horizontal-tb;text-orientation:mixed;direction:ltr;
   display:flex;align-items:center;gap:7px}
@@ -216,10 +216,10 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
    because this one is a field and a field has to look like somewhere you can put a caret. */
 .angchip{position:fixed;z-index:4400;transform:translate(-50%,-50%);
   background:#fff;color:#1b1f27;border:1px solid rgba(20,24,32,.22);
-  border-radius:999px;padding:4px 10px;font:600 12px/1 var(--sans);
+  border-radius:var(--r-pill);padding:4px 10px;font:600 var(--fs-4)/1 var(--sans);
   box-shadow:0 3px 14px rgba(0,0,0,.18);display:flex;align-items:center;gap:6px;
   white-space:nowrap;writing-mode:horizontal-tb;direction:ltr}
-.angchip .ac-g{color:#2f6fd0;font-size:13px;line-height:1}
+.angchip .ac-g{color:#2f6fd0;font-size:var(--fs-5);line-height:1}
 .angchip .ac-in{width:52px;border:0;outline:0;background:transparent;color:inherit;
   font:inherit;text-align:right;padding:0;font-variant-numeric:tabular-nums}
 .angchip .ac-d{opacity:.6}
@@ -229,7 +229,7 @@ body.ribbonright #toolbar .grp-style .stylegrid input[type=number]{width:52px}
    the digits run. */
 .deghud .dh-abs,.deghud .dh-dlt{display:inline-block;white-space:nowrap;
   font-variant-numeric:tabular-nums;line-height:1}
-.deghud .dh-dlt{padding:2px 6px;border-radius:999px;
+.deghud .dh-dlt{padding:2px 6px;border-radius:var(--r-pill);
   background:rgba(0,0,0,.42);color:#cfd6e2;font-weight:700}
 .deghud.caught .dh-dlt{background:rgba(0,0,0,.28);color:#d6ffe9}
 
@@ -251,7 +251,7 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
    hover; the pencil says what it does and the two never overlap because each is anchored to its own
    corner of the cell. */
 #maPanel .ma-mk .edit{position:absolute;top:2px;left:2px;appearance:none;background:var(--panel);
-  border:1px solid var(--line);border-radius:5px;color:var(--faint);font-size:11px;line-height:1;
+  border:1px solid var(--line);border-radius:var(--r-sm);color:var(--faint);font-size:var(--fs-3);line-height:1;
   padding:2px 5px;cursor:pointer;opacity:0;transition:opacity .12s}
 #maPanel .ma-mk:hover .edit{opacity:1}
 #maPanel .ma-mk .edit:hover{color:var(--accent);border-color:var(--accent)}
@@ -261,19 +261,19 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
    corner, and drawn at the size it will land at. It is never a click target — the click has to reach
    the page underneath it. */
 .maghost{position:fixed;left:-9999px;top:-9999px;z-index:70;pointer-events:none;
-  opacity:.72;outline:1.5px dashed var(--accent);outline-offset:2px;border-radius:2px;
+  opacity:.72;outline:1.5px dashed var(--accent);outline-offset:2px;border-radius:var(--r-xs);
   box-shadow:0 6px 20px rgba(0,0,0,.28)}
 .maghost img{display:block;width:100%;height:100%;object-fit:fill}
 .maghost.grp{display:flex;align-items:center;justify-content:center;text-align:center;
-  background:var(--panel2);color:var(--ink);font-size:11px;font-weight:700;padding:6px;
+  background:var(--panel2);color:var(--ink);font-size:var(--fs-3);font-weight:700;padding:6px;
   box-sizing:border-box}
 
 /* 6hl — A SAVED SELECTION SHOWS ITSELF. The tile holds a drawing of the marks rather than a count of
    them, on the same checker the picture markups sit on so the two read as one library. The drawing is
    an SVG built from the marks, so it scales to the tile without a raster step. */
 #maPanel .ma-mk .ma-mkgrp{width:100%;height:88px;display:flex;align-items:center;justify-content:center;
-  border-radius:4px;overflow:hidden;padding:4px;box-sizing:border-box;
-  font-size:11px;font-weight:700;color:var(--muted);
+  border-radius:var(--r-sm);overflow:hidden;padding:4px;box-sizing:border-box;
+  font-size:var(--fs-3);font-weight:700;color:var(--muted);
   background-color:#f3f4f6;
   background-image:linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%),
                    linear-gradient(45deg,#d9dde3 25%,transparent 25%,transparent 75%,#d9dde3 75%);
@@ -318,11 +318,11 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
   --mp-ink:#e6e9ef; --mp-dim:#8d96a6;
   --mp-hi:rgba(255,255,255,.055); --mp-lo:rgba(0,0,0,.55);
   background:var(--mp-bg); border-color:var(--mp-line); color:var(--mp-ink);
-  border-radius:16px; box-shadow:0 18px 50px rgba(0,0,0,.5);
+  border-radius:var(--r-xl); box-shadow:0 18px 50px rgba(0,0,0,.5);
 }
 #maPanel .mk-head{
   border-bottom:1px solid #2a303a; padding:13px 14px 9px;
-  border-radius:16px 16px 0 0; background:var(--mp-bg);
+  border-radius:var(--r-xl) var(--r-xl) 0 0; background:var(--mp-bg);
   /* 6ks — and it is the handle: the panel is dragged by its head, the way the tool popover is */
   cursor:grab; touch-action:none;
 }
@@ -330,24 +330,24 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
 #maPanel.dragging{user-select:none}
 #maPanel .mk-head button,#maPanel .mk-head input,
 #maPanel .mk-head select,#maPanel .mk-head label{cursor:pointer}
-#maPanel .mk-head b{font-size:14px;font-weight:800;letter-spacing:.09em}
-#maPanel .ma-site{font-size:10.5px;color:var(--mp-dim)}
+#maPanel .mk-head b{font-size:var(--fs-6);font-weight:800;letter-spacing:.09em}
+#maPanel .ma-site{font-size:var(--fs-2);color:var(--mp-dim)}
 #maPanel .mk-head .btn{
-  width:26px;height:26px;padding:0;border-radius:999px;
-  border:1px solid #3a414f;background:var(--mp-raise);color:#cfd6e2;font-size:13px;line-height:1;
+  width:26px;height:26px;padding:0;border-radius:var(--r-pill);
+  border:1px solid #3a414f;background:var(--mp-raise);color:#cfd6e2;font-size:var(--fs-5);line-height:1;
   box-shadow:0 1px 0 var(--mp-hi) inset, 0 2px 5px var(--mp-lo);
 }
 #maPanel .mk-head .btn:hover{background:#2f3541;border-color:#4a5364}
 #maPanel .ma-body{padding:12px 14px 14px;color:var(--mp-ink)}
 #maPanel h4{color:var(--mp-dim)}
-#maPanel .ma-hint,#maPanel .ma-note{color:var(--mp-dim);font-size:11px;line-height:1.55;margin:8px 0 0}
+#maPanel .ma-hint,#maPanel .ma-note{color:var(--mp-dim);font-size:var(--fs-3);line-height:1.55;margin:8px 0 0}
 #maPanel label.ma-f > span{color:var(--mp-dim)}
 
 /* the sunken field: pressed into the card, with the light coming from above */
 #maPanel input[type=text],#maPanel input[type=date],#maPanel input[type=number],
 #maPanel select,#maPanel textarea{
   background:var(--mp-sunk); color:var(--mp-ink);
-  border:1px solid #2b313b; border-radius:10px; padding:9px 11px;
+  border:1px solid #2b313b; border-radius:var(--r-md); padding:9px 11px;
   box-shadow:inset 0 2px 5px var(--mp-lo), inset 0 -1px 0 var(--mp-hi);
 }
 #maPanel select{
@@ -364,8 +364,8 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
 /* the raised pad: a button sits ON the card */
 #maPanel .ma-go{
   display:block; width:100%; margin:9px 0 0; padding:10px 13px;
-  border-radius:11px; border:1px solid #3a414f; background:var(--mp-raise); color:var(--mp-ink);
-  font:600 12px/1.3 var(--sans); cursor:pointer; text-align:center;
+  border-radius:var(--r-lg); border:1px solid #3a414f; background:var(--mp-raise); color:var(--mp-ink);
+  font:600 var(--fs-4)/1.3 var(--sans); cursor:pointer; text-align:center;
   box-shadow:0 1px 0 var(--mp-hi) inset, 0 3px 7px var(--mp-lo);
   transition:transform .08s ease, box-shadow .08s ease, background .12s ease;
 }

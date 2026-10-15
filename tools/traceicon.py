@@ -39,7 +39,7 @@ def dp(points, eps):
         if L < 1e-9:
             d = np.hypot(*(points[a + 1:b] - p0).T)
         else:
-            d = np.abs(np.cross(seg, points[a + 1:b] - p0)) / L
+            d = np.abs(seg[0] * (points[a + 1:b] - p0)[:, 1] - seg[1] * (points[a + 1:b] - p0)[:, 0])  # 2-D cross; np.cross on 2-vectors was removed in NumPy 2 / L
         if len(d) == 0:
             continue
         k = int(np.argmax(d))
@@ -104,7 +104,8 @@ def main():
         if len(r) < 3:
             continue
         # area in artwork pixels: drop specks the antialiasing left behind
-        ar = abs(np.cross(r - r.mean(0), np.roll(r, -1, 0) - r.mean(0)).sum()) / 2
+        _a, _b = r - r.mean(0), np.roll(r, -1, 0) - r.mean(0)
+        ar = abs((_a[:, 0] * _b[:, 1] - _a[:, 1] * _b[:, 0]).sum()) / 2
         if ar < 1.5:
             continue
         d = []

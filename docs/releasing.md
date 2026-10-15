@@ -11,7 +11,8 @@ that stops that, and `npm run release:check` is the half of it a script can enfo
 Run these in order. Nothing here is optional, and the last two are the ones that get skipped.
 
 ```bash
-export MIU_FIXTURE="test/fixtures/<a real site package>.pdf"
+npm run fixture    # the synthetic package CI uses; a real one in test/fixtures/ is better before a release
+export MIU_FIXTURE="test/fixtures/synthetic-mount-analysis.pdf"
 
 # 1. build both targets and prove the two packers agree
 node build.mjs --target=both
@@ -19,12 +20,13 @@ npm run verify:packers
 
 # 2. the seven suites — all of them, every time
 npm test                 # tools.py       · 214 checks
-npm run test:wysiwyg     # wysiwyg.py     · marks, screen against export
-npm run test:text        # textparity.py  · type, screen against export
+npm run test:wysiwyg     # wysiwyg.py     · marks, screen against export   (not at the same time as ↓)
+npm run test:text        # textparity.py  · type, screen against export   (they share an --out dir)
 npm run test:stamp       # stampparity.py · the COP stamp as a block
 npm run test:behave      # behave.py      · fifty-one behaviours, real mouse and keyboard
 npm run test:keys        # keys.py        · every shortcut, on a real keyboard
 npm run test:reopen      # reopen.py      · export with photos, reopen, are they still there
+npm run test:chaos       # chaos.py       · seeded random sessions against the invariants
 
 for s in v19 v14 v12; do
   python3 test/harness.py dist/mark-it-up.artifact.html "$MIU_FIXTURE" \
@@ -32,7 +34,7 @@ for s in v19 v14 v12; do
 done
 
 # 3. bump the version and write the changelog section for it
-#    package.json "version": "<N>.0.0"   ·   docs/CHANGELOG.md "## v<N>" at the top
+#    package.json "version": "<N>.0.0"   ·   src/guard.js MIU_VERSION   ·   docs/CHANGELOG.md "## v<N>" at the top
 
 # 4. the bookkeeping check — it will tell you which of the above you skipped
 npm run release:check

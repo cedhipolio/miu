@@ -807,17 +807,22 @@ const edIco=k=>'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
    it carries its own id. Auto is an ACTION and never takes the `on` state, which is the one place a
    fixed-colour glyph would disappear — every other coloured glyph here still gets its colour from
    CSS, where the selected state can take it back. */
+/* v60 — AND THE SHEET TAKES THE THEME. Ced: "make the color of the iridescent icon match the theme."
+   Each stop now reads `--holo-1…8`, which ds.css derives from the theme's own accent: the same
+   eight-step sweep around the colour wheel, but centred on the accent's hue instead of on cyan, so
+   Forest shimmers green, Crimson warm, Ontel a cool grey-lilac. The sampled colours stay as each
+   stop's fallback, for a browser too old to do the derivation. */
 const ED_ICO_AUTO=
   '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
     '<defs><linearGradient id="skHolo" x1="0" y1="1" x2="1" y2="0">'+
-      '<stop offset="0" stop-color="#c2b7fc"/>'+
-      '<stop offset="0.16" stop-color="#c6d2fe"/>'+
-      '<stop offset="0.34" stop-color="#9cdffb"/>'+
-      '<stop offset="0.50" stop-color="#51f9fc"/>'+
-      '<stop offset="0.64" stop-color="#81fff2"/>'+
-      '<stop offset="0.78" stop-color="#bdfbc5"/>'+
-      '<stop offset="0.90" stop-color="#e1e3d9"/>'+
-      '<stop offset="1" stop-color="#e9d0da"/>'+
+      '<stop offset="0" style="stop-color:var(--holo-1,#c2b7fc)"/>'+
+      '<stop offset="0.16" style="stop-color:var(--holo-2,#c6d2fe)"/>'+
+      '<stop offset="0.34" style="stop-color:var(--holo-3,#9cdffb)"/>'+
+      '<stop offset="0.50" style="stop-color:var(--holo-4,#51f9fc)"/>'+
+      '<stop offset="0.64" style="stop-color:var(--holo-5,#81fff2)"/>'+
+      '<stop offset="0.78" style="stop-color:var(--holo-6,#bdfbc5)"/>'+
+      '<stop offset="0.90" style="stop-color:var(--holo-7,#e1e3d9)"/>'+
+      '<stop offset="1" style="stop-color:var(--holo-8,#e9d0da)"/>'+
     '</linearGradient></defs>'+
     '<path fill="url(#skHolo)" fill-rule="evenodd" d="'+ED_ICO_PATHS.auto+'"/>'+
   '</svg>';
@@ -831,6 +836,26 @@ const ED_ICO_AUTO=
 const edStroke=body=>'<svg viewBox="0 0 24 24" style="fill:none" stroke="currentColor" '+
   'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '+
   'aria-hidden="true" focusable="false">'+body+'</svg>';
+/* v60 — THE LASSO, DRAWN. Ced: "the lasso tool icon, make the dotted line thicker and the arrow
+   filled out." The traced artwork had a loop of hairline dashes and an arrow drawn as an outline —
+   the lightest glyph in a set whose others are solid. The loop is now a 2.6-unit dotted stroke with
+   round caps (dots, not dashes), and the arrow is one solid shape with a knockout edge where it
+   crosses the loop, so the two read as separate at 16px. */
+const ED_ICO_LASSO='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
+  '<path d="M12.6 17.9C7.1 19.2 1.9 17.2 1.9 12.4c0-4.9 4.6-9.6 10.1-9.6 5.4 0 9.6 3.2 9.6 7.4" '+
+    'style="fill:none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="0.1 4.1"/>'+
+  '<path d="M12.2 9.3 22.6 17.1 17.9 17.4 20.5 22.3 18.1 23.5 15.6 18.6 12.3 21.9Z" '+
+    'fill="currentColor" stroke="var(--ske-card, #fff)" stroke-width="1.4" stroke-linejoin="round" paint-order="stroke"/>'+
+  '</svg>';
+/* v60 — Invert, from the artwork Ced sent: a rounded tile, a light panel on its right half, and a
+   disc across the seam whose two halves are each the opposite of what they sit on. Even-odd fill does
+   the knocking-out, so the glyph is one colour and inverts with its button like every other. */
+const ED_ICO_INVERT='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
+  '<path fill="currentColor" fill-rule="evenodd" d="M3 0H21A3 3 0 0 1 24 3V21A3 3 0 0 1 21 24H3A3 3 0 0 1 0 21V3A3 3 0 0 1 3 0Z'+
+    'M12 2.67H21.33V21.33H12Z'+
+    'M12 5.34A6.66 6.66 0 0 0 12 18.66Z"/>'+
+  '<path fill="currentColor" d="M12 5.34A6.66 6.66 0 0 1 12 18.66Z"/>'+
+  '</svg>';
 const ED_ICO_LINE   =edStroke('<path d="M4.2 19.8 19.8 4.2"/>');
 const ED_ICO_ARROW  =edStroke('<path d="M4.4 19.6 19.2 4.8"/><path d="M11.4 4.8h7.8v7.8"/>');
 const ED_ICO_BOX    =edStroke('<rect x="3.6" y="5.6" width="16.8" height="12.8" rx="1.8"/>');
@@ -1489,14 +1514,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
                "Click a space to select it — Shift adds another","wand");
   /* 6gt — Ced: "add a lasso effect on edit photo." For everything the wand cannot reach: draw round
      it by hand and what you drew round is selected, through the same three chips. */
-  bLasso  =mkb(gSel,"Lasso",edIco("lasso"),()=>setTool("lasso"),false,
+  bLasso  =mkb(gSel,"Lasso",ED_ICO_LASSO,()=>setTool("lasso"),false,
                "Draw round a region by hand — Shift adds it, Alt takes it out","lasso");
   /* 6la — SHAPED SELECT. Ced: "shaped select - within magic wand type tool". The lasso is for a
      region with no shape to it; most of what wants selecting on a drawing is a rectangle, and
      drawing one by hand round it is both slower and worse. It answers to the same three chips. */
   bShapeSel=mkb(gSel,"Shape",ED_ICO_SHAPE,()=>setTool("shapesel"),false,
                "Drag a rectangle or an ellipse over what you want — Shift adds, Alt takes out","shapesel");
-  bInv    =mkb(gSel,"Invert",edIco("invert"),()=>{
+  bInv    =mkb(gSel,"Invert",ED_ICO_INVERT,()=>{
     push();
     mask=skMaskInvert(mask,cv.width*cv.height);
     skMaskShow(ov,mask); say();

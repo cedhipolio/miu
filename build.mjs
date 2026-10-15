@@ -45,18 +45,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "src");
 const SITE = join(HERE, "site");
 
-/* Each blob is several source files concatenated in order: separate files to work on, one script to
-   run, which is what keeps them in a single scope. Order matters — app.js defines what ma.js extends. */
-const ASSETS = [
-  ["pk-css", ["app.css", "ma.css", "toolpop.css", "selbar.css"]],
-  ["pk-pdf", ["pdfjs.js"]],
-  ["pk-wrk", ["pdfworker.js"]],
-  ["pk-lib", ["pdflib.js"]],
-  ["pk-app", ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"]],
-];
-
-/* the files we author, as opposed to the vendored libraries — these are the ones worth syntax-checking */
-const OURS = ["fonts.js", "app.js", "ma.js", "stamp.js", "toolpop.js", "selbar.js", "selectkit.js"];
+/* What goes into each blob, and in what order, lives in src/manifest.json — the ONE list, read by this
+   file and by build.py alike. Until v60 each packer carried its own copy, and a file added to one and
+   not the other was a build that differed by machine. */
+const MANIFEST = JSON.parse(readFileSync(join(SRC, "manifest.json"), "utf8"));
+const ASSETS = MANIFEST.blobs;
+const OURS = MANIFEST.ours;
 
 function checkSyntax() {
   for (const name of OURS) {

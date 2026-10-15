@@ -908,48 +908,77 @@ function maRenderStampTab(body){
   const scope=maScopeControl("all");
   sec.appendChild(scope);
 
-  const stampGo=maBtn("Stamp",`go`,async()=>{
+  /* ================================================================================================
+     v60 — ONE BUTTON: STAMP, OR UPDATE THE STAMP. Ced: "instead of the 'STAMP' word, add the same
+     stamp logo on the bottom of the tab, but dont make it scrollable, make it actual part of the
+     tab. and then, it is either update stamp or just stamp. both functions in one button."
+     The two buttons asked the user to know which one applied. The tool knows: for every page in
+     the scope, a page that already carries a stamp has THAT stamp brought up to the card (in place —
+     it keeps the spot it was put in), and a page without one is stamped. With stamps selected on
+     the sheet, it updates exactly those. The button says which it is about to do, and it lives in a
+     footer pinned to the bottom of the panel, outside the scrolling body.
+     ================================================================================================ */
+  const plan=()=>{
+    const selected=(()=>{ const ids=[]; const add=id=>{ const a=(S.annos||[]).find(z=>z.id===id);
+      if(a&&a.copRole&&a.group!=null&&ids.indexOf(a.group)<0)ids.push(a.group); };
+      if(S.sel!=null)add(S.sel); (S.selMulti||new Set()).forEach(add); return ids; })();
+    if(selected.length)return {update:selected, place:[], selected:true};
+    const pages=S.pages.length?maScopePages(($("#maScope")||{}).value||"all",($("#maRange")||{}).value||""):[];
+    const update=[], place=[];
+    pages.forEach(pi=>{ const g=copStampsOn(pi); if(g.length)g.forEach(x=>update.push(x)); else place.push(pi); });
+    return {update, place, selected:false};
+  };
+  const foot=document.createElement("div"); foot.id="maFoot"; foot.className="ma-foot";
+  const go=document.createElement("button"); go.type="button"; go.className="ma-stampgo";
+  go.innerHTML='<span class="ma-stampico" aria-hidden="true"></span><span class="ma-stamplbl"></span>';
+  const lbl=go.querySelector(".ma-stamplbl");
+  const sub=document.createElement("div"); sub.className="ma-stampsub";
+  const relabel=()=>{
+    const p=plan();
+    const verb=(p.update.length&&!p.place.length)?"Update stamp":(p.place.length&&!p.update.length)?"Stamp":
+               (p.update.length&&p.place.length)?"Stamp & update":"Stamp";
+    lbl.textContent=verb;
+    go.title=verb+" — "+(p.selected?"the selected stamp"+(p.update.length===1?"":"s"):
+      [p.place.length?("stamps "+p.place.length+" page"+(p.place.length===1?"":"s")):"",
+       p.update.length?("updates "+p.update.length+" stamp"+(p.update.length===1?"":"s")):""].filter(Boolean).join(", ")||"nothing in that range");
+    go.setAttribute("aria-label",go.title);
+    sub.textContent=p.selected?(p.update.length+" selected"):
+      [p.place.length?(p.place.length+" to stamp"):"", p.update.length?(p.update.length+" to update"):""].filter(Boolean).join(" · ")||"No pages in range";
+  };
+  go.onclick=async()=>{
     if(!needFields())return;
     if(!S.pages.length){ setStatus("Open a report first.",true); return; }
-    const pages=maScopePages(($("#maScope")||{}).value||"page",($("#maRange")||{}).value||"");
-    if(!pages.length){ setStatus("No pages in that range.",true); return; }
-    stampGo.disabled=true;
-    const was=setStatus;
-    let n=0;
+    const p=plan();
+    if(!p.update.length&&!p.place.length){ setStatus("No pages in that range.",true); return; }
+    go.disabled=true;
+    let placed=0;
     try{
-      for(const pi of pages){
+      pushHistory();
+      const now={status:stSel.value, gc:f.gc, poc:f.poc, date:dtIn.value.trim()||copToday()};
+      p.update.forEach(g=>copApplyTo(g,now));
+      for(const pi of p.place){
         setStatus(`Stamping page ${pi+1} of ${S.pages.length}…`);
         /* eslint-disable no-await-in-loop */
         const id=await copPlaceOn(pi,f);
-        if(id!=null)n++;
+        if(id!=null)placed++;
       }
-    } finally { stampGo.disabled=false; }
+    }finally{ go.disabled=false; }
     layoutAnnos(); drawAllLines(); updateRail(); updateCount();
     try{ autosave(); }catch(e){}
-    setStatus(n===1?`Stamped page ${pages[0]+1}.`:`Stamped ${n} pages.`);
-  });
-  sec.appendChild(stampGo);
-
-  /* 6km — UPDATE THE STAMP, NOT JUST ITS DATE.
-     Ced: "have the ability to update stamps if the selections on the stamp tool were changed, no
-     just date. so instead of just date. change it to update stamp."
-     Re-dating was the only thing this did, which made the card a form you could fill in and then
-     only partly apply — change the contractor and the stamps on the sheet kept the old one unless
-     you deleted and re-stamped every page. It writes ALL FOUR fields now, which is what the card is
-     showing and what the user has just decided. */
-  const reDate=maBtn("Update stamp",null,()=>{
-    const gs=copTargetGroups();
-    if(!gs.length){ setStatus("There are no stamps on this document yet.",true); return; }
-    if(!needFields())return;
-    pushHistory();
-    const now={status:stSel.value, gc:f.gc, poc:f.poc, date:dtIn.value.trim()||copToday()};
-    gs.forEach(g=>copApplyTo(g,now));
-    layoutAnnos(); updateCount(); updateRail();
-    try{ autosave(); }catch(e){}
-    setStatus(`${gs.length} stamp${gs.length===1?"":"s"} updated — ${now.status}, ${now.gc}, `+
-              `${now.poc}, ${now.date}.`);
-  });
-  sec.appendChild(reDate);
+    const parts=[];
+    if(placed)parts.push(placed===1?`stamped page ${p.place[0]+1}`:`stamped ${placed} pages`);
+    if(p.update.length)parts.push(`updated ${p.update.length} stamp${p.update.length===1?"":"s"}`);
+    setStatus(parts.length?(parts.join(" and ").replace(/^./,c=>c.toUpperCase())+"."):"Nothing to do.");
+    relabel();
+  };
+  go.appendChild(sub);            /* the count rides inside the button, at its right end */
+  foot.appendChild(go);
+  { const pan=document.getElementById("maPanel"); if(pan)pan.appendChild(foot); }
+  /* the label follows the scope control and the selection */
+  scope.addEventListener("change",relabel); scope.addEventListener("input",relabel);
+  relabel();
+  try{ clearInterval(window._copRelabelT); }catch(e){}
+  window._copRelabelT=setInterval(()=>{ if(!document.body.contains(foot)){ clearInterval(window._copRelabelT); return; } relabel(); },700);
 
   const flip=maBtn("Switch REDLINED ↔ AS-BUILT",null,()=>{
     const gs=copTargetGroups();
@@ -970,8 +999,8 @@ function maRenderStampTab(body){
 
   const hint=document.createElement("p");
   hint.className="ma-note";
-  hint.textContent="Stamping a page replaces the stamp already on it. Update and Switch act on the "+
-    "stamps you have selected, or on every stamp in the document when nothing is selected.";
+  hint.textContent="The stamp button stamps the pages in range that have none and brings the ones "+
+    "that do up to this card, where they are. With stamps selected, it and Switch act on those only.";
   sec.appendChild(hint);
 
   copPaintPreview(pv);

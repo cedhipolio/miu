@@ -1,27 +1,71 @@
 <script>
 /* The stylesheet, the libraries and the app are gzipped and base64'd above so this file stays a
    single shareable document. They are inflated here and injected as real <script> elements, in
-   order, so everything runs in global scope exactly as it did when they were separate tags. */
+   order, so everything runs in global scope exactly as it did when they were separate tags.
+
+   v60 — AND IF IT CANNOT START, IT SAYS SO. Before, a browser without DecompressionStream got a red
+   strip of developer text, and an error thrown while the app script was running its top level got
+   nothing at all: the loading screen simply stayed, forever, which reads as "slow" rather than
+   "broken" and gets reloaded ten times before anyone asks. Now: every injected script reports
+   whether it ran, the boot checks that the app actually came up, and a failure replaces the loading
+   screen with what happened, what to try, and the details to send. */
 (async()=>{
+  const fail=(what,detail)=>{
+    try{
+      const b=document.getElementById("boot"); if(b)b.style.display="none";
+      const n=document.getElementById("miuNotice"); if(n)n.remove();
+      const d=document.createElement("div");
+      d.setAttribute("role","alert");
+      d.style.cssText="position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;"+
+        "background:#101112;color:#e8e9ec;font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;padding:24px";
+      const msg=String(detail&&detail.message||detail||"").slice(0,600);
+      d.innerHTML='<div style="max-width:520px;background:#18191b;border:1px solid #35373b;border-radius:16px;padding:24px 26px;box-shadow:0 24px 60px rgba(0,0,0,.5)">'+
+        '<div style="font-weight:700;font-size:17px;margin-bottom:6px">Mark It Up couldn’t start</div>'+
+        '<div style="color:#9a9da6;margin-bottom:14px"></div>'+
+        '<ul style="margin:0 0 16px 18px;padding:0;color:#c9cbd1"><li>Reload the page.</li>'+
+        '<li>Use a current version of Chrome or Edge.</li>'+
+        '<li>If it keeps happening, send the details below to whoever looks after the tool.</li></ul>'+
+        '<pre style="white-space:pre-wrap;background:#101112;border:1px solid #35373b;border-radius:9px;padding:10px 12px;font:12px/1.4 ui-monospace,Consolas,monospace;color:#9a9da6;max-height:160px;overflow:auto;margin:0 0 14px"></pre>'+
+        '<button type="button" style="appearance:none;border:0;border-radius:9px;background:#e9eaee;color:#17181c;font:600 13px system-ui,sans-serif;padding:9px 16px;cursor:pointer">Reload</button></div>';
+      d.querySelector("div div:nth-child(2)").textContent=what;
+      d.querySelector("pre").textContent="Mark It Up · "+navigator.userAgent+"\n"+msg;
+      d.querySelector("button").onclick=()=>location.reload();
+      document.body.appendChild(d);
+    }catch(_){ alert("Mark It Up couldn't start: "+what); }
+  };
   const inflate=async id=>{
-    const b=atob(document.getElementById(id).textContent.trim());
+    const node=document.getElementById(id);
+    if(!node)throw new Error("the packed file is missing its "+id+" block — it was cut short when it was copied");
+    const b=atob(node.textContent.trim());
     const u=new Uint8Array(b.length); for(let n=0;n<b.length;n++)u[n]=b.charCodeAt(n);
     const ds=new DecompressionStream("gzip");
     const buf=await new Response(new Blob([u]).stream().pipeThrough(ds)).arrayBuffer();
     return new TextDecoder().decode(buf);
   };
-  const run=async id=>{ const code=await inflate(id);
-    const el=document.createElement("script"); el.textContent=code; document.head.appendChild(el); };
+  /* a script's top-level error does not reject anything — it goes to window.onerror. Catch it there
+     for the duration of the injection and turn it into a boot failure. */
+  let topErr=null;
+  const onErr=ev=>{ if(!topErr)topErr=ev.error||new Error(ev.message||"script error"); };
+  const run=async id=>{ const code=await inflate(id); topErr=null;
+    window.addEventListener("error",onErr);
+    try{ const el=document.createElement("script"); el.textContent=code; document.head.appendChild(el); }
+    finally{ window.removeEventListener("error",onErr); }
+    if(topErr && id==="pk-app")throw topErr;
+  };
   try{
-    if(typeof DecompressionStream==="undefined")throw new Error("this browser cannot inflate the bundle");
+    if(typeof DecompressionStream==="undefined")
+      return fail("This browser is too old to open the tool.",new Error("DecompressionStream is not available"));
     /* styles first, so the page is never shown unstyled */
     const st=document.createElement("style"); st.textContent=await inflate("pk-css");
     document.head.appendChild(st);
     for(const id of ["pk-pdf","pk-wrk","pk-lib","pk-app"]) await run(id);
+    /* v60 — the font library and the preloaded markups are their own blob, run after the app: a failure in it costs fonts, not
+       the tool, so it is reported and the boot carries on */
+    if(document.getElementById("pk-ast")){ try{ await run("pk-ast"); }catch(e){ try{ MIU_GUARD.handle("error","asset library: "+(e&&e.message||e),null,"fonts"); }catch(_){} } }
+    if(typeof S==="undefined"||typeof loadPdf!=="function")
+      throw topErr||new Error("the application script did not finish loading");
   }catch(e){
-    document.body.insertAdjacentHTML("afterbegin",
-      '<div style="padding:16px;font:14px system-ui;color:#fff;background:#a11">'+
-      'Could not unpack the tool: '+String(e&&e.message||e)+'</div>');
+    fail("Something stopped it while it was loading.",e);
   }
 })();
 </script>

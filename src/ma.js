@@ -2238,6 +2238,9 @@ function maRenderPanel(){
   if(ttl)ttl.textContent=row[1];
   const pan=$("#maPanel"); if(pan)pan.dataset.ma=row[0];
   body.innerHTML="";
+  /* v60 — a card may pin a footer to the panel (outside the scrolling body); it belongs to the
+     card that drew it, so it goes when the panel is redrawn */
+  { const ft=document.getElementById("maFoot"); if(ft)ft.remove(); }
   if(row[0]==="stamp")maRenderStampTab(body);          /* 6k4 — stamp.js */
   else maRenderMarkupsTab(body);                       /* 6kx — and there are only the two */
   try{ maPlacePanel(); }catch(e){}
@@ -2402,12 +2405,21 @@ function maRenderMarkupsTab(body){
   s1.appendChild(btns);
   body.appendChild(s1);
 
-  const s2=maSection(`Library (${MA_MARKUPS.length})`);
-  if(!MA_MARKUPS.length){
+  /* v60 — PRELOADED MARKUPS. Ced: "add these on pre loaded markup photos." A set of equipment
+     drawings ships with the tool (markups-preset.js, built by tools/addmarkups.py), so every user
+     starts with them instead of each uploading their own. They sit under their own heading, after
+     the user's own library; they are never written to this browser's storage (the library's quota is the user's),
+     cannot be removed, and editing one saves an edited COPY into the user's library, so the
+     preloaded original is always there to go back to. */
+  const PRE=(typeof MA_PRESET_MARKUPS!=="undefined"&&Array.isArray(MA_PRESET_MARKUPS))?MA_PRESET_MARKUPS:[];
+  for(const [title,LIST,isPre] of [["Library",MA_MARKUPS,false],["Preloaded",PRE,true]]){   /* yours first */
+  if(isPre&&!LIST.length)continue;
+  const s2=maSection(`${title} (${LIST.length})`);
+  if(!LIST.length){
     s2.appendChild(el("div","ma-empty","Nothing here yet."));
   }else{
     const grid=el("div","ma-grid");
-    MA_MARKUPS.forEach(rec=>{
+    LIST.forEach(rec=>{
       const cell=el("div","ma-mk");
       if(rec.kind==="group"){
         /* 6hl — a saved selection has no picture of its own, so one is DRAWN from the marks it holds:
@@ -2444,10 +2456,12 @@ function maRenderMarkupsTab(body){
         maArmPlacement({kind:"markup",rec},
           `Holding “${rec.name}” — click the sheet where its top-left corner goes.`);
       };
+      if(!isPre){
       const x=el("button","x","✕"); x.type="button"; x.title="Remove from the library";
       x.onclick=ev=>{ ev.stopPropagation();
         const i=MA_MARKUPS.indexOf(rec); if(i>=0){ MA_MARKUPS.splice(i,1); maSaveMarkups(); maRenderPanel(); } };
       cell.appendChild(x);
+      }
       /* 6ha — AND A MARKUP CAN BE EDITED. Ced: "markups should be editable too as an option." A
          graphic is uploaded once and used on every report after it, which is exactly the thing worth
          cleaning up once: rub out the margin it came with, crop it, turn it, put white behind it. It
@@ -2463,6 +2477,12 @@ function maRenderMarkupsTab(body){
           try{
             skEditor(shim,{title:"Edit markup — "+(rec.name||""),
               onSave:url=>{
+                /* a preloaded markup is never changed in place: the edit becomes the user's copy */
+                if(isPre){
+                  const copy=Object.assign({},rec,{id:"mk"+Date.now().toString(36),preset:false,
+                                                   name:(rec.name||"Markup")+" (edited)",srcOrig:rec.src});
+                  MA_MARKUPS.unshift(copy); rec=copy;
+                }
                 rec.src=url;
                 if(!rec.srcOrig)rec.srcOrig=shim.srcOrig;
                 const im=new Image();
@@ -2475,12 +2495,50 @@ function maRenderMarkupsTab(body){
           }catch(e){ setStatus("Could not open that markup.",true); }
         };
         cell.appendChild(ed);
+      }else{
+        /* v60 — A SNAPSHOT SAVED TO THE LIBRARY IS A PICTURE TOO. Ced: "the markups added from snapshot
+           still dont have the edit photo option from markups." "Add to markup library" on the
+           selection bar saves a SELECTION, so a snapshot added that way became a one-mark group, and
+           6ha's ✎ was only ever offered to uploaded images. A group whose marks include exactly one
+           picture now gets the same ✎: it edits that picture inside the entry, and a crop that
+           changes the picture's shape keeps its width and takes the new height, so the next drop is
+           not stretched. (A group of several pictures is ambiguous — which one? — and is left as is.) */
+        const pics=(rec.annos||[]).filter(a=>a&&a.kind==="img"&&/^data:image\//.test(String(a.src||"")));
+        if(pics.length===1){
+          const pic=pics[0];
+          const ed=el("button","edit","✎"); ed.type="button";
+          ed.title="Edit this markup's picture — erase, crop, turn or fill it";
+          ed.onclick=ev=>{ ev.stopPropagation();
+            const shim={id:"mk:"+(rec.id!=null?rec.id:rec.name),page:0,kind:"img",
+                        src:pic.src,srcOrig:pic.srcOrig||pic.src,nw:null,nh:null};
+            try{
+              skEditor(shim,{title:"Edit markup — "+(rec.name||""),
+                onSave:url=>{
+                  pic.src=url;
+                  if(!pic.srcOrig)pic.srcOrig=shim.srcOrig;
+                  const im=new Image();
+                  const done=()=>{ maSaveMarkups(); maRenderPanel();
+                                   setStatus("Markup updated — every new drop uses it."); };
+                  im.onload=()=>{
+                    try{
+                      const w=im.naturalWidth, h=im.naturalHeight, pw=rec.pw||612, ph=rec.ph||792;
+                      if(w>0&&h>0&&pic.nw>0)pic.nh=pic.nw*pw*h/(w*ph);
+                    }catch(e){}
+                    done(); };
+                  im.onerror=done;
+                  im.src=url;
+                }});
+            }catch(e){ setStatus("Could not open that markup.",true); }
+          };
+          cell.appendChild(ed);
+        }
       }
       grid.appendChild(cell);
     });
     s2.appendChild(grid);
   }
   body.appendChild(s2);
+  }
 }
 
 /* ---- AS-BUILT ---- */
