@@ -6979,6 +6979,18 @@ function layoutAnnos(){
        has any — which is what a callout is */
     if(isShape(a))d.classList.add("shapemark");
     if(isTextBox(a))d.classList.add("textbox");   /* 6g1 — it gets the vertical handles too */
+    /* 6na — AND SO DOES A CELL REDLINE. Ced: "the text in redline tool should behave similarly with
+       text box when selected", after "please be consistent in every selected item. apply how the
+       textbox works on all redlines if possible."
+
+       Measured, a redline showed six grips where a text box and a shape show eight: no top, no
+       bottom. 6lc's reasoning for that was that a plain redline has no box of its own, so a
+       vertical handle has nothing to resize — true of the BOX and not true of the mark, because a
+       redline's height IS its type. So the pills are there now and they do what the vertical half
+       of a corner has always done on this kind of mark: they size the text. `.cellmark` rather
+       than `.textbox`, because the class also decides which resize branch the mark takes and a
+       redline is still not a free box. */
+    if(!isFreeBox(a)&&a.kind!=="img")d.classList.add("cellmark");
     /* 6fb — a locked mark is left alone by every gesture; a flattened one is going into the page */
     if(a.lock)d.classList.add("locked");
     if(a.flat)d.classList.add("flatm");
@@ -8026,8 +8038,15 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
     /* 6lc — CORNERS ONLY, the same rule the boxed path now has. A plain redline has no box of its own,
        so a top or bottom handle has nothing left to change and does nothing, which is the honest
        answer to "it should only work when the corner handles were used". */
-    if(pos.length===2){                       // a corner scales the type; an edge does not
-      const delta=(pos.includes("s")?dy:-dy);
+    /* 6na — A CORNER SCALES THE TYPE, AND SO DOES A TOP OR BOTTOM PILL.
+       6lc left `n` and `s` doing nothing on a plain redline, on the reasoning that it has no box to
+       make taller — true of the box and not of the mark. A redline's height IS its type, so the one
+       honest thing a vertical handle can do here is size the type, which is exactly the vertical
+       half of what a corner already does. Ced: "the text in redline tool should behave similarly
+       with text box when selected." `pos.length===2` is the four corners; `n` and `s` are the two
+       pills; `e` and `w` are left alone, because a side handle re-wraps and always has. */
+    if(pos.length===2||pos==="n"||pos==="s"){
+      const delta=(pos.indexOf("s")>=0?dy:-dy);
       /* 6ha — down to 2pt, the same floor the panel now has */
       const npx=Math.max(2*S.scale,startPx+delta); ed.style.fontSize=npx+"px"; a.size=npx/S.scale;
     }
@@ -8438,7 +8457,13 @@ function paintGroupFrame(){
     try{ document.getSelection().selectAllChildren(ed2); }catch(e){}
   });
   f.appendChild(mv);
-  ["nw","ne","se","sw"].forEach(pos=>{
+  /* 6nb — THE SAME EIGHT GRIPS A MARK HAS. Ced: "the cross does not follow the same design
+     language when selected." A cross-out is two grouped strokes, so what you click is the GROUP,
+     and the group's frame carried four corners where every mark on the sheet carries four corners
+     and four pills. The pills are the same elements with the same geometry — see `.gframe .gh.n`
+     in selbar.css, which takes the mark's own clamp — and they drive the same `startGroupScale`,
+     which now leaves an axis alone when the handle does not touch it. */
+  ["nw","ne","se","sw","n","s","e","w"].forEach(pos=>{
     const h=el("div","gh "+pos);
     h.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); startGroupScale(ev,pg,bb,pos); });
     f.appendChild(h);
@@ -8482,9 +8507,14 @@ function startGroupScale(ev,pg,bb,pos){
   const L=multiLines().map(l=>({l,pts:linePts(l).map(p=>[p[0],p[1]])}));
   const move=e=>{
     const dx=e.clientX-cx, dy=e.clientY-cy;
-    let sx=(w0+((pos.indexOf("e")>=0)?dx:-dx))/w0;
-    let sy=(h0+((pos.indexOf("s")>=0)?dy:-dy))/h0;
-    if(e.shiftKey||e.ctrlKey||e.metaKey){ const k=Math.max(sx,sy); sx=k; sy=k; }   /* keep it square */
+    /* 6nb — an axis the handle does not touch is NOT scaled. With only corners this was moot: every
+       handle held both an east/west and a north/south edge. A side pill holds one, and the old
+       arithmetic read "no east" as "west" and squashed the other axis by the drag it never made. */
+    const _hx=(pos.indexOf("e")>=0)||(pos.indexOf("w")>=0);
+    const _hy=(pos.indexOf("s")>=0)||(pos.indexOf("n")>=0);
+    let sx=_hx?((w0+((pos.indexOf("e")>=0)?dx:-dx))/w0):1;
+    let sy=_hy?((h0+((pos.indexOf("s")>=0)?dy:-dy))/h0):1;
+    if((e.shiftKey||e.ctrlKey||e.metaKey)&&_hx&&_hy){ const k=Math.max(sx,sy); sx=k; sy=k; }
     sx=Math.max(0.05,sx); sy=Math.max(0.05,sy);
     A.forEach(o=>{
       o.a.nx=(ax+(o.nx*w-ax)*sx)/w; o.a.ny=(ay+(o.ny*h-ay)*sy)/h;
@@ -8614,7 +8644,17 @@ function positionMultibar(){
     top=(above>=ins.top)?above:Math.max(ins.top,window.innerHeight-h-8);
   }
   if(top<ins.top)top=ins.top;
-  multibar.style.left=Math.max(ins.left,Math.min(window.innerWidth-330,r.left+bb.l))+"px";
+  /* 6n9 — and the multi bar centres on the selection's own box, for the same reason. It is placed
+     by hand rather than through `fitFloatingBar` because it is already `show`n; the clamp is the
+     same one — the chrome's inset on the left, the window less the bar on the right. */
+  {
+    const mw=multibar.offsetWidth||330;
+    const mid=r.left+(bb.l+bb.r)/2;
+    let ml=mid-mw/2;
+    if(ml<ins.left)ml=ins.left;
+    if(ml+mw>window.innerWidth-ins.right)ml=Math.max(ins.left,window.innerWidth-ins.right-mw);
+    multibar.style.left=ml+"px";
+  }
   multibar.style.top=top+"px";
   $("#mbCount").textContent=multiCount()+" selected";
   /* 6dv — a line has no top or bottom to align: it IS a single horizontal (or diagonal) stroke, and
@@ -8912,7 +8952,13 @@ function syncRibbonXSoon(){
 }
 window.addEventListener("scroll",syncRibbonXSoon,{passive:true});
 window.addEventListener("resize",syncRibbonXSoon);
-function fitFloatingBar(bar,x,y){
+/* 6n9 — THE BAR IS CENTRED ON WHAT IT BELONGS TO. Ced: "always put the mini toolbar in the middle
+   of the shape if allowable. only put it on left or right if the item is on the edge of UI."
+   `cx` is the middle of the mark in window coordinates; `x` stays the left-hand fallback for the
+   few callers that place the bar at a POINT — a right-click menu — rather than against a box. The
+   clamping below is unchanged, so "only on the edge" is what the chrome insets already enforce:
+   the bar is centred until centring would put it past the chrome, and then it stops at the chrome. */
+function fitFloatingBar(bar,x,y,cx){
   bar.classList.add("show");
   const w=bar.offsetWidth||220, h=bar.offsetHeight||34;
   const vw=window.innerWidth, vh=window.innerHeight;
@@ -8920,10 +8966,16 @@ function fitFloatingBar(bar,x,y){
   /* 6gn — the right-hand limit is the chrome's, not the window's, so a bar next to a mark near the
      right edge stops at the side ribbon instead of behind it or past the screen. */
   const rmax=vw-ins.right;
-  let left=x;
+  let left=(cx!=null)?(cx-w/2):x;
+  if(cx!=null){
+    if(left<ins.left) left=ins.left;
+    if(left+w>rmax) left=Math.max(ins.left,rmax-w);
+  }
+  else {
   if(left+w>rmax) left=x-w;                      // flip to the left of the cursor / mark
   if(left<ins.left) left=Math.max(ins.left,rmax-w);  // and if that overflows too, tuck it against the chrome
   if(left+w>rmax) left=Math.max(ins.left,rmax-w);    // never past the right-hand chrome either
+  }
   let top=y;
   if(top<ins.top)top=ins.top;
   if(top+h>vh-8)top=Math.max(ins.top,vh-h-8);
@@ -8984,7 +9036,8 @@ function positionBar(){
     const roomAbove=r.top-8, roomBelow=vh-8-r.bottom;
     top=(roomAbove>=roomBelow)?Math.max(8,r.top-h-BAR_TOP_CLEAR-BAR_AIR):Math.min(vh-h-8,below);
   }
-  fitFloatingBar(annobar,Math.max(8,r.left),top);
+  /* 6n9 — centred on the mark, with the mark's left kept as the fallback the clamp falls back to */
+  fitFloatingBar(annobar,Math.max(8,r.left),top,(r.left+r.right)/2);
   try{ syncSelUI(); }catch(e){}     /* 6is — the handle frame rides along with the bar */
 }
 function setTextAlign(al){
@@ -10650,6 +10703,119 @@ document.addEventListener("keydown",e=>{
    field to be added without passing through it. `maPicFrame` recovers the unframed picture by cropping
    when it needs it (see there), so nothing is lost by leaving `picRaw` out.
    ================================================================================================== */
+/* ==================================================================================================
+   6nm — A PICTURE HAS TO SURVIVE SOMEONE ELSE FLATTENING THE FILE.
+   Ced: "uploading a pdf into a different platform and editing it again seems to flatten the photos
+   in the pdf", with the file back from the site it was submitted to.
+
+   Measured on that file — 18 pages, our own Producer still on it:
+
+       /Annots on every page .......... 0      every annotation stripped
+       MAData / MAPhoto / MARL ........ 0      so every per-mark tag went with them
+       /Subject MAREDLINE payload ..... 99,934 chars, intact
+       marks in it .................... 139 marks, 41 strokes  — all of them
+       pictures in it ................. 8, every one with NO pixels
+
+   So the document payload is the channel that survives, and the reason the PICTURES do not come
+   back is 6ff and 6le: a photo's bytes were taken out of the payload because they were also in the
+   photo's own annotation tag, and the tag is what a flattener destroys. Everything else in the
+   payload is enough to rebuild the mark; the picture is the one thing that is only pixels.
+
+   The payload is also stored UNCOMPRESSED — base64 of plain JSON. Measured on Ced's file, gzipping
+   it first takes 99,920 chars to 9,624, which is a tenth. That is where the room comes from.
+
+   So each picture now travels twice, on purpose and at two different weights:
+
+     the annotation tag  the picture as it is, full resolution — the normal reopen, unchanged
+     the payload         a RECOVERY COPY, bounded to 1400px on the long side, PNG where the
+                         picture has transparency (every cut-out does) and JPEG where it has not
+
+   A reopen prefers the tag and falls back to the recovery copy, so an ordinary round trip loses
+   nothing and a flattened one comes back with the pictures visible. Identical pictures — the same
+   markup placed five times — are stored once and referenced. And if the whole thing would still
+   grow past what pdf-lib can read back, the largest copies are dropped one at a time until it
+   fits and the count is recorded, so the reopen can say which pictures it could not bring back
+   rather than quietly showing an empty box.
+   ================================================================================================== */
+/* measured: pdf-lib's `decodeText` spreads a string a character at a time and blew the stack past
+   about 1.5M; this is the ceiling for the whole encoded payload, with room to spare. */
+const PAY_SAFE_MAX=900000;
+/* 6nm — SHRINK BEFORE YOU SHED. The first cut made one copy at 1400px and dropped whole pictures
+   when the total would not fit, which is the worst trade available: three incompressible test
+   photos cost 644,761 chars and TWO of them were thrown away to make the third fit. A picture that
+   comes back small is worth a great deal more than a picture that does not come back, so each one
+   is stepped down until it fits a budget of its own, and only a picture that will not fit even at
+   its smallest is given up. Measured on three 1180x820 noise photos — the worst case there is,
+   since noise is exactly what will not compress — 1400px/q0.72 came to about 215,000 chars each
+   and 700px/q0.55 to about 46,000. */
+const PIC_RECOVER_STEPS=[[1400,0.72],[1000,0.62],[700,0.55],[480,0.5]];
+const PIC_RECOVER_BUDGET=120000;   /* chars, per picture */
+/* does this picture have anything transparent in it? a cut-out does, a photograph does not */
+function _picHasAlpha(im){
+  try{
+    const w=Math.min(im.naturalWidth||im.width||0,320), h=Math.min(im.naturalHeight||im.height||0,320);
+    if(!(w&&h))return true;
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const g=c.getContext("2d",{willReadFrequently:true});
+    g.drawImage(im,0,0,w,h);
+    const d=g.getImageData(0,0,w,h).data;
+    for(let i=3;i<d.length;i+=4) if(d[i]<250) return true;
+    return false;
+  }catch(e){ return true; }     /* cannot tell: keep the alpha-safe format */
+}
+/* the bounded copy that rides in the document payload */
+function _picRecovery(src){
+  return new Promise(res=>{
+    try{
+      const im=new Image();
+      im.onload=()=>{
+        try{
+          const w0=im.naturalWidth||im.width, h0=im.naturalHeight||im.height;
+          if(!(w0&&h0))return res(null);
+          /* 6nm — a picture with no transparency is a photograph, and a photograph in PNG is
+             several times the size of the same picture in JPEG for no gain a redliner can see.
+             A cut-out has transparency and has to stay PNG however big that makes it, which is why
+             the steps go down to 480: that is the lever PNG leaves. */
+          const alpha=_picHasAlpha(im);
+          let best=null;
+          for(const [maxPx,q] of PIC_RECOVER_STEPS){
+            const k=Math.min(1,maxPx/Math.max(w0,h0));
+            const w=Math.max(1,Math.round(w0*k)), h=Math.max(1,Math.round(h0*k));
+            const c=document.createElement("canvas"); c.width=w; c.height=h;
+            const g=c.getContext("2d");
+            g.drawImage(im,0,0,w,h);
+            const url=alpha ? c.toDataURL("image/png") : c.toDataURL("image/jpeg",q);
+            c.width=c.height=0;
+            best=url;
+            if(url.length<=PIC_RECOVER_BUDGET)break;
+          }
+          res(best);
+        }catch(e){ res(null); }
+      };
+      im.onerror=()=>res(null);
+      im.src=src;
+    }catch(e){ res(null); }
+  });
+}
+/* Build the `pics` table for a payload: one entry per DISTINCT picture, each mark pointing at it.
+   Returns {pics, dropped} and writes `picRef` onto the marks it could serve. */
+async function _payPics(annos){
+  const pics={}, bySrc=new Map();
+  let n=0;
+  for(const a of (annos||[])){
+    if(!a||a.kind!=="img")continue;
+    const src=a.__picSrc;                       /* put there by the caller, before the strip */
+    if(!src)continue;
+    let key=bySrc.get(src);
+    if(key==null){
+      const rec=await _picRecovery(src);
+      if(!rec)continue;
+      key="p"+(++n); bySrc.set(src,key); pics[key]=rec;
+    }
+    a.picRef=key;
+  }
+  return pics;
+}
 const PIC_FIELDS=["src","srcOrig","picRaw"];
 function _stripPicBytes(o){
   if(!o)return o;
@@ -10661,6 +10827,35 @@ function _stripPicBytes(o){
    is written rather than at the reopen that loses the marks. 1,000,000 is comfortably under the
    measured ceiling and comfortably over anything a legitimate tag holds. */
 const TAG_SAFE_MAX=1000000;
+/* 6nm — THE DOCUMENT PAYLOAD IS PACKED. `_tagEnc` is shared with the per-mark tags, which are small
+   and must stay exactly as they are, so the payload gets its own pair. `gz:` is the new carrier and
+   `b64:` is what every file written before this build has — both are read, only `gz:` is written.
+   Measured on Ced's returned file: 99,920 chars of base64 JSON becomes 9,624. */
+async function _payEnc(o){
+  let json; try{ json=JSON.stringify(o); }catch(e){ return ""; }
+  if(typeof CompressionStream==="function"){
+    try{
+      const cs=new CompressionStream("gzip"), w=cs.writable.getWriter();
+      w.write(new TextEncoder().encode(json)); w.close();
+      const buf=new Uint8Array(await new Response(cs.readable).arrayBuffer());
+      const packed="gz:"+_b64enc(buf);
+      if(packed.length<json.length)return packed;
+    }catch(e){ LOG&&LOG("payload: could not pack it, writing it plain —",e&&e.message); }
+  }
+  try{ return "b64:"+btoa(unescape(encodeURIComponent(json))); }catch(e){ return json; }
+}
+async function _payDec(v){
+  if(v==null)return null;
+  const t=String(v);
+  if(t.indexOf("gz:")===0){
+    try{
+      const ds=new DecompressionStream("gzip"), w=ds.writable.getWriter();
+      w.write(_b64dec(t.slice(3))); w.close();
+      return JSON.parse(await new Response(ds.readable).text());
+    }catch(e){ LOG&&LOG("payload: packed but would not unpack —",e&&e.message); return null; }
+  }
+  return _tagDec(t);                 /* `b64:` and bare JSON, exactly as before */
+}
 function _tagEnc(o){
   let s;
   try{ s="b64:"+btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
@@ -10809,12 +11004,37 @@ async function exportPdf(){
       annotsOf(pg).push(ctx.register(ctx.obj(dict)));
     }
 
+    /* ==================================================================================================
+       6nc — AND THE STREAM SAYS HOW IT IS TO BE COMPOSITED.
+       Ced: "the colors rendered are sometimes different to the one showed in ui", with a 34% red fill
+       that reads #fdb9bb on screen and #c5aeae in his render.
+
+       Measured against poppler, every variant of ours comes out exact — a plain fill at 1.0, 0.6,
+       0.34 and 0.15, dashed, rotated, hatched, multiply-blended, ink at half opacity, and a
+       translucent PNG at four combinations of image and mark opacity: twelve cases, twelve exact
+       matches. So the file we write is right by that renderer.
+
+       But #c5aeae is not a random wrong colour. Solve for it: take the fill PREMULTIPLIED by its own
+       opacity — 0.34 x (250,50,55) = (85,17,19) — and composite THAT over white at 0.34 again, and
+       you get (197.2, 174.1, 174.8). Ced's render is (197,174,174). Three channels, within one unit.
+       That is the signature of the alpha being applied twice, which is what a viewer does when it
+       composites an appearance stream as a NON-ISOLATED group: the stream's own alpha is applied
+       inside it and again as it is laid onto the page.
+
+       A form XObject that paints with transparency is supposed to say so. Ours did not — no `/Group`
+       — so a viewer was free to pick, and some pick the one that darkens. The group is declared now:
+       isolated (`/I true`), so the stream composites against a transparent backdrop and then lands on
+       the page once, which is the only reading that matches the screen. Poppler's answer does not
+       change — the parity suites still pass to the pixel — and the viewers that were guessing stop.
+       ================================================================================================== */
+    const _apGroup=()=>ctx.obj({ S:PDFName.of("Transparency"), CS:PDFName.of("DeviceRGB"), I:true });
     // build an appearance-stream XObject (Form) so every viewer renders the annotation
     function appearance(w,h,drawOps,useFont,matrix,gs){
       const r={ Font: ctx.obj({ TR:(useFont||font).ref }) };
       if(gs)r.ExtGState=ctx.obj(gs);        /* 6f6 — opacity / blend states the ops refer to by name */
       const res=ctx.obj(r);
-      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,w,h], Resources:res };
+      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,w,h], Resources:res,
+                   Group:_apGroup() };      /* 6nc */
       if(matrix)dict.Matrix=matrix;
       const streamObj=ctx.stream(drawOps,dict);
       return ctx.register(streamObj);
@@ -11336,7 +11556,8 @@ async function exportPdf(){
       const ovr=shapePat(a)?(Math.max(1.6,sw*1.7)*1.35+sw/2+0.5):0;
       if(ovr>0)ops=`q 1 0 0 1 ${ovr.toFixed(2)} ${ovr.toFixed(2)} cm\n`+ops+"\nQ\n";
       const BW=bw+ovr*2, BH=bh+ovr*2;
-      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,BW,BH], Resources:ctx.obj(res) };
+      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,BW,BH],
+                   Resources:ctx.obj(res), Group:_apGroup() };      /* 6nc */
       if(phi)dict.Matrix=[cth,sth,-sth,cth,0,0];
       const ap=ctx.register(ctx.stream(ops,dict));
       const ctr=toPdf(pg,(a.nx*W+bw/2)/W,(a.ny*H+bh/2)/H);
@@ -11478,7 +11699,12 @@ async function exportPdf(){
        file's payload still has `src` and is still read — this only changes what we WRITE. */
     /* 6le — and so are the other two fields that hold a whole picture, through the one function that
        knows which those are. `delete o.src` alone let `srcOrig` and `picRaw` back in. */
-    const _payA=z=>_stripPicBytes(_cleanA(z));
+    /* 6nm — the picture's own bytes are remembered on the way past, so the recovery copy can be
+       made from them after the strip. `__picSrc` never reaches the file: `_payPics` reads it and
+       the payload is built from `picRef` instead. */
+    const _payA=z=>{ const o=_stripPicBytes(_cleanA(z));
+      if(z&&z.kind==="img"){ const raw=z.srcOrig||z.src; if(raw)o.__picSrc=raw; }
+      return o; };
     let outAnnos=(S.annos||[]).map(_payA), outLines=(S.lines||[]).map(_cleanL);
     if(drop.length){
       const gone=new Set(drop);
@@ -11493,12 +11719,28 @@ async function exportPdf(){
       LOG("Export: remapped page numbers for",outAnnos.length,"mark(s) and",outLines.length,"line(s)"
           +((lostA+lostL)?("; left out "+(lostA+lostL)+" on dropped page(s)"):""));
     }
-    const payload={v:1, name:S.name, pages:(S.pages.length-drop.length),
+    /* 6nm — the recovery copies, then the payload, then as many copies as it takes to fit */
+    let pics={}, picsDropped=0;
+    try{ pics=await _payPics(outAnnos); }catch(e){ LOG("payload: no recovery copies —",e&&e.message); }
+    const nPics=Object.keys(pics).length;
+    const build=()=>({v:1, name:S.name, pages:(S.pages.length-drop.length),
                    stamp:{tcol:$("#c_text").value,bcol:$("#c_bg").value},
-                   annos:outAnnos, lines:outLines};
-    const _pj="MAREDLINE:"+_tagEnc(payload);
-    LOG("Export: the re-edit payload is",_pj.length,"chars for",outAnnos.length,"mark(s) and",
-        outLines.length,"line(s)");
+                   pics:pics, picsDropped:picsDropped,
+                   annos:outAnnos.map(z=>{ const o=Object.assign({},z); delete o.__picSrc; return o; }),
+                   lines:outLines});
+    let _pj="MAREDLINE:"+await _payEnc(build());
+    /* over the ceiling: give up the biggest recovery copy and try again. Dropping the largest
+       first means the most pictures survive for a given budget, and the count is written into the
+       payload so the reopen can say how many it could not bring back. */
+    while(_pj.length>PAY_SAFE_MAX && Object.keys(pics).length){
+      const worst=Object.keys(pics).sort((x,y)=>pics[y].length-pics[x].length)[0];
+      delete pics[worst]; picsDropped++;
+      outAnnos.forEach(z=>{ if(z.picRef===worst)delete z.picRef; });
+      _pj="MAREDLINE:"+await _payEnc(build());
+    }
+    LOG("Export: the re-edit payload is",_pj.length,"chars for",outAnnos.length,"mark(s), ",
+        outLines.length,"line(s) and",Object.keys(pics).length,"of",nPics,
+        "recovery picture(s)"+(picsDropped?(" — "+picsDropped+" too large to carry"):""));
     doc.setSubject(_pj);
     doc.setTitle(`${siteLocation()||S.name||"Document"} (${outputFilename().replace(/^.*? - /,"")})`);
     setProg(1,1,"Saving…");
@@ -12032,14 +12274,21 @@ async function detachOurRedlines(u8){
     }catch(e){ return null; } };
 
   /* the payload, if the file still has one — used only to fill gaps */
-  let payA=[], payL=[], stamp=null;
+  let payA=[], payL=[], stamp=null, payPicsDropped=0;
   try{
     const subj=_subjectOf(doc);              /* 6fg — never getSubject(); see _pdfText */
     const _mk=(subj&&subj.indexOf("MAREDLINE:")===0)?"MAREDLINE:"
               :((subj&&subj.indexOf("RFDSREDLINE:")===0)?"RFDSREDLINE:":null);
     if(_mk){
-      const d=_tagDec(subj.slice(_mk.length));
+      const d=await _payDec(subj.slice(_mk.length));
       payA=(d&&d.annos)||[]; payL=(d&&d.lines)||[]; stamp=(d&&d.stamp)||null;
+      /* 6nm — the recovery copies, put back on the marks that point at them. A mark whose
+         annotation survived is served by the annotation instead; this only fills what is missing,
+         which is exactly the flattened case. */
+      const _pics=(d&&d.pics)||null;
+      payPicsDropped=(d&&d.picsDropped)||0;
+      if(_pics)payA.forEach(z=>{ if(z&&z.picRef&&!z.src&&_pics[z.picRef]){
+        z.src=_pics[z.picRef]; z.__fromRecovery=true; } });
     }
   }catch(e){ LOG("detachOurRedlines: the payload would not parse; the annotations still speak",e&&e.message); }
 
@@ -12050,6 +12299,7 @@ async function detachOurRedlines(u8){
   catch(e){ LOG("photo recovery skipped",e&&e.message); }
 
   const tagA=[], tagL=[];
+  const leftPhotos=new Set();   /* 6nm — photo ids left on the page */
   let photos=0, removed=0, other=0;
   try{
     doc.getPages().forEach((pg,pi)=>{
@@ -12089,6 +12339,7 @@ async function detachOurRedlines(u8){
             try{ arr.remove(i); removed++; }catch(e){ LOG("could not detach a photo",e&&e.message); }
           }else{
             photos++;
+            if(pid!=null)leftPhotos.add(pid);   /* 6nm — this one is still on the page */
           }
           continue;
         }
@@ -12266,7 +12517,17 @@ async function detachOurRedlines(u8){
   /* photos are settled in the walk above — either detached and taken from the payload whole, or left on
      the page. Filling one in here would put it in S.annos while its annotation is still on the document,
      which is the doubling this build had to measure its way out of once already. */
-  payA.forEach(a=>{ if(a&&a.id&&a.kind!=="img"&&!haveA.has(a.id)){ annos.push(a); haveA.add(a.id); extraA++; } });
+  /* 6nm — AND A PICTURE TOO, WHEN NOTHING ON THE PAGE CLAIMS IT.
+     This said `kind!=="img"` flatly, to stop a photo arriving twice: restored from the payload AND
+     still sitting on the document as an annotation, which is a doubling this build measured its way
+     out of once already. But that only happens when the ANNOTATION IS STILL THERE — and on a file
+     another platform has flattened there are no annotations at all, so the blanket refusal was the
+     reason Ced's 8 pictures came back as nothing. The test is now the precise one: no annotation
+     claimed this id (`haveA`), none was left on the page under it (`leftPhotos`), and the payload
+     actually has pixels for it. */
+  payA.forEach(a=>{ if(!a||!a.id||haveA.has(a.id))return;
+    if(a.kind==="img"&&(!a.src||leftPhotos.has(a.id)))return;
+    annos.push(a); haveA.add(a.id); extraA++; });
   payL.forEach(l=>{ if(l&&l.id&&!haveL.has(l.id)){ lines.push(l); haveL.add(l.id); extraL++; } });
 
   if(!annos.length&&!lines.length&&!photos){
@@ -12306,8 +12567,14 @@ async function detachOurRedlines(u8){
   LOG("Detached",removed,"of our annotation(s) from the file:",annos.length,"mark(s),",lines.length,
       "line(s)"+(extraA+extraL?(" ("+(extraA+extraL)+" from the payload only)"):"")
       +(photos?("; "+photos+" photo(s) left in place"):"")+"; "+other+" annotation(s) are not ours");
+  /* 6nm — how many pictures came back from the payload's recovery copy rather than from their own
+     annotation, and how many the payload could not carry. Both are worth saying out loud: the
+     first means the file has been through a flattener, the second means a picture is gone. */
+  const recovered=annos.filter(z=>z&&z.__fromRecovery).length;
+  annos.forEach(z=>{ if(z)delete z.__fromRecovery; });
   return {bytes:bytes, annos:annos, lines:lines, photos:photos, removed:removed,
-          other:other, stamp:stamp, fromPayload:extraA+extraL};
+          other:other, stamp:stamp, fromPayload:extraA+extraL,
+          recovered:recovered, picsLost:payPicsDropped};
 }
 
 /* Read our marks back out of the PDF's own annotations. Each one written by this tool carries an RFDSRL
@@ -12411,10 +12678,21 @@ async function restoreEmbedded(){
       const n=S.annos.length+S.lines.length;
       LOG("Installed",n,"editable redline(s) taken off the page ("+d.removed+" annotation(s) detached, "
           +d.other+" left as somebody else's)");
+      /* 6nm — and it says what it had to reach for. A file that has been through another platform
+         comes back with every annotation stripped, so the marks are rebuilt from the document
+         payload and the pictures from the bounded copies it carries — which is worth telling
+         someone, because those pictures are at the recovery resolution and not the originals. A
+         picture the payload could not carry is simply gone, and that is worth telling them twice. */
       const msg=n+" redline"+(n===1?"":"s")+" on this PDF "+(n===1?"is":"are")+
                 " now editable — move, retype or delete "+(n===1?"it":"them")+" and re-export."+
                 (d.photos?(" "+d.photos+" photo"+(d.photos===1?"":"s")+
-                           " stayed on the page and cannot be edited here."):"");
+                           " stayed on the page and cannot be edited here."):"")+
+                (d.recovered?(" This file had been flattened by another tool, so "+d.recovered+
+                              " picture"+(d.recovered===1?"":"s")+" came back from the copy kept in "+
+                              "the document rather than from the original — re-add "+
+                              (d.recovered===1?"it":"them")+" if you need full resolution."):"")+
+                (d.picsLost?(" "+d.picsLost+" picture"+(d.picsLost===1?"":"s")+" could not be "+
+                             "recovered at all and will need re-adding."):"");
       try{ toast(n+" redline"+(n===1?"":"s")+" on this PDF "+(n===1?"is":"are")+" editable"); }catch(e){}
       setStatus(msg);
       setTimeout(()=>{ try{ setStatus(msg); }catch(e){} },350);

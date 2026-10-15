@@ -3584,6 +3584,12 @@
   /* --- the two FIXED-DARK surfaces: they carry their own pair, because the light falls on THEM ---- */
   #toolpop, .sk-edit{--emb-hi:rgba(255,255,255,.055); --emb-lo:rgba(0,0,0,.55);
                      --emb-in-hi:rgba(255,255,255,.06); --emb-in-lo:rgba(0,0,0,.4)}
+  /* 6n8 — the picture editor is no longer one of the fixed-dark surfaces: it follows the theme now
+     (see `.sk-edit`'s tokens in selbar.css), so in day mode the light falls on it the way it falls
+     on the page and its emboss pair has to turn over with it. `#toolpop` is still fixed-dark and
+     keeps the pair above. */
+  html.light .sk-edit{--emb-hi:rgba(255,255,255,.92); --emb-lo:rgba(16,20,28,.16);
+                      --emb-in-hi:rgba(255,255,255,.9); --emb-in-lo:rgba(16,20,28,.13)}
   #toolpop{border:1px solid transparent;
     box-shadow:0 22px 54px rgba(0,0,0,.55),
                var(--emb-d) var(--emb-d) calc(var(--emb-b)*1.8) var(--emb-lo),

@@ -224,19 +224,21 @@ body.selbaron #markR{bottom:64px}
    width is the same clamp the side pills take — 22px, shrinking only to clear the corners, never
    below the corner's own 11px. */
 .anno.sel.shapemark .rz.n,.anno.sel.shapemark .rz.s,
-.anno.sel.textbox .rz.n,.anno.sel.textbox .rz.s{
+.anno.sel.textbox .rz.n,.anno.sel.textbox .rz.s,
+.anno.sel.cellmark .rz.n,.anno.sel.cellmark .rz.s{          /* 6na — a redline wears them too */
   display:block!important;height:7px;border-radius:6px;
   width:clamp(11px,calc(100% - 22px),22px);
   left:0;right:0;margin-inline:auto;
 }
-.anno.sel.shapemark .rz.n,.anno.sel.textbox .rz.n{top:-5px;cursor:ns-resize}
-.anno.sel.shapemark .rz.s,.anno.sel.textbox .rz.s{bottom:-5px;cursor:ns-resize}
+.anno.sel.shapemark .rz.n,.anno.sel.textbox .rz.n,.anno.sel.cellmark .rz.n{top:-5px;cursor:ns-resize}
+.anno.sel.shapemark .rz.s,.anno.sel.textbox .rz.s,.anno.sel.cellmark .rz.s{bottom:-5px;cursor:ns-resize}
 .anno.editing .rz.n,.anno.editing .rz.s{display:none!important}
 /* 6mn — and they go with everything else while the mark is being adjusted. This lives here, beside
    the rule it has to beat, because that one is four classes of `!important` and the adjusting block
    in app.css is three — the only honest place for an override is next to what it overrides. */
 body.adjusting .anno.sel.shapemark .rz.n,body.adjusting .anno.sel.shapemark .rz.s,
-body.adjusting .anno.sel.textbox .rz.n,body.adjusting .anno.sel.textbox .rz.s{display:none!important}
+body.adjusting .anno.sel.textbox .rz.n,body.adjusting .anno.sel.textbox .rz.s,
+body.adjusting .anno.sel.cellmark .rz.n,body.adjusting .anno.sel.cellmark .rz.s{display:none!important}
 
 /* =================================================================================================
    6g1 — CENTRED AT ANY ZOOM
@@ -279,11 +281,33 @@ body.adjusting .anno.sel.textbox .rz.n,body.adjusting .anno.sel.textbox .rz.s{di
 /* 6hb — the selection's three controls, in a row under the frame: the same trio, in the same order
    and at the same size, that a mark and a stroke carry. Each one has a fingertip's worth of padding
    round the visible circle (`touch-action:none`, like every other handle). */
-/* 6i2 — and the grips go ABOVE the frame when the selection sits low on the page, where the multi bar
-   would otherwise cover them. `.up` is set by the painter that places the frame. */
-.gframe.up .ggrips{bottom:auto;top:-34px}
-.gframe .ggrips{position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);
-  display:flex;gap:6px;pointer-events:none}
+/* ==================================================================================================
+   6nb — A GROUP WEARS WHAT A MARK WEARS. Ced: "the cross does not follow the same design language
+   when selected", with a cross-out showing four corners and a row of three buttons above it, beside
+   a circle showing eight grips with the turn alone below and the other two stacked on the right.
+
+   6hb put the group's trio in a ROW under the frame, which was the mark's layout at the time. 6mr
+   and 6mt changed the mark's: the TURN is alone and centred under the box, because it is the one
+   control whose position has to mean something, and delete and drag stack off the right-hand edge.
+   The group's trio is laid out from the same numbers now — `-32px` under, `-30px`/`-31px` to the
+   right, 20px discs — so the two cannot be told apart except by the dashed ring, which is the one
+   difference that is deliberate.
+   ================================================================================================== */
+.gframe .ggrips{position:absolute;inset:0;pointer-events:none}
+.gframe .ggrip{position:absolute}
+.gframe .ggrip.grot{left:calc(50% - 10px);bottom:-32px;top:auto;right:auto}
+.gframe.up .ggrip.grot{bottom:auto;top:-32px}
+.gframe .ggrip.gdrag{right:-30px;top:calc(50% + 3px);left:auto;bottom:auto}
+.gframe .ggrip.gdel{right:-31px;top:calc(50% - 23px);left:auto;bottom:auto;
+  width:18px;height:18px;font-size:11px}
+/* 6nb — and the four side pills, on the mark's own clamp: 22px, shrinking only to clear the
+   corners, never under the corner's 11px. One rule, written the same way as `.anno .rz`. */
+.gframe .gh.e,.gframe .gh.w{width:7px;border-radius:6px;top:0;bottom:0;margin-block:auto;
+  height:clamp(11px,calc(100% - 22px),22px);cursor:ew-resize}
+.gframe .gh.n,.gframe .gh.s{height:7px;border-radius:6px;left:0;right:0;margin-inline:auto;
+  width:clamp(11px,calc(100% - 22px),22px);cursor:ns-resize}
+.gframe .gh.e{right:-5px} .gframe .gh.w{left:-5px}
+.gframe .gh.n{top:-5px}   .gframe .gh.s{bottom:-5px}
 /* ==================================================================================================
    6m6 — ONE DESIGN FOR EVERY BOX. Ced: "apply the updated colors of icons (grey) in all redlines",
    with captures of a group's trio and a stroke's still wearing selection blue, and then "also be
@@ -372,21 +396,66 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    `100vw - 48px` wide and covers everything else. The scrim does the separating; it is a shade
    deeper now to do it alone.
    ================================================================================================= */
+/* ==================================================================================================
+   6n8 — THE EDITOR HAS A DAY AND A NIGHT. Ced sent the plain light chequer and asked for the ground
+   to match it, "but have light and dark background mode".
+
+   It was a FIXED-DARK surface by design — app.css calls it that, and gives it its own neumorphism
+   pair because the light falls on it rather than on the page. That was a decision made when the
+   editor was a small panel; it is now most of the window, and a white sheet behind a black window
+   is the thing Ced is looking at all day. So every colour in here becomes a token, and `html.light`
+   gives the other set. The chequer is the one Ced sent: white and a light grey, 14px, which is what
+   every other editor draws transparency as.
+   ================================================================================================== */
 .sk-edit{position:fixed;inset:0;z-index:4700;display:flex;align-items:center;justify-content:center;
-  background:rgba(8,10,14,.72)}
+  --ske-scrim:rgba(8,10,14,.72);
+  --ske-card:#1f232b; --ske-ink:#e6e9ef; --ske-muted:#8d96a6; --ske-line:#3a414f;
+  --ske-sep:#3f4756;  --ske-btn:#262b34; --ske-btn-hi:#2f3541; --ske-btn-ink:#cfd6e2;
+  --ske-sunk:#11151b; --ske-sunk-line:#333a47; --ske-chip-ink:#9aa4b4;
+  --ske-stage:#1a1e25; --ske-chk-a:#3b414c; --ske-chk-b:#4b5260;
+  --ske-accent:#2f7be0; --ske-accent-ink:#fff;
+  /* 6ni — the slider, sampled from the picture Ced sent */
+  --ske-trk:#3a404c; --ske-fill-a:#2a8bf2; --ske-fill-b:#1559c8;
+  --ske-thumb:#f7f8fa; --ske-thumb-line:#6c7483; --ske-bub:#2d333d; --ske-bub-ink:#e6e9ef;
+  background:var(--ske-scrim)}
+html.light .sk-edit{
+  --ske-scrim:rgba(24,28,36,.42);
+  --ske-card:#ffffff; --ske-ink:#14161a; --ske-muted:#6b7280; --ske-line:#d7dae1;
+  --ske-sep:#c9ccd4;  --ske-btn:#f1f3f6; --ske-btn-hi:#e4e7ec; --ske-btn-ink:#23262c;
+  --ske-sunk:#e7eaef; --ske-sunk-line:#d2d6de; --ske-chip-ink:#5b6069;
+  --ske-stage:#f4f5f7; --ske-chk-a:#ffffff; --ske-chk-b:#cfd2d8;
+  --ske-accent:#2f7be0; --ske-accent-ink:#fff;
+  --ske-trk:#d5d5d5; --ske-fill-a:#0077e4; --ske-fill-b:#0054b0;
+  --ske-thumb:#fdfbfe; --ske-thumb-line:#a8a6a9; --ske-bub:#ebebeb; --ske-bub-ink:#3c4049}
 /* 6gr — THE DIALOG IS A FIXED SHAPE. Ced: "make the ui extend on the available space of the tool, with
    just few spaces. so zooming in and out in the ui does not change the shape of the tab."
    The card used to be sized by the picture inside it, so every zoom step resized the whole dialog —
    the buttons moved under the hand and the tab breathed in and out. It takes the room it is given,
    once, with a small margin; the picture scrolls inside the stage. */
-.sk-edcard{background:#1f232b;color:#e6e9ef;border:1px solid #3a414f;border-radius:12px;
-  box-shadow:0 22px 60px rgba(0,0,0,.6);padding:14px;
+.sk-edcard{position:relative;   /* 6ne — the hover chip is placed against the CARD */
+  background:var(--ske-card);color:var(--ske-ink);border:1px solid var(--ske-line);
+  border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.35);padding:14px;
   width:calc(100vw - 48px);height:calc(100vh - 48px);
   max-width:1480px;max-height:1000px;
   display:flex;flex-direction:column;box-sizing:border-box}
 /* 6j9 — headings in caps */
 .sk-edtitle{font:800 12px/1.2 var(--sans);letter-spacing:.11em;text-transform:uppercase}
-.sk-edhint{color:#8d96a6;font-size:11.5px;line-height:1.5;margin:4px 0 10px;max-width:640px}
+/* 6ng — the hint paragraph is gone; the heading keeps a little air under it on its own. */
+.sk-edhead{margin-bottom:10px}
+/* 6n5 — what the editor has just said. The page's own status strip is behind this dialog, so every
+   message in here had nowhere to land; this is where they land. An ordinary message is quiet, an
+   error is the red the rest of the tool uses for one. */
+/* 6no — one line, over the picture, not a block above it. It is `position:absolute` in the card so
+   it costs the stage no height at all, and it clips to one line with an ellipsis: the whole of a
+   long message is still in the activity log and in the page's own status strip. */
+.sk-edsay{position:absolute;left:50%;transform:translateX(-50%);top:46px;z-index:30;
+  max-width:min(70%,760px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-size:11.5px;line-height:1.4;
+  color:var(--ske-btn-ink);background:var(--ske-card);border:1px solid transparent;
+  border-left:3px solid #4b94e6;border-radius:var(--radius,12px);padding:8px 14px;
+  box-shadow:0 10px 26px rgba(0,0,0,.34), 0 2px 6px rgba(0,0,0,.18)}
+.sk-edsay.err{border-left-color:#fa3237;color:#b3161c}
+html:not(.light) .sk-edsay.err{color:#ffd9da}
 /* 6kv — the two rows of tools sit in the MIDDLE of the card. Ced: "make the tools on edit picture
    align in center." The card is a fixed shape — `100vw - 48px`, up to 1480 — and the picture inside
    it is centred in its stage, so two rows of buttons packed against the left edge of a very wide
@@ -418,29 +487,29 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
 /* 6gk/6m2 — the tools, the selection, the fill: groups on one row, divided the way the ribbon divides
    its own categories — a 1px dotted rule, no plate, no padding of its own. */
 .sk-edgrp{display:flex;align-items:center;gap:3px;padding:2px 7px;
-  border-right:1px dotted #3f4756}
+  border-right:1px dotted var(--ske-sep)}
 .sk-edbar .sk-edgrp:last-child{border-right:none}
 .sk-edbar2{margin-bottom:10px}
 .sk-edzoom{min-width:40px;text-align:center}
 /* 6gk — what the next wand click does to the selection: new, add, subtract */
-.sk-edmodes{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
-  border-radius:8px;padding:2px}
-.sk-edm{background:transparent;border:0;color:#9aa4b4;border-radius:6px;padding:4px 7px;
+.sk-edmodes{display:inline-flex;gap:2px;background:var(--ske-sunk);border:1px solid transparent;
+  border-radius:11px;padding:2px}
+.sk-edm{background:transparent;border:0;color:var(--ske-chip-ink);border-radius:9px;padding:4px 7px;
   font:600 11px/1 var(--sans);cursor:pointer;white-space:nowrap}
-.sk-edm:hover{background:#262b34;color:#e6e9ef}
-.sk-edm.on{background:#2f7be0;color:#fff}
-.sk-edb{display:inline-flex;align-items:center;gap:5px;background:#262b34;border:1px solid #3a414f;
-  color:#cfd6e2;border-radius:8px;padding:6px 7px;font-size:11px;cursor:pointer;
+.sk-edm:hover{background:var(--ske-btn-hi);color:var(--ske-ink)}
+.sk-edm.on{background:var(--ske-accent);color:var(--ske-accent-ink)}
+.sk-edb{display:inline-flex;align-items:center;gap:5px;background:var(--ske-btn);border:1px solid var(--ske-line);
+  color:var(--ske-btn-ink);border-radius:9px;padding:6px 7px;font-size:11px;cursor:pointer;
   white-space:nowrap;line-height:1.1}
-.sk-edb:hover{background:#2f3541}
-.sk-edb.on{background:#2f7be0;border-color:#2f7be0;color:#fff}
+.sk-edb:hover{background:var(--ske-btn-hi)}
+.sk-edb.on{background:var(--ske-accent);border-color:var(--ske-accent);color:var(--ske-accent-ink)}
 .sk-edg{font-size:13px;line-height:1}
 /* 6lf — a drawn glyph sits on the text's own line and takes the button's ink. 1.15em rather than 1em
    because the bucket's artwork is taller than it is wide, so matched by WIDTH it reads smaller than
    the typed glyphs beside it. */
 .sk-edg svg{display:block;width:1.15em;height:1.15em;fill:currentColor}
-.sk-edsize{display:inline-flex;align-items:center;gap:6px;color:#8d96a6;font-size:11px;
-  background:#262b34;border:1px solid #3a414f;border-radius:8px;padding:4px 7px;white-space:nowrap}
+.sk-edsize{display:inline-flex;align-items:center;gap:6px;color:var(--ske-muted);font-size:11px;
+  background:var(--ske-btn);border:1px solid var(--ske-line);border-radius:8px;padding:4px 7px;white-space:nowrap}
 /* 6mx/6n0 — Ced, three times: "have the free and border slider longer to have more control in
    adjustments." 64px for a 60-degree sweep is barely a degree a pixel, and for a 12px border it is
    five pixels a step. 6mx measured the tool row's slack and took all of it — 96px is the last width
@@ -448,7 +517,75 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    the limit, so 6n0 takes the two sliders OFF the tool row and gives them one of their own: 94px
    stays the floor for a slider sitting inline anywhere else, and on their own row each track takes
    whatever the card has left over. */
-.sk-edsize input[type=range]{width:94px}
+/* ==================================================================================================
+   6nl — AND THE SPACES ARE EVEN. Ced: "make sure the spaces are even", with the history and zoom
+   panels shown crowding their own edges.
+
+   Measured, they were: `.sk-edbase .sk-edhist,.sk-edbase .sk-edview` from 6n3 set `padding:0` and
+   won the tie against 6nk's panel padding on source order, so those two panels had none at all
+   while the sliders beside them had 12px — "nothing selected" sat hard against the hairline. Every
+   panel in the dock now takes the SAME inside measure and the SAME height, and every gap in the
+   dock is the one number the rail is already inset by.
+
+   One scale, written once: 10px between panels and from the dock to the card, 12px inside a panel,
+   46px tall. The slider panels spend their 46 differently — 19 above the track for the bubble to
+   sit in, 7 below — but they end at the same height as the button panels beside them, which is
+   what "even" has to mean when one panel has a bubble over it and another does not.
+   ================================================================================================== */
+/* `.sk-edpanel` is put on by hand, in `skEdWire`, on exactly the controls that float — rather than
+   inferred from "a child of a row", which made the settings GROUP a panel with the brush panel
+   nested inside it: two plates, one 57px tall and one 46px, which is the unevenness Ced saw. */
+/* 6nl — one HEIGHT, not one minimum. A slider panel spends it on a bubble above the track and the
+   brush panel on the nib chips beside it, and left to their own content they came out 46 and 55 —
+   which is the unevenness, measured. 54 is the tallest of them, so it is the height of all of
+   them, and everything inside centres in what is left. */
+.sk-eddock .sk-edpanel{height:54px;box-sizing:border-box;
+  background:var(--ske-card);border:1px solid var(--ske-line);border-radius:13px;
+  box-shadow:0 10px 30px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.16)}
+.sk-eddock .sk-edsize.sk-edpanel{padding:19px 12px 7px;align-items:center}
+.sk-eddock .sk-edgrp.sk-edpanel{padding:0 12px;gap:6px;align-items:center;border-right:none}
+/* the rows and the groups inside them are layout only: they carry no plate of their own */
+.sk-eddock .sk-edbar,.sk-eddock .sk-edctx .sk-edgrp{background:none;border:none;box-shadow:none;
+  padding:0;min-height:0}
+.sk-eddock .sk-edctx .sk-edgrp{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+/* a control inside one of those panels is ON the panel, so it keeps its own plate small */
+.sk-eddock .sk-edmodes,.sk-eddock .sk-ednib{padding:3px;border-radius:11px}
+.sk-eddock .sk-edcount{margin:0}
+
+/* ---- 6ni — the slider itself -------------------------------------------------------------------
+   A native range paints no filled portion on WebKit, so the fill is a gradient on the track sized
+   by `--v`, written by `edSyncRange`. The thumb is the one Ced drew: a white disc on a grey ring
+   with a soft shadow, a touch larger than the track so it reads as sitting on top of it. */
+.sk-edsize{position:relative;padding-top:19px;align-items:center;border-radius:var(--radius,12px)}
+.sk-edsize input[type=range]{width:94px;-webkit-appearance:none;appearance:none;
+  background:transparent;height:18px;margin:0;cursor:pointer}
+.sk-edsize input[type=range]::-webkit-slider-runnable-track{
+  height:16px;border-radius:9px;
+  background:
+    linear-gradient(90deg,var(--ske-fill-a),var(--ske-fill-b)) left/var(--v,0%) 100% no-repeat,
+    var(--ske-trk);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.26), inset 0 0 0 1px rgba(0,0,0,.07)}
+.sk-edsize input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:18px;height:18px;margin-top:-1px;border-radius:50%;
+  background:var(--ske-thumb);border:1px solid var(--ske-thumb-line);
+  box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.sk-edsize input[type=range]:active::-webkit-slider-thumb{background:#fff}
+.sk-edsize input[type=range]::-moz-range-track{height:16px;border-radius:9px;background:var(--ske-trk);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.26)}
+.sk-edsize input[type=range]::-moz-range-progress{height:16px;border-radius:9px;
+  background:linear-gradient(90deg,var(--ske-fill-a),var(--ske-fill-b))}
+.sk-edsize input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
+  background:var(--ske-thumb);border:1px solid var(--ske-thumb-line);
+  box-shadow:0 1px 3px rgba(0,0,0,.4)}
+/* the reading rides above the thumb, placed from `--bx` — pixels, not a percentage, because the
+   thumb's centre never reaches the track's own ends */
+.sk-edsize .sk-ednum{position:absolute;top:0;left:var(--bx,50%);transform:translateX(-50%);
+  min-width:0;background:var(--ske-bub);color:var(--ske-bub-ink);
+  border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;line-height:1.3;
+  box-shadow:0 1px 3px rgba(0,0,0,.26);pointer-events:none;white-space:nowrap}
+/* 6ni — the rows that carry a reading but no track (the zoom percentage) keep the old inline look */
+.sk-edview .sk-ednum,.sk-edzoom{position:static;transform:none;background:none;box-shadow:none;
+  color:var(--ske-ink);padding:0;font-weight:400;font-size:11px}
 /* ==================================================================================================
    6n3 — THE TOOL BAR IS DOWN THE LEFT, AND THE SLIDERS ARE ON THE FLOOR.
    Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
@@ -459,52 +596,141 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    only changes edge — `border-right` between groups laid side by side becomes `border-bottom`
    between groups stacked down a column, which is what "the same separator, but horizontally" means.
    ================================================================================================== */
-.sk-edbody{display:flex;gap:10px;flex:1 1 auto;min-height:0;margin-bottom:8px}
-.sk-edrail{display:flex;flex-direction:column;flex:0 0 auto;width:150px;
-  align-items:stretch;justify-content:flex-start;flex-wrap:nowrap;margin:0;
-  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:3px}
-.sk-edrail .sk-edgrp{flex-direction:column;align-items:stretch;gap:4px;padding:8px 2px;
-  border-right:none;border-bottom:1px dotted #3f4756}
+/* ==================================================================================================
+   6nn — TWO COLUMNS OVER ONE STAGE, AND EVERY TAB NEUMORPHIC.
+   Ced: "put all the tool tabs on the left and stack individual tools. the main tab, the brush,
+   rotate, and border. while the undo redo and zoom are stacked on the right" · "no colored border.
+   it should play the neumorphism ui here" · "make the tools icons and ui here more rounded like the
+   roundness of the tools on the main ui".
+
+   So: the stage runs the full width of the card and both columns float over it. The left stacks the
+   tool tab, the brush, the turn and the border, in that order; the right stacks the history and the
+   zoom. Nothing crosses the foot of the picture any more.
+
+   The hairline is gone from every tab. `app.css` already gives the editor its own emboss pair and
+   puts it on the BUTTONS; the tabs take the same pair, at the card's weight, so a tab reads as
+   raised out of the surface rather than drawn on it. And the radius is the main UI's own `--radius`
+   (12px) on a panel and 9px on a control, which is `.btn`'s — the two numbers the rest of the tool
+   is built from, rather than the 13/8 this dialog had invented for itself.
+   ================================================================================================== */
+.sk-edbody{position:relative;display:flex;flex:1 1 auto;min-height:0;margin-bottom:8px}
+.sk-edcol-l,.sk-edcol-r{position:absolute;top:10px;bottom:10px;z-index:6;
+  display:flex;flex-direction:column;gap:10px;align-items:flex-start;
+  overflow-y:auto;overflow-x:visible;overscroll-behavior:contain;
+  pointer-events:none;scrollbar-width:thin}
+.sk-edcol-l{left:10px;width:214px}
+.sk-edcol-r{right:10px;align-items:flex-end}
+.sk-edcol-l>*,.sk-edcol-r>*{pointer-events:auto;flex:0 0 auto}
+
+/* a TAB: the tool grid, the brush, the turn, the border, the history, the zoom. No border at all —
+   the emboss is the edge. */
+.sk-edcol-l>*,.sk-edcol-r>*,.sk-eddock .sk-edpanel{
+  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,12px);
+  box-shadow:var(--emb-d,4px) var(--emb-d,4px) calc(var(--emb-b,10px)*1.5) var(--emb-lo,rgba(0,0,0,.5)),
+             calc(var(--emb-d,4px)*-1) calc(var(--emb-d,4px)*-1) calc(var(--emb-b,10px)*1.5) var(--emb-hi,rgba(255,255,255,.05));
+  box-sizing:border-box}
+.sk-edcol-l>.sk-edbar,.sk-edcol-r>.sk-edgrp{margin:0}
+
+/* the tool grid inside its tab */
+.sk-edrail{display:flex;flex-direction:column;width:100%;margin:0;padding:4px 6px;
+  align-items:stretch;justify-content:flex-start;flex-wrap:nowrap}
+.sk-edrail .sk-edgrp{display:grid;grid-template-columns:repeat(4,38px);gap:5px;padding:7px 0;
+  justify-content:center;border-right:none;border-bottom:1px dotted var(--ske-sep)}
 .sk-edrail .sk-edgrp:last-child{border-bottom:none}
-/* a button in the rail is a full-width row: glyph, then the word, left aligned, so the column of
-   them reads as a list of tools rather than as a bag of chips */
-.sk-edrail .sk-edb{width:100%;justify-content:flex-start;text-align:left}
-.sk-edrail .sk-edcol{width:100%}
-/* a tool in the rail is COMPACT: 22px rather than 27px. Measured at 1512x923, the rail has 636px
-   to work with, and the tools came to 907px with the zoom block in it — so the zoom went to the
-   base strip and the buttons lost five pixels each, which brings the column to 620px and inside
-   the room there is. Nothing is below the fold at that size. */
-.sk-edrail .sk-edb{padding:3px 7px;font-size:11px;gap:5px}
-.sk-edrail .sk-edg{font-size:12px}
-.sk-edrail .sk-edgrp{gap:2px;padding:6px 2px}
+.sk-edrail .sk-edb{width:38px;height:38px;padding:0;gap:0;justify-content:center;
+  align-items:center;text-align:center;border-radius:11px}
+.sk-edrail .sk-edb .sk-edt{display:none}          /* the word is on the tooltip */
+.sk-edrail .sk-edg{font-size:16px}
+.sk-edrail .sk-edg svg{width:1.15em;height:1.15em}
+.sk-edrail .sk-edcol{width:38px;height:38px}
+
+/* the settings tabs — brush, turn, border — fill the column's width */
+.sk-edctx,.sk-edbase{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;
+  background:none;border:none;box-shadow:none;width:100%}
+.sk-edcol-l>.sk-edctx,.sk-edcol-l>.sk-edbase{background:none;border:none;box-shadow:none}
+.sk-edctx .sk-edgrp{display:flex;flex-direction:column;gap:8px;align-items:stretch;
+  border-right:none;padding:0;background:none;box-shadow:none}
+.sk-edcol-l .sk-edpanel{width:100%;display:flex;box-sizing:border-box;
+  background:var(--ske-card);border:1px solid transparent;border-radius:var(--radius,12px);
+  box-shadow:var(--emb-d,4px) var(--emb-d,4px) calc(var(--emb-b,10px)*1.5) var(--emb-lo,rgba(0,0,0,.5)),
+             calc(var(--emb-d,4px)*-1) calc(var(--emb-d,4px)*-1) calc(var(--emb-b,10px)*1.5) var(--emb-hi,rgba(255,255,255,.05))}
+.sk-edcol-l .sk-edsize.sk-edpanel{flex-wrap:wrap;padding:10px 12px 9px;row-gap:0}
+.sk-edcol-l .sk-edsize.sk-edpanel>:not(input[type=range]){order:1}
+.sk-edcol-l .sk-edsize.sk-edpanel input[type=range]{flex:1 1 100%;width:auto;min-width:0;order:3;
+  margin-top:20px}
+/* 6nn — the track is the LAST row in a stacked tab, so the reading rides just above it rather than
+   at the top of the panel, which is where `top:0` was putting it — a bubble 40px adrift of its own
+   thumb. Measured from the bottom: 9px of padding, an 18px track, 3px of air. */
+.sk-edcol-l .sk-edsize.sk-edpanel .sk-ednum{top:auto;bottom:28px}
+.sk-edcol-r .sk-edgrp.sk-edpanel{padding:6px 8px;gap:5px;align-items:center;
+  border-right:none;flex-direction:column}
+.sk-edcol-r .sk-edzoom{order:-1}
 
 /* the settings for the tool in the hand — not tools, so not in the rail */
-.sk-edctx{justify-content:flex-start;gap:6px;margin:0 0 8px;min-height:0}
+.sk-edctx{justify-content:flex-start;gap:10px;margin:0;min-height:0}
 .sk-edctx .sk-edgrp{border-right:none;padding:0;flex-wrap:wrap;gap:6px}
 
 /* 6n0/6n3 — the floor. The two sliders take an equal share of what is left after Undo and Redo, and
    inside a slider the track takes everything the label and the reading do not. `min-width:0` is what
    lets a flex child be narrower than its content wants, which is what keeps a narrow editor from
    pushing the row wider than the card. */
-.sk-edbase{display:flex;gap:8px;margin:0 0 10px;padding:0;align-items:stretch;flex-wrap:nowrap}
+/* ==================================================================================================
+   6ni — THE STRIPS ARE A DOCK, AND THE SLIDERS ARE CED'S.
+   "now improve the sliders to look like this and also incorporate them inside the ui."
+
+   The dock is the tool rail's twin: the same ground, hairline, radius and shadow, resting over the
+   foot of the stage instead of lying on the card below it. The stage's bottom padding is what keeps
+   the picture off it, the same way the left padding keeps it off the rail.
+   ================================================================================================== */
+/* 6nk — AND EACH ONE FLOATS ON ITS OWN. Ced, at the first cut: "no, the sliders should be within
+   the ui separately not in one tab." One dock holding everything is the same plate the tools were
+   taken off in 6nh, only moved to the bottom. So the dock keeps the POSITION and gives up the
+   plate: it is a transparent rail along the foot of the stage, and the panel — ground, hairline,
+   radius, shadow — belongs to each control inside it. Brush, Rotate, Border, the history pair and
+   the zoom block are five panels resting over the picture, not one tab with five things in it. */
+.sk-eddock{position:absolute;left:142px;right:10px;bottom:10px;z-index:6;
+  display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.sk-eddock>*{pointer-events:auto}
+.sk-edbase{display:flex;gap:10px;margin:0;padding:0;align-items:stretch;flex-wrap:nowrap}
 .sk-edbase .sk-edsize{flex:1 1 0;min-width:0;display:flex}
 .sk-edbase .sk-edsize input[type=range]{flex:1 1 auto;width:auto;min-width:94px}
 .sk-edbase .sk-edhist,.sk-edbase .sk-edview{flex:0 0 auto;border-right:none;padding:0;gap:4px;
   align-items:center}
 .sk-edbase .sk-edview .sk-edzoom{min-width:44px}
+/* ==================================================================================================
+   6ne — THE TOOL'S NAME, BESIDE THE TOOL, AT ONCE.
+   Ced: "make the hover to the icon have tool name to have ease of understanding to user."
+   A chip rather than a `::after`, because the rail scrolls and would clip one. It takes no pointer
+   events, so moving onto it cannot make it flicker away.
+   ================================================================================================== */
+.sk-edtip{position:absolute;z-index:40;pointer-events:none;white-space:nowrap;border-radius:9px;
+  background:var(--ske-ink);color:var(--ske-card);
+  font:600 11px/1 var(--sans);letter-spacing:.02em;
+  padding:6px 9px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+
+/* 6nd — the two marks Ced sent in COLOUR keep it, from here rather than from the path, so the
+   selected state can take it back: a blue glyph on a blue button would disappear. Auto is an
+   action and is never `on`, but the rule is written for both so the next coloured glyph is safe. */
+/* 6nf — Auto's glyph paints itself from a gradient (see ED_ICO_AUTO), so it takes no ink from
+   here. On a light ground the palest end of an iridescent sheet is very nearly the ground, so
+   the glyph gets a hairline of the button's own ink behind it to keep its edge. */
+html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);stroke-width:.7}
+.sk-edb[data-k="clear"] .sk-edg,.sk-edb[data-k="deselect"] .sk-edg{color:#e8453f}
+.sk-edb.on .sk-edg{color:inherit}
+
 /* 6n4 — the nib chips sit tight against the brush's reading, dressed as the wand's mode chips are
    but on a class of their own, so a lookup for one never finds the other. */
-.sk-ednib{display:inline-flex;gap:2px;background:#11151b;border:1px solid #333a47;
-  border-radius:8px;padding:2px;margin-left:2px}
-.sk-ednum{color:#e6e9ef;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+.sk-ednib{display:inline-flex;gap:2px;background:var(--ske-sunk);border:1px solid transparent;
+  border-radius:11px;padding:2px;margin-left:2px}
+.sk-ednum{color:var(--ske-ink);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
 /* 6ha — THE STAGE IS THE ROOM, THE PICTURE SITS IN THE MIDDLE OF IT.
    Ced: "the photo should always be in the middle of edit photo ui." It was pinned to the top and to
    the centre only horizontally, so a picture smaller than the stage — which is most of them, since the
    fit never goes above 1:1 — sat against the ceiling with all the empty room underneath it. `margin:
    auto` on the picture is the one way that centres BOTH ways and still scrolls correctly when the
    picture is larger than the stage; `justify-content:center` alone clips the top-left in that case. */
-.sk-edstage{position:relative;background:#1a1e25;
-  border:1px solid #3a414f;border-radius:9px;padding:8px;display:flex;
+.sk-edstage{position:relative;background:var(--ske-stage);
+  border:1px solid var(--ske-line);border-radius:9px;padding:8px;display:flex;
   justify-content:safe center;align-items:safe center;
   /* it fills whatever the card has left, whatever the picture inside it is doing */
   flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
@@ -536,9 +762,14 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    alike. */
 .sk-edbgclip{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .sk-edbg{position:absolute;inset:-71%;transform-origin:center center;
-  background:
-    linear-gradient(45deg,#33394400 25%,transparent 25%,transparent 75%,#33394400 75%),
-    linear-gradient(45deg,#3b414c 25%,#4b5260 25%,#4b5260 75%,#3b414c 75%);
+  /* 6n8 — a real chequer: ONE two-colour gradient, laid twice and offset by half a tile, over a
+     ground of the other colour. The first pass of 6n8 tokenised only the second layer and left the
+     first transparent, which is a diagonal weave rather than squares — visible in the dark theme as
+     a herringbone. */
+  background-color:var(--ske-chk-a);
+  background-image:
+    linear-gradient(45deg,var(--ske-chk-b) 25%,transparent 25%,transparent 75%,var(--ske-chk-b) 75%),
+    linear-gradient(45deg,var(--ske-chk-b) 25%,transparent 25%,transparent 75%,var(--ske-chk-b) 75%);
   background-size:14px 14px;background-position:0 0,7px 7px}
 .sk-edcanvas{display:block;touch-action:none;image-rendering:auto;position:relative;z-index:1}
 .sk-edov{z-index:2}
@@ -586,15 +817,21 @@ body.laseron #pages .page,body.laseron #pages .tspan,body.laseron #pages .anno{c
    the brush ring does — a tinted ring parked at the last place the hand was is not a cursor. */
 .sk-edring.pen{border-color:rgba(255,255,255,.95);background:var(--sk-ink,#fa3237)}
 .sk-edring.pen.on{opacity:.82}
-.sk-edcol{width:30px;height:26px;padding:0;border:1px solid #3a414f;border-radius:7px;
-  background:#262b34;cursor:pointer}
-.sk-edcount{color:#8d96a6;font-size:11.5px;margin-left:2px;font-variant-numeric:tabular-nums}
+/* 6nj — Ced: "make the fill color rounded as well". The swatch is an `input[type=color]`, whose
+   inner well is a shadow part of its own: rounding the control alone leaves a square of colour
+   sitting inside a rounded box, which is what his capture shows. Both are rounded here. */
+.sk-edcol{width:30px;height:26px;padding:2px;border:1px solid transparent;border-radius:11px;
+  background:var(--ske-btn);cursor:pointer;overflow:hidden}
+.sk-edcol::-webkit-color-swatch-wrapper{padding:0}
+.sk-edcol::-webkit-color-swatch{border:none;border-radius:9px}
+.sk-edcol::-moz-color-swatch{border:none;border-radius:7px}
+.sk-edcount{color:var(--ske-muted);font-size:11.5px;margin-left:2px;font-variant-numeric:tabular-nums}
 .sk-edb[disabled]{opacity:.45;cursor:default}
 .sk-edfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
-.sk-edfb{background:#262b34;border:1px solid #3a414f;color:#cfd6e2;border-radius:8px;
+.sk-edfb{background:var(--ske-btn);border:1px solid var(--ske-line);color:var(--ske-btn-ink);border-radius:8px;
   padding:7px 16px;font-size:12px;cursor:pointer}
-.sk-edfb:hover{background:#2f3541}
-.sk-edfb.primary{background:#2f7be0;border-color:#2f7be0;color:#fff}
+.sk-edfb:hover{background:var(--ske-btn-hi)}
+.sk-edfb.primary{background:var(--ske-accent);border-color:var(--ske-accent);color:var(--ske-accent-ink)}
 .sk-edfb.primary:hover{background:#3d88ec}
 
 /* 6kz — the vertical flip is the horizontal one's drawing, turned a quarter. See selbar.js. */

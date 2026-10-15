@@ -4,7 +4,273 @@ Per-version working notes — what was asked for, what was measured, why each fi
 is — live alongside this repo in the **MIU (Mark It Up)** Claude project as `claude/vNN-notes.md`,
 back to v11. This file is the summary.
 
-Versions are numbered by release, not semver: v55 is the fifty-fifth published build.
+Versions are numbered by release, not semver: v59 is the fifty-ninth published build.
+
+---
+
+## v59
+
+**The picture editor becomes two columns, the border grows smoothly, and the two tools nobody had
+ever pressed get pressed.**
+
+Ced: *"work through the tool audit / also, the stops in border tool in edit picture is too much. make
+it more seamless like a slider. / in edit photo, put all the tool tabs on the left and stack
+individual tools. the main tab, the brush, rotate, and border. while the undo redo and zoom are
+stacked on the right. / also, no colored border. it should play the neumorphism ui here. / the
+explanation tab here is not needed. make the tools icons and ui here more rounded like the roundness
+of the tools on the main ui"*
+
+**Two columns of tabs (`6nn`).** The rail and the floor dock are gone. Everything that *does*
+something to the picture stacks down the left — tools, brush, rotate, border — and everything that
+undoes or looks stacks down the right: history, zoom. Each is its own plate: no hairline, the same
+`--radius: 12px` the main UI's panels use, lifted on the same two-sided neumorphic shadow rather than
+a coloured edge. The tool grid is four across at 38px, and the stage's padding is measured from the
+columns themselves on every layout, so a wide picture never slides under either one.
+
+| | before | after |
+|---|---|---|
+| left column | — | `tools · brush · rotate · border` |
+| right column | — | `history · zoom` |
+| plate border | 1px coloured | none — shadow only |
+| plate radius | 8px | **12px**, as the ribbon's |
+| button radius | 6px | **9–11px** |
+| slider track | 96px | **188px** |
+
+**One line instead of a paragraph (`6no`).** The explanation block under the picture is gone. What
+it used to say now rides on each control's own `title`, and the editor says what it has just done in
+a single line over the picture, which fades after five seconds — unless it is an error, which stays.
+
+**A border that grows, not steps (`6np`).** The border slider moved in whole pixels: 12 stops across
+its whole travel, and the step from 3 to 4 is visible. It now moves in tenths — **121 positions** —
+and the fractional part is painted as the next ring out at `globalAlpha = frac`, so 3.5 really is
+half a ring heavier than 3.0. Measured as summed alpha across the picture: 3.0 → 10,852,800,
+3.5 → 11,047,360, 4.0 → 11,240,400. Counting *pixels* reads 3.5 and 4.0 as identical, which is why
+the test that proves this sums the channel instead.
+
+**The audit: the two tools that had never been driven (`6nq`).** Counting named cases per ribbon
+tool, every tool had some coverage except two. **Pan** had a single passing mention and no gesture
+anywhere — which is the exact shape of hole v41's `6gb` could fall through, since it is three
+branches off one press and nothing had ever pressed. **Find** had no named case at all, in either
+file. Both now have one, driven by real mouse and keyboard:
+
+* the hand moves the sheet by the distance the hand moved (80px across, 160px down, to the pixel),
+  leaves no marquee behind and makes no mark; the arrow in the same place marquees and moves
+  nothing; and Shift lends each tool the other's gesture, both ways
+* Find counts what is on the sheet (25 hits for its needle in the fixture), lights the first one,
+  walks forward on Enter and back on Shift+Enter, and puts the box and the highlight away on Escape
+
+Both were proved against a broken build: with `_wantPan` forced false every pan reads 0, and with
+Enter's handler gutted the count never leaves 1/25.
+
+**Two stale tests, corrected rather than relaxed.** `6nn` moved Undo and Redo out of `.sk-edbar` and
+into the right-hand column, and two cases looked for them *inside the bar* — so a working button
+read as a missing one. The helper that presses an editor button by its `data-k` now searches the
+whole editor, which is what it always meant: the key names the button, where it is hung is layout.
+
+**Suites:** tools 188 · behave **82** (two new) · wysiwyg 19 · textparity 12 · stampparity 4 ·
+colparity 11 · keys · reopen · flatten · scenarios v19/v14/v12 — all green.
+
+---
+
+## v58
+
+**A file that comes back from another platform brings its pictures with it.**
+
+Ced: *"uploading a pdf into a different platform and editing it again seems to flatten the photos in
+the pdf"*, with the package back from the site it had been submitted to.
+
+**What the returned file actually showed.** 18 pages, 4.1 MB, our own Producer still on it:
+
+| | |
+|---|---|
+| `/Annots` on every page | **0** — every annotation stripped |
+| `MAData` / `MAPhoto` / `MARL` | **0** — so every per-mark tag went with them |
+| `/Subject` MAREDLINE payload | **99,934 chars, intact** |
+| marks in it | **139 marks, 41 strokes** — all of them |
+| pictures in it | **8, every one with no pixels** |
+
+So the document payload is the channel that survives a flattener, and the pictures were the one
+thing not riding in it. v49's `6ff` and v51's `6le` had taken a photo's bytes *out* of the payload
+precisely because they were also in the photo's own annotation tag — and the tag is exactly what a
+flattener destroys. Everything else in the payload is enough to rebuild a mark; a picture is only
+pixels.
+
+**The payload was also uncompressed** — base64 of plain JSON. Measured on Ced's file, gzipping it
+first takes 99,920 chars to **9,624**, a tenth. That is where the room came from.
+
+So a picture now travels twice, on purpose and at two weights (`6nm`): the annotation tag keeps it
+at full resolution for an ordinary reopen, and the payload carries a **recovery copy** — PNG where
+the picture has transparency (every cut-out does) and JPEG where it has not. Identical pictures are
+stored once and referenced.
+
+**Shrink before you shed.** The first cut made one copy at 1400px and dropped whole pictures when
+the total would not fit: three incompressible test photos came to 644,761 chars and **two of the
+three were thrown away** to make the third fit. A picture that comes back small is worth far more
+than a picture that does not come back, so each one is now stepped down — 1400px, 1000, 700, 480 —
+until it fits a budget of its own. The same three photos now cost **100,661 chars in total** and
+all three come back.
+
+**And a payload picture is let through when nothing on the page claims it.** The merge said
+`kind!=="img"` flatly, to stop a photo arriving twice — restored from the payload *and* still
+sitting on the document as an annotation. But that only happens when the annotation is still there,
+and on a flattened file there are none, so the blanket refusal was the reason Ced's 8 pictures came
+back as nothing. The test is the precise one now: no annotation claimed this id, none was left on
+the page under it, and the payload has pixels for it.
+
+**It says so.** A reopen that had to reach for the recovery copies now tells you the file had been
+flattened by another tool and that those pictures are at recovery resolution, not the originals —
+and if one could not be carried at all, it says that too. Silently showing a lower-resolution
+picture, or an empty box, is the part of this that cost Ced a submitted package.
+
+**New suite: `test/flatten.py`.** `reopen.py` could never have caught this — it exports and reopens
+*our* file, where the annotations are still there and serve every picture, so the payload is never
+asked. This one asks it, by doing to the export exactly what that platform did: strip every
+`/Annots` and nothing else. Reverted to the old behaviour it reproduces Ced's symptom precisely —
+6 of 9 marks, 0 of 3 pictures.
+
+---
+
+## v57
+
+**Ced's own icons on every tool, and the picture editor taken off its surface.**
+
+**Seventeen marks, traced** (`6nd`). Ced sent artwork and said which tool each belongs to. They are
+**traced, not redrawn** — `tools/traceicon.py`, the tracer the bucket and the app's icon set already
+went through: each contour simplified with Douglas-Peucker at a tolerance just wide enough to
+swallow the antialiased staircase, scaled into a 24-unit box, holes kept as subpaths, emitted
+`fill-rule:evenodd`. Three sources were low-resolution — the flip-vertical pair and the two turn
+discs — so those were smoothed 4× with Lanczos first, or every jag would have become a vertex. One
+carried a stock-library watermark under the artwork; the first pass kept it and sized both discs to
+a tenth of the box to make room for it, so it was cropped off before the trace. 17 KB in all.
+
+**The shapes are thicker** (`6nd`). Line, Arrow, Box, Ellipse and the shaped selection had no
+artwork and were typographic glyphs, whose weight is the font's and not ours. Drawn now, at a
+stroke of 3 in a 24 box. `style="fill:none"` and not the `fill` attribute, because
+`.sk-edg svg{fill:currentColor}` is a stylesheet rule and beats a presentation attribute — which is
+how the first cut came out as a solid square, a solid disc and a solid rounded rect.
+
+**Auto is holographic** (`6nf`). Ced sent an iridescent sheet. The stops are **sampled** from it,
+across the brightest band — #c2b7fc, #c6d2fe, #9cdffb, #51f9fc, #81fff2, #bdfbc5, #e1e3d9, #e9d0da
+— on the diagonal the sheet runs on.
+
+**The name, on hover, at once** (`6ne`). Every button already carried a sentence, but a native
+tooltip waits about a second and then shows the whole thing — right when you wonder what a tool
+*does*, wrong when you are hunting for the one called Lasso. The word appears beside the button
+immediately; the sentence still arrives behind it. One floating chip rather than a `::after` on
+each button, because the rail scrolls and would clip one.
+
+**The paragraph is gone** (`6ng`). Two lines of prose saying a third time what each button now says
+twice, at the cost of 40px off the top of the picture. The two things in it that no tool says — the
+wheel sizes the brush with Shift and zooms with Ctrl — moved onto the brush slider's tooltip and the
+zoom buttons'.
+
+**The tools float, and so does every control** (`6nh`, `6nk`). Ced: *"make the tools be floating in
+a tab on the ui instead of lying on a surface"*, then, at a single dock holding everything,
+*"no, the sliders should be within the ui separately not in one tab."* The rail is a panel of its
+own resting over the stage; the dock at the foot keeps the position and gives up the plate, so
+Brush, Rotate, Border, the history pair and the zoom block are five panels rather than one tab with
+five things in it.
+
+**The sliders are Ced's** (`6ni`). A pill track, the part behind the thumb filled, a white thumb on
+a grey ring, and the reading in a bubble riding above it. Sampled from his picture: #0077e4 to
+#0054b0 across the fill, #d5d5d5 for the track, #a8a6a9 for the ring. A native range paints no
+filled portion on WebKit, so the fill is a gradient sized by a custom property; the bubble is placed
+in **pixels** and not a percentage, because the thumb's centre travels half a thumb in from each end
+and a flat percentage drifts off it by 9px at the extremes.
+
+**And the spaces are even** (`6nl`). Ced: *"make sure the spaces are even."* Measured, they were
+not: v56's `.sk-edbase .sk-edhist,.sk-edbase .sk-edview{padding:0}` won a specificity tie on source
+order, so those two panels had no inside measure at all while the sliders beside them had 12px —
+"nothing selected" sat hard against the hairline. And the settings group was being panelled along
+with its own child: one 57px plate with a 46px plate inside it. One scale now, written once: **10px
+between panels and to the card, 12px inside a panel, 54px tall** — 54 because that is the tallest
+of them, and even has to mean the same number even when one panel carries a bubble and another does
+not.
+
+Chasing that clearance turned up two more of mine. `.sk-edstage{padding-left:142px}` lost to the
+shorthand `padding:8px` written later in the same file, so a wide picture slid **under** the tools;
+the room the panels take is set from the element's own style now, measured off the panels
+themselves. And `fitZoom` measured the stage's **border** box, so a 560×760 capture was fitted to a
+box 137px taller than the one it had to sit in and hung out of the bottom of it.
+
+**The fill swatch is rounded** (`6nj`). An `input[type=color]`'s inner well is a shadow part of its
+own, so rounding the control alone leaves a square of colour inside a rounded box — which is what
+Ced's capture showed. Both are rounded.
+
+**And the chequer is squares again** (`6n8` corrected). v56 tokenised only the second of the two
+gradient layers and left the first transparent, which is a diagonal weave rather than a chequer —
+visible in the dark theme as a herringbone.
+
+---
+
+## v56
+
+**Auto was never broken — it had been silenced. And the picture editor, the selection chrome and
+the bars all answered at once.**
+
+**The picture editor says what it has just done** (`6n5`). Ced: *"auto has stopped working in edit
+photo."* Measured on four pictures, Auto strips the strays and fills behind the ink in **96–546 ms**
+and declines a block of text on purpose — the algorithm was fine. What had stopped was the telling:
+every message in the editor goes through `setStatus`, which writes to the page's status strip and
+the quick bar, and the editor is `position:fixed; inset:0` at z-index 4700. So Auto's paragraph
+explaining *why* it declined — the whole point of v51's work — was painted underneath the dialog.
+The editor has a line of its own now, and `skEdWire` shadows `setStatus` with one that writes to
+both, so all forty-odd call sites reach the eye without one of them being touched.
+
+**The tools are squares** (`6n7`). Ced: *"make the clickable icons on edit photo boxes instead of a
+long rectangle."* The word goes to the tooltip, which every one of these already carried — a
+sentence saying what the tool does, more than the word ever said. 34px boxes, three to a row: the
+rail goes 150px → **122px** and the column 622px → ~330px.
+
+**The slider is the angle, and it is called Rotate** (`6n6`). Ced: *"free slider is not working
+good. also, rename it to Rotate."* It read as a nudge and behaved as one — every release committed
+the value as a *relative* turn and snapped the handle back to 0, so the reading never said where
+the picture was and asking for 12° twice gave 24°. The mechanism underneath was already absolute
+(v51's `spinAcc`); the handle is wired to it now. Ask for 12 twice and the picture is at 12.
+
+**A day and a night** (`6n8`). Ced sent the plain light chequer: *"make the background more similar
+to this, but have light and dark background mode."* The editor was one of two surfaces deliberately
+kept dark whatever the theme — a decision made when it was a small panel, and it is most of the
+window now. Every colour is a token with a light set; the light chequer is white against #cfd2d8,
+which is the one Ced sent.
+
+**A box nib keeps its promise**, and **the grips** — see v55; both carried into this build unchanged.
+
+**Every kind of mark wears the same selection chrome** (`6na`, `6nb`). Ced: *"the text in redline
+tool should behave similarly with text box when selected"* and *"the cross does not follow the same
+design language when selected."* Measured: a cell redline showed **six grips where a text box and a
+shape show eight**. v51 had left the top and bottom off on the reasoning that a plain redline has no
+box to make taller — true of the box, not of the mark, because a redline's height *is* its type. The
+pills are there and they size the type, which is the vertical half of what a corner already did. A
+cross-out is two grouped strokes, so what you select is the group: its frame now carries the same
+eight grips and lays its three controls out from the same numbers as a mark's — the turn alone and
+centred, delete and drag stacked off the right. The dashed ring is the only difference left, and
+that one is deliberate.
+
+**The mini toolbar centres on what it belongs to** (`6n9`). Ced: *"always put the mini toolbar in
+the middle of the shape if allowable. only put it on left or right if the item is on the edge of
+UI."* It was placed at the mark's left edge. Both bars centre now and the existing chrome insets do
+the rest: on a mark in the middle the bar is **0px off centre**, and against the right edge it stops
+at the chrome instead of running off it.
+
+**The colour in the file is the colour on the sheet** (`6nc`). Ced: *"the colors rendered are
+sometimes different to the one showed in ui"*, with a 34% red fill reading `#fdb9bb` on screen and
+`#c5aeae` in his render.
+
+Measured against poppler, **eleven of eleven cases come out exact** — four opacities of the same
+red; at 0.34 a dashed rule, a dashed rule on a turned box, a hatch, the multiply blend and ink at
+quarter and half opacity; and a translucent PNG at four combinations of image and mark opacity.
+So the file we write is right by that renderer, and none of the three geometry parity suites was
+ever looking at colour — a new one, `colparity.py`, is.
+
+But `#c5aeae` is not a random wrong colour. Take the fill **premultiplied** by its own opacity —
+0.34 × (250,50,55) = (85,17,19) — and composite *that* over white at 0.34 **again**, and you get
+(197.2, 174.1, 174.8). Ced's render is (197,174,174): three channels, within one unit. That is the
+alpha applied twice, which is what a viewer does with an appearance stream composited as a
+non-isolated group. A form XObject that paints with transparency is supposed to declare one and
+ours did not, so the viewer was free to choose and some choose the reading that darkens. Every
+appearance stream now carries `/Group << /S /Transparency /CS /DeviceRGB /I true >>`. Poppler's
+answer is unchanged to the pixel; the viewers that were guessing stop.
 
 ---
 

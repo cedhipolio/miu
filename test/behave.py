@@ -703,14 +703,19 @@ async def _ed_click(T, key):
     button whose key has not been written yet.
     """
     r = await T.page.evaluate(
-        """(t)=>{const b=document.querySelector('.sk-edbar .sk-edb[data-k="'+t+'"]')
-                   ||[...document.querySelectorAll(".sk-edbar .sk-edb")]
+        """(t)=>{const b=document.querySelector('.sk-edit .sk-edb[data-k="'+t+'"]')
+                   ||[...document.querySelectorAll(".sk-edit .sk-edb")]
                        .find(z=>z.textContent.trim().endsWith(t));
                  if(!b)return null;
-                 /* 6n3 — the tool bar is a rail that can scroll, so a button may be off-screen.
-                    A hand would scroll to it; so does this, before reading where it is. A click
-                    at a point outside the rail lands on the editor's backdrop and closes it,
-                    which is how this first showed up. */
+                 /* 6nn — the search is the whole editor, not `.sk-edbar`. Undo, Redo and the zoom
+                    controls moved out of the bars and into the right-hand column, and a helper
+                    that can only see one half of the editor reports a working button as missing,
+                    which is how two cases failed for a reason that was not in the tool at all.
+                    `data-k` is what names a button; where it is hung is layout.
+                    6n3 — a column can scroll, so a button may be off-screen. A hand would scroll
+                    to it; so does this, before reading where it is. A click at a point outside
+                    the column lands on the editor's backdrop and closes it, which is how this
+                    first showed up. */
                  try{ b.scrollIntoView({block:"nearest",inline:"nearest"}); }catch(e){}
                  const q=b.getBoundingClientRect();
                  return {cx:q.x+q.width/2, cy:q.y+q.height/2};}""", key)
@@ -848,10 +853,9 @@ async def t_auto(T):
     out = {"before": before, "after": after, "ms": ms,
            "ink kept": round(100 * after["red"] / max(1, before["red"])),
            "outer line left": after["outerRed"]}
-    # undo must put the whole pass back in one step
-    await T.page.evaluate(
-        """()=>{const b=[...document.querySelectorAll(".sk-edbar .sk-edb")]
-                  .find(z=>/undo/i.test(z.textContent)); if(b)b.click();}""")
+    # undo must put the whole pass back in one step — pressed, like everything else in this file
+    if not await _ed_click(T, "undo"):
+        return False, dict(out, why="no Undo in the editor")
     await T.page.wait_for_timeout(600)
     back = await census()
     out["after one undo"] = back
@@ -1932,79 +1936,6 @@ async def t_crop_edges(T):
     return ok, {"on opening": opened, "after dragging the west edge": mid, "after Apply": after}
 
 
-@case("The picture editor's tools run down the left of the picture")
-async def t_editor_rail(T):
-    """Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
-    management. make the tools be separated by the same separator on the ribbon, but horizontally."
-    (6n3)
-
-    This replaces "the tools fit two rows" (6m2), whose whole premise — two rows ACROSS THE TOP —
-    Ced has now asked to be taken away. What survives from it is the part that is still true and
-    still his: the groups are divided by the ribbon's own separator, there is no plate behind a
-    group, and the neumorphism is still on the buttons. The separator only changes edge, from
-    `border-right` between groups side by side to `border-bottom` between groups stacked.
-
-    The reason for the move is room, so room is what is measured: the stage has to keep at least two
-    thirds of the card's height, where two bars across the top left it under 60%. And the rail has to
-    FIT — a tool below the fold is worse than a tool on a top bar, and a click aimed at one lands on
-    the backdrop and closes the editor.
-    """
-    if not await _open_editor(T, """
-        q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
-        return False, {"why": "the picture editor did not open"}
-    got = await T.page.evaluate(
-        """()=>{ const rail=document.querySelector('.sk-edrail');
-                 const stage=document.querySelector('.sk-edstage');
-                 const card=document.querySelector('.sk-edcard');
-                 if(!rail||!stage||!card)return null;
-                 const rr=rail.getBoundingClientRect(), sr=stage.getBoundingClientRect();
-                 const cr=card.getBoundingClientRect();
-                 const grps=[...rail.querySelectorAll('.sk-edgrp')];
-                 const gs=getComputedStyle(grps[0]);
-                 const lastG=getComputedStyle(grps[grps.length-1]);
-                 const btn=rail.querySelector('.sk-edb');
-                 const bs=getComputedStyle(btn);
-                 /* the groups are STACKED: every one starts on its own line */
-                 const tops=new Set(grps.map(g=>Math.round(g.getBoundingClientRect().top)));
-                 /* and the buttons in a group are a column, all flush to one left edge */
-                 const btns=[...grps[0].querySelectorAll('.sk-edb')];
-                 const lefts=new Set(btns.map(b=>Math.round(b.getBoundingClientRect().left)));
-                 return { leftOfStage: Math.round(rr.right) <= Math.round(sr.left)+1,
-                          railW:Math.round(rr.width),
-                          /* and every tool is reachable without scrolling the rail: a button below
-                             the fold is worse than the top bars were, and a click aimed at one
-                             lands on the backdrop, which closes the editor */
-                          railFits: rail.scrollHeight <= rail.clientHeight+1,
-                          railNeeds: rail.scrollHeight, railHas: rail.clientHeight,
-                          stage:{w:Math.round(sr.width),h:Math.round(sr.height)},
-                          card:{w:Math.round(cr.width),h:Math.round(cr.height)},
-                          groups:grps.length, stacked:tops.size===grps.length,
-                          oneColumn:lefts.size===1, buttons:btns.length,
-                          sep:gs.borderBottomStyle, sepW:gs.borderBottomWidth,
-                          sepSide:gs.borderRightStyle,
-                          lastSep:lastG.borderBottomStyle,
-                          groupPlate:gs.backgroundColor,
-                          emboss:/inset/.test(bs.boxShadow),
-                          /* nothing but the heading is above the picture now */
-                          barsAboveStage:[...document.querySelectorAll('.sk-edbar')]
-                            .filter(b=>b.getBoundingClientRect().bottom<=sr.top+1).length }; }""")
-    await T.page.keyboard.press("Escape")
-    await T.page.wait_for_timeout(300)
-    if not got:
-        return False, {"why": "the editor's rail or stage was not found"}
-    # the stage keeps at least two thirds of the card's height: with two bars on top it was under 60%
-    tall = got["stage"]["h"] >= got["card"]["h"] * 0.66
-    ok = (got["leftOfStage"] and got["groups"] >= 5 and got["stacked"] and got["oneColumn"]
-          and got["railFits"]
-          and got["barsAboveStage"] == 0 and tall
-          and got["sep"] == "dotted" and got["sepW"] == "1px" and got["sepSide"] == "none"
-          and got["lastSep"] == "none"
-          and got["groupPlate"] in ("rgba(0, 0, 0, 0)", "transparent")
-          and got["emboss"])
-    got["stage h / card h"] = round(got["stage"]["h"] / got["card"]["h"], 3)
-    return ok, got
-
-
 @case("A box nib is square, where the round one is round")
 async def t_box_brush(T):
     """Ced: "add a box brush on edit photo." (6n4)
@@ -2066,46 +1997,6 @@ async def t_box_brush(T):
           and got["boxPct"] >= 0.99                                    # the square takes the lot
           and got["box"]["corners"] == 4
           and got["ringSquare"] is True)
-    return ok, got
-
-
-@case("The free and border sliders are long enough to aim with")
-async def t_editor_sliders(T):
-    """Ced, three times: "have the free and border slider longer to have more control in
-    adjustments." (6mx, then 6n0)
-
-    6mx took every pixel the tool row had left — 94px, with 96 the last width that keeps the row to
-    one line. The row was the limit, so 6n0 took the sliders off it. What this checks is the thing
-    Ced can feel: how much of the range a pixel of travel is worth. The free turn covers 60°, so at
-    94px that is 0.64° a pixel; this asks for at least three times the old track, which puts it
-    under a fifth of a degree. It also checks they are still side by side on ONE row, because a
-    slider that got its length by wrapping the card has not been improved. (6n3 moved this strip to
-    the foot of the card, and put Undo/Redo and the zoom block on the end of it, so the row has
-    four cells now.)
-    """
-    if not await _open_editor(T, """
-        q.fillStyle='#e31e24'; q.fillRect(60,60,440,640);"""):
-        return False, {"why": "the picture editor did not open"}
-    got = await T.page.evaluate(
-        """()=>{ const f=document.querySelector('.sk-edfree input[type=range]');
-                 const b=document.querySelector('.sk-edborder input[type=range]');
-                 const bar=document.querySelector('.sk-edbase');
-                 if(!f||!b||!bar)return null;
-                 const fr=f.getBoundingClientRect(), br=b.getBoundingClientRect();
-                 const ys=new Set([...bar.children].map(c=>Math.round(c.getBoundingClientRect().top)));
-                 const card=document.querySelector('.sk-edit')||bar.parentElement;
-                 return {free:Math.round(fr.width), border:Math.round(br.width),
-                         rows:ys.size, cells:bar.children.length,
-                         card:Math.round(card.getBoundingClientRect().width),
-                         degPerPx:+(60/fr.width).toFixed(3),
-                         pxPerStep:+(br.width/12).toFixed(1)}; }""")
-    await T.page.keyboard.press("Escape")
-    await T.page.wait_for_timeout(300)
-    if not got:
-        return False, {"why": "the sliders' row was not found"}
-    ok = (got["rows"] == 1 and got["cells"] == 4
-          and got["free"] >= 282 and got["border"] >= 282      # three times 94
-          and got["free"] <= got["card"] and got["border"] <= got["card"])
     return ok, got
 
 
@@ -3430,6 +3321,463 @@ async def t_zoom_sharp(T):
                 "settled": settled}
 
 
+@case("Every kind of mark wears the same selection chrome")
+async def t_one_chrome(T):
+    """Ced: "the text in redline tool should behave similarly with text box when selected" and
+    "the cross does not follow the same design language when selected" — after, earlier, "please be
+    consistent in every selected item. apply how the textbox works on all redlines if possible."
+    (6na, 6nb)
+
+    Measured before: a cell redline showed SIX grips where a text box and a shape show eight — no
+    top, no bottom. 6lc had left them off on the reasoning that a plain redline has no box to make
+    taller, which is true of the box and not of the mark: a redline's height is its type, so the
+    pills size the type, which is the vertical half of what a corner already did.
+
+    The controls are compared as offsets from the middle of the mark, so a wider box does not read
+    as a different layout: the turn must be centred (x = 0) and below, and delete and drag must be
+    off the right-hand edge, on every kind.
+    """
+    await T.reset()
+    got = await T.page.evaluate(
+        """()=>new Promise(async res=>{
+             const nap=ms=>new Promise(r=>setTimeout(r,ms));
+             const look=async id=>{ selectAnno(id); await nap(320);
+               const d=document.querySelector('.anno[data-id="'+id+'"]');
+               const ui=document.querySelector('.anno.selui');
+               const pick=s=>{ const n=(ui&&ui.querySelector(s))||(d&&d.querySelector(s));
+                 return (n&&getComputedStyle(n).display!=='none')?n:null; };
+               const host=(ui||d).getBoundingClientRect();
+               const off=n=>{ if(!n)return null; const r=n.getBoundingClientRect();
+                 return { x:Math.round(r.left+r.width/2-host.left-host.width/2),
+                          below:(r.top+r.height/2)>host.bottom,
+                          right:(r.left+r.width/2)>host.right }; };
+               return { grips:['nw','n','ne','e','se','s','sw','w'].filter(k=>pick('.rz.'+k)).join(','),
+                        rot:off(pick('.rot')), mov:off(pick('.mov')), x:off(pick('.x')) }; };
+             const out={};
+             const r1=addText(0,0.20,0.18,"VALUE",{});
+             await nap(250); out.redline=await look(r1);
+             const t1=maAddTextBox(0,0.20,0.34,"NOTE",0.18,0.05);
+             await nap(250); out["text box"]=await look(t1);
+             const s1=maAddShape(0,"rect",0.20,0.50,0.18,0.08,{});
+             await nap(250); out.shape=await look(s1);
+             res(out); })""")
+    ALL = "nw,n,ne,e,se,s,sw,w"
+    ok = all(
+        v["grips"] == ALL
+        and v["rot"] and abs(v["rot"]["x"]) <= 1 and v["rot"]["below"]
+        and v["mov"] and v["mov"]["right"]
+        and v["x"] and v["x"]["right"]
+        for v in got.values())
+    return ok, got
+
+
+@case("A cross-out's frame is a mark's frame")
+async def t_group_chrome(T):
+    """Ced: "the cross does not follow the same design language when selected", with a cross-out
+    showing four corner circles and a row of three buttons above it, next to a circle showing eight
+    grips with the turn alone underneath and the other two stacked on the right. (6nb)
+
+    A cross-out is two grouped strokes, so what gets selected is the GROUP and what you see is the
+    group's frame. It is held to the same shape as a mark's: eight grips, the turn centred below,
+    delete and drag off the right.
+    """
+    await T.reset()
+    await T.pick("crossout")
+    await T.drag(T.at(0.25, 0.25), T.at(0.55, 0.55))
+    await T.page.wait_for_timeout(500)
+    await T.pick("select")
+    r = await T.page.evaluate(
+        """()=>{const l=S.lines[0]; if(!l)return null;
+                if(l.group!=null)selectGroup?selectGroup(l.group):0;
+                return {lines:S.lines.length, group:l.group}; }""")
+    if not r or r["lines"] < 2:
+        return False, {"why": "the cross-out did not make two strokes", "got": r}
+    # click the middle of the X, which is how a cross-out is picked up
+    await T.click(T.at(0.40, 0.40))
+    await T.page.wait_for_timeout(450)
+    got = await T.page.evaluate(
+        """()=>{ const f=document.querySelector('.gframe');
+                 if(!f)return {frame:false};
+                 const fr=f.getBoundingClientRect();
+                 const seen=s=>{ const n=f.querySelector(s);
+                   return (n&&getComputedStyle(n).display!=='none')?n:null; };
+                 const off=n=>{ if(!n)return null; const r=n.getBoundingClientRect();
+                   return { x:Math.round(r.left+r.width/2-fr.left-fr.width/2),
+                            below:(r.top+r.height/2)>fr.bottom,
+                            right:(r.left+r.width/2)>fr.right }; };
+                 return { frame:true, flipped:f.classList.contains('up'),
+                          grips:['nw','n','ne','e','se','s','sw','w']
+                                  .filter(k=>seen('.gh.'+k)).join(','),
+                          rot:off(seen('.ggrip.grot')), mov:off(seen('.ggrip.gdrag')),
+                          x:off(seen('.ggrip.gdel')),
+                          dashed:getComputedStyle(f).outlineStyle }; }""")
+    ok = (got.get("frame")
+          and got["grips"] == "nw,n,ne,e,se,s,sw,w"
+          # the turn is CENTRED and clear of the frame; which side of it depends on the room there
+          # is, exactly as 6i2 made it depend for the old row, and the `up` flag says which
+          and got["rot"] and abs(got["rot"]["x"]) <= 1
+          and (got["rot"]["below"] or got["flipped"])
+          and got["mov"] and got["mov"]["right"]
+          and got["x"] and got["x"]["right"]
+          and got["dashed"] == "dashed")      # the one difference that is meant to be there
+    return ok, got
+
+
+@case("The mini toolbar sits over the middle of what it belongs to")
+async def t_bar_centred(T):
+    """Ced: "always put the mini toolbar in the middle of the shape if allowable. only put it on
+    left or right if the item is on the edge of UI." (6n9)
+
+    It was placed at the mark's LEFT edge. Measured on two marks — one in the middle of the sheet,
+    one hard against the right — the middle one has to centre, and the edge one is allowed to stop
+    at the chrome rather than run off it.
+    """
+    await T.reset()
+
+    async def bar_for(nx):
+        mid = await T.page.evaluate(
+            """(nx)=>{ const id=maAddShape(0,"rect",nx,0.40,0.16,0.08,{});
+                       layoutAnnos(); selectAnno(id); return id; }""", nx)
+        await T.page.wait_for_timeout(420)
+        return await T.page.evaluate(
+            """(id)=>{ const b=document.getElementById("annobar");
+                       const d=document.querySelector('.anno[data-id="'+id+'"]');
+                       if(!b||!d||!b.classList.contains("show"))return null;
+                       const br=b.getBoundingClientRect(), dr=d.getBoundingClientRect();
+                       return { off:Math.round((br.left+br.width/2)-(dr.left+dr.width/2)),
+                                barW:Math.round(br.width), barR:Math.round(br.right),
+                                win:window.innerWidth }; }""", mid)
+
+    middle = await bar_for(0.40)
+    edge = await bar_for(0.84)
+    if not middle or not edge:
+        return False, {"middle": middle, "edge": edge, "why": "the bar did not show"}
+    out = {"mark in the middle": middle, "mark at the right edge": edge}
+    ok = (abs(middle["off"]) <= 2                      # centred on the mark
+          and edge["barR"] <= edge["win"] - 4)         # and never off the window at the edge
+    return ok, out
+
+
+@case("The picture editor says what it has just done")
+async def t_editor_says(T):
+    """Ced: "auto has stopped working in edit photo." (6n5)
+
+    Auto had not stopped working — measured on four pictures it strips the strays and fills behind
+    the ink in 96-546ms, and declines a block of text on purpose. What had stopped was the telling:
+    every message in the editor goes through `setStatus`, which writes to the page's status strip
+    and the quick bar, and the editor covers the whole window at z-index 4700. So Auto's paragraph
+    explaining why it declined was painted underneath the dialog and Ced saw a button that did
+    nothing.
+
+    The picture here is a block of text, which is the case Auto is meant to refuse — so a working
+    Auto says so, visibly, in red.
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#111'; q.font='16px Arial';
+        for(let i=0;i<12;i++) q.fillText('SOME PRINTED TEXT HERE 12345', 40, 60+i*30);"""):
+        return False, {"why": "the picture editor did not open"}
+    if not await _ed_click(T, "auto"):
+        return False, {"why": "no Auto in the rail"}
+    await T.page.wait_for_timeout(1500)
+    got = await T.page.evaluate(
+        """()=>{ const el=document.querySelector('.sk-edsay');
+                 if(!el)return {line:false};
+                 const r=el.getBoundingClientRect();
+                 const top=document.elementFromPoint(r.left+8,r.top+8);
+                 return { line:true, shown:!el.hidden, err:el.classList.contains('err'),
+                          says:(el.textContent||'').slice(0,60),
+                          onTop:!!(top&&top.closest&&top.closest('.sk-edsay')),
+                          /* and the page's own strip still gets its copy, for the log */
+                          page:((document.getElementById('status')||{}).textContent||'').slice(0,24) }; }""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    ok = (got.get("line") and got["shown"] and got["err"] and got["onTop"]
+          and "Auto" in got["says"] and "Auto" in got["page"])
+    return ok, got
+
+
+@case("The rotate slider reads the picture's own angle")
+async def t_rotate_slider(T):
+    """Ced: "free slider is not working good. also, rename it to Rotate instead of Free." (6n6)
+
+    It read as a nudge: every release committed the value as a RELATIVE turn and snapped the handle
+    back to 0, so the number never told you where the picture was, and 12 degrees followed by 12
+    degrees gave 24. The mechanism underneath was already absolute — `spinAcc` is the run's total
+    and each commit resamples the run's base by it — so the handle is wired to that: set it to 12
+    twice and the picture is at 12.
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(80,60,340,480);"""):
+        return False, {"why": "the picture editor did not open"}
+    got = await T.page.evaluate(
+        """()=>new Promise(async res=>{
+             const nap=ms=>new Promise(r=>setTimeout(r,ms));
+             const row=document.querySelector('.sk-edfree');
+             const rng=row&&row.querySelector('input[type=range]');
+             if(!rng)return res(null);
+             const set=async v=>{ rng.value=String(v);
+               rng.dispatchEvent(new Event('input',{bubbles:true}));
+               rng.dispatchEvent(new Event('change',{bubbles:true}));
+               await nap(500); return +rng.value; };
+             const label=(row.textContent||'').replace(/[-0-9.°]/g,'').trim();
+             const first=await set(12);
+             const again=await set(12);          /* asking for 12 twice must still be 12 */
+             const back=await set(0);
+             res({ label, max:+rng.max, min:+rng.min, first, again, back }); })""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    if not got:
+        return False, {"why": "no rotate slider on the base strip"}
+    ok = (got["label"].lower().startswith("rotate")
+          and abs(got["first"] - 12) < 0.3
+          and abs(got["again"] - 12) < 0.3          # not 24
+          and abs(got["back"]) < 0.3)
+    return ok, got
+
+
+@case("The picture editor has a day and a night")
+async def t_editor_theme(T):
+    """Ced sent the plain light chequer: "make the background more similar to this, but have light
+    and dark background mode." (6n8)
+
+    The editor was one of two surfaces deliberately kept dark whatever the theme. It is most of the
+    window now, so it follows the theme like everything else. What is measured is that the card,
+    the stage and the chequer all actually change, and that the light chequer is the one Ced sent —
+    white against a light grey, not a dark pair lightened a little.
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(60,60,300,300);"""):
+        return False, {"why": "the picture editor did not open"}
+    got = await T.page.evaluate(
+        """()=>new Promise(async res=>{
+             const nap=ms=>new Promise(r=>setTimeout(r,ms));
+             const read=()=>{ const w=document.querySelector('.sk-edit');
+               const cs=getComputedStyle(w);
+               const card=getComputedStyle(document.querySelector('.sk-edcard'));
+               const lum=c=>{ const m=/(\d+),\s*(\d+),\s*(\d+)/.exec(c);
+                 return m?(+m[1]*0.299+ +m[2]*0.587+ +m[3]*0.114):null; };
+               return { card:card.backgroundColor, cardLum:Math.round(lum(card.backgroundColor)),
+                        ink:Math.round(lum(card.color)),
+                        stage:getComputedStyle(document.querySelector('.sk-edstage')).backgroundColor,
+                        chkA:cs.getPropertyValue('--ske-chk-a').trim(),
+                        chkB:cs.getPropertyValue('--ske-chk-b').trim() }; };
+             const had=document.documentElement.classList.contains('light');
+             document.documentElement.classList.remove('light'); await nap(120);
+             const dark=read();
+             document.documentElement.classList.add('light'); await nap(120);
+             const light=read();
+             document.documentElement.classList.toggle('light',had);
+             res({dark,light}); })""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    ok = (got["dark"]["cardLum"] < 80 and got["light"]["cardLum"] > 220      # the card turns over
+          and got["dark"]["ink"] > 180 and got["light"]["ink"] < 70          # and so does the ink
+          and got["dark"]["stage"] != got["light"]["stage"]
+          and got["light"]["chkA"].lower() == "#ffffff"                      # the chequer Ced sent
+          and got["light"]["chkB"] != got["dark"]["chkB"])
+    return ok, got
+
+
+@case("Every editor tool wears its own icon, and says its name on hover")
+async def t_editor_icons(T):
+    """Ced sent seventeen marks and said which tool each belongs to — "apply the following icons on
+    edit photo respectively: erase, restore, line erase, restore all, auto, pen, fill, wand, lasso,
+    invert, deselect, fill and unfill (under wand), rotate right and left, flip horizontal and
+    vertical, and crop" — then "all shapes icon should be thicker" and "make the hover to the icon
+    have tool name to have ease of understanding to user." (6nd, 6ne)
+
+    Three things, and none of them reads a label. Every tool Ced named is drawn, not typed: a
+    `<svg>` in the button with a real path in it, in `currentColor` so it takes the button's ink.
+    The five that had no artwork — the shapes — are drawn too, at a stroke of 3 in a 24 box, which
+    is what "thicker" had to become to be a number. And the name appears beside the button the
+    moment the pointer arrives, rather than a second later as the native tooltip, with the
+    sentence still behind it. And Auto, which Ced sent as an iridescent sheet rather than a flat
+    mark, is filled from a gradient of colours sampled off that sheet instead of taking the
+    button's ink.
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(60,60,380,300);"""):
+        return False, {"why": "the picture editor did not open"}
+    NAMED = ["erase", "restore", "wipe", "restoreall", "auto", "pen", "bucket", "wand", "lasso",
+             "invert", "deselect", "fillsel", "clearsel", "turnleft", "turnright",
+             "fliph", "flipv", "crop"]
+    SHAPES = ["line", "arrow", "rect", "ellipse", "shapesel"]
+    got = await T.page.evaluate(
+        """([named,shapes])=>{
+             const by=k=>document.querySelector('.sk-edrail .sk-edb[data-k="'+k+'"]');
+             const drawn=k=>{ const b=by(k); if(!b)return null;
+               const sv=b.querySelector('svg'); if(!sv)return null;
+               const pth=[...sv.querySelectorAll('path,rect,ellipse,circle')];
+               const d=pth.map(n=>n.getAttribute('d')||'').join('');
+               return { len:d.length, shapes:pth.length,
+                        ink:getComputedStyle(sv.querySelector('path,rect,ellipse')||sv).color };
+             };
+             const miss=named.filter(k=>!drawn(k));
+             const thin=shapes.filter(k=>{ const b=by(k); if(!b)return true;
+               const sv=b.querySelector('svg'); if(!sv)return true;
+               return (parseFloat(sv.getAttribute('stroke-width'))||0)<3; });
+             /* the traced marks carry real contours, not a token path */
+             const tiny=named.filter(k=>{ const g=drawn(k); return !g||g.len<200; });
+             const all=[...document.querySelectorAll('.sk-edrail .sk-edb')];
+             return { missing:miss, thin, tiny,
+                      named:named.length, buttons:all.length,
+                      withName:all.filter(b=>b.dataset.name).length,
+                      withTitle:all.filter(b=>(b.title||'').length>6).length,
+                      /* 6nf — Auto is holographic: its glyph is filled from a gradient sampled
+                         off the sheet Ced sent, not from the button's ink like every other one */
+                      autoFill:(by('auto').querySelector('svg path')||{getAttribute:()=>''})
+                                 .getAttribute('fill')||'',
+                      autoStops:[...by('auto').querySelectorAll('stop')]
+                                 .map(n=>n.getAttribute('stop-color')),
+                      penFill:(by('pen').querySelector('svg path')||{getAttribute:()=>''})
+                                 .getAttribute('fill')||'' }; }""",
+        [NAMED, SHAPES])
+    # the chip: hover a tool and read it, without waiting for a native tooltip
+    await T.page.hover('.sk-edrail .sk-edb[data-k="lasso"]')
+    await T.page.wait_for_timeout(160)
+    tip = await T.page.evaluate(
+        """()=>{ const t=document.querySelector('.sk-edtip');
+                 const b=document.querySelector('.sk-edrail .sk-edb[data-k="lasso"]');
+                 if(!t||!b)return null;
+                 const tr=t.getBoundingClientRect(), br=b.getBoundingClientRect();
+                 return { hidden:t.hidden, text:(t.textContent||'').trim(),
+                          beside:tr.left>=br.right, clear:tr.width>10 }; }""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    got["chip"] = tip
+    ok = (not got["missing"] and not got["thin"] and not got["tiny"]
+          and got["withName"] == got["buttons"]
+          and got["withTitle"] == got["buttons"]
+          and got["autoFill"].startswith("url(")       # the one Ced sent holographic keeps it
+          and len(got["autoStops"]) >= 6
+          and got["penFill"] == "currentColor"
+          and tip and not tip["hidden"] and tip["text"] == "Lasso"
+          and tip["beside"] and tip["clear"])
+    return ok, got
+
+
+@case("The picture editor is two columns of tabs")
+async def t_editor_columns(T):
+    """Ced: "in edit photo, put all the tool tabs on the left and stack individual tools. the main
+    tab, the brush, rotate, and border. while the undo redo and zoom are stacked on the right" ·
+    "no colored border. it should play the neumorphism ui here" · "make the tools icons and ui here
+    more rounded like the roundness of the tools on the main ui". (6nn)
+
+    This replaces three cases that described the layout before it — the floating rail, the dock at
+    the foot, and the length of the two sliders in it. Ced has asked for that arrangement to be
+    taken away, so testing it would be testing a design nobody wants; what survives is what is
+    still his and still true, restated against the shape he asked for:
+
+      * the tabs, in the order he listed them, in the column he put them in
+      * no hairline on any of them — the emboss is the edge
+      * the main UI's own radii: 12px on a panel, which is `--radius`, and 9px or more on a control,
+        which is `.btn`'s
+      * the picture clear of both columns, and nothing across the foot of it
+      * and the sliders still long enough to aim with, which is why they were moved in the first
+        place — 188px in the column, against the 94px they had before any of this started
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(40,40,480,680);"""):
+        return False, {"why": "the picture editor did not open"}
+    got = await T.page.evaluate(
+        """()=>{ const L=document.querySelector('.sk-edcol-l'), R=document.querySelector('.sk-edcol-r');
+                 const st=document.querySelector('.sk-edstage'), wr=document.querySelector('.sk-edwrap');
+                 if(!L||!R||!st||!wr)return null;
+                 /* a TAB is the thing with a plate on it, wherever the layout wrappers sit */
+                 const tabs=n=>[...n.querySelectorAll('.sk-edrail,.sk-edpanel')]
+                   .filter(e=>e.offsetParent!==null);
+                 const name=e=>e.classList.contains('sk-edrail')?'tools'
+                   :(e.classList.contains('sk-edfree')?'rotate'
+                   :(e.classList.contains('sk-edborder')?'border'
+                   :(e.classList.contains('sk-edhist')?'history'
+                   :(e.classList.contains('sk-edview')?'zoom'
+                   :(e.querySelector('.sk-ednib')?'brush':'other')))));
+                 const plate=e=>{ const cs=getComputedStyle(e);
+                   return { r:Math.round(parseFloat(cs.borderTopLeftRadius)),
+                            bare:(parseFloat(cs.borderTopWidth)||0)===0
+                                 ||/rgba\(0, 0, 0, 0\)|transparent/.test(cs.borderTopColor),
+                            lifted:/\d/.test(cs.boxShadow||'') }; };
+                 const lt=tabs(L), rt=tabs(R);
+                 const sr=st.getBoundingClientRect(), wrr=wr.getBoundingClientRect();
+                 const cs=getComputedStyle(st);
+                 const stacked=a=>{ const ys=a.map(e=>Math.round(e.getBoundingClientRect().top));
+                   return ys.every((y,i)=>!i||y>ys[i-1]); };
+                 return { left:lt.map(name), right:rt.map(name),
+                          plates:lt.concat(rt).map(plate),
+                          stackedL:stacked(lt), stackedR:stacked(rt),
+                          btnR:Math.round(parseFloat(getComputedStyle(
+                                 document.querySelector('.sk-edrail .sk-edb')).borderTopLeftRadius)),
+                          tracks:[...document.querySelectorAll('.sk-edcol-l input[type=range]')]
+                                   .map(i=>Math.round(i.getBoundingClientRect().width))
+                                   .filter(w=>w>0),
+                          footPad:Math.round(parseFloat(cs.paddingBottom)||0),
+                          clearL:Math.round(wrr.left-L.getBoundingClientRect().right),
+                          clearR:Math.round(R.getBoundingClientRect().left-wrr.right),
+                          borderStep:parseFloat(
+                            document.querySelector('.sk-edborder input[type=range]').step) }; }""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    if not got:
+        return False, {"why": "the editor's columns were not found"}
+    ok = (got["left"] == ["tools", "brush", "rotate", "border"]
+          and got["right"] == ["history", "zoom"]
+          and got["stackedL"] and got["stackedR"]
+          and all(p["r"] == 12 and p["bare"] and p["lifted"] for p in got["plates"])
+          and got["btnR"] >= 9
+          and got["tracks"] and min(got["tracks"]) >= 150
+          and got["footPad"] <= 12
+          and got["clearL"] >= 10 and got["clearR"] >= 10)
+    return ok, got
+
+
+@case("The border thickens continuously, not in whole pixels")
+async def t_border_smooth(T):
+    """Ced: "the stops in border tool in edit picture is too much. make it more seamless like a
+    slider." (6np)
+
+    It was `step="1"` over 0..12 — thirteen stops — because the thing underneath is a box dilation
+    and a dilation's radius is a whole number of pixels. Making the step finer alone would change
+    nothing: every value between 3 and 4 would still paint the border of 3.
+
+    So the fraction is painted rather than rounded away: the mask grown by the whole part at full
+    strength, and the ring one pixel further out at the fraction's strength. The test is that the
+    COVERAGE actually rises between two whole numbers — three settings, 3.0, 3.5, 4.0, each with
+    more ink on the picture than the last. Coverage and not a pixel count, because a half step
+    paints the same outermost ring at half alpha and the two read as identical by pixel.
+    """
+    if not await _open_editor(T, """
+        q.fillStyle='#e31e24'; q.fillRect(120,120,260,220);
+        q.clearRect(170,170,160,120);"""):
+        return False, {"why": "the picture editor did not open"}
+    got = await T.page.evaluate(
+        """()=>new Promise(async res=>{
+             const nap=ms=>new Promise(r=>setTimeout(r,ms));
+             const rng=document.querySelector('.sk-edborder input[type=range]');
+             if(!rng)return res(null);
+             const cv=document.querySelector('.sk-edcanvas');
+             /* COVERAGE, not a pixel count: a half step paints the same outermost ring at half
+                alpha, so counting pixels reads 3.5 and 4.0 as identical. The sum of the alpha
+                channel is what actually rises with the setting. */
+             const ink=()=>{ const g=cv.getContext('2d',{willReadFrequently:true});
+               const d=g.getImageData(0,0,cv.width,cv.height).data;
+               let n=0; for(let i=3;i<d.length;i+=4) n+=d[i]; return n; };
+             const at=async v=>{ rng.value=String(v);
+               rng.dispatchEvent(new Event('input',{bubbles:true}));
+               await nap(420); return ink(); };
+             const a=await at(3), b=await at(3.5), c=await at(4);
+             res({ step:parseFloat(rng.step), max:parseFloat(rng.max),
+                   at3:a, at35:b, at4:c }); })""")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    if not got:
+        return False, {"why": "no border slider"}
+    ok = (got["step"] < 1
+          and got["at35"] > got["at3"]        # a half step really is more border
+          and got["at4"] > got["at35"])
+    got["steps on the slider"] = int(got["max"] / got["step"]) + 1
+    return ok, got
+
+
 @case("A grip is 22px, centred, and shrinks only to clear the corners")
 async def t_side_grip_fits(T):
     """Ced, twice. First: "when the textbox is so small, adjust the length of the left or right
@@ -3520,6 +3868,142 @@ async def t_side_grip_fits(T):
     centred = all(g["topOff"] is None or abs(g["topOff"]) <= 1.0 for g in (small, big)) and \
               all(g["botOff"] is None or abs(g["botOff"]) <= 1.0 for g in (small, big))
     return (small_ok and big_ok and centred), out
+
+
+@case("Pan drags the sheet, and Select still marquees")
+async def t_pan(T):
+    """6nq — the audit's first gap. Ced: "separate grab/pan vs marquee tool. with marquee tool
+    interchangeable with these tools." (6gb)
+
+    Counting the audit's named cases per ribbon tool, Pan came out with one mention and no gesture
+    anywhere — which is exactly the shape of hole 6gb's own handler could fall through, because it
+    is three branches off one press and nothing had ever pressed. So: the hand moves the sheet by
+    the distance the hand moved and leaves nothing behind; the arrow in the same place draws a
+    marquee and does not move the sheet; and a modifier lends each tool the other's gesture.
+    """
+    await T.reset()
+    # Room to pan into, on BOTH axes, which at fit width there is not: the column is sized to the
+    # window, so scrollX is pinned at 0 and a sideways drag that works reads as a sideways drag that
+    # does nothing. Narrowing the window leaves the sheet where it is and puts the slack back. Setup,
+    # not the test.
+    await T.page.set_viewport_size({"width": 860, "height": 900})
+    await T.page.wait_for_timeout(700)
+    await T.page.evaluate("()=>window.scrollTo(100,340)")
+    await T.page.wait_for_timeout(400)
+    room = await T.page.evaluate(
+        """()=>({x:document.documentElement.scrollWidth-innerWidth,
+                 y:document.documentElement.scrollHeight-innerHeight,
+                 sx:Math.round(scrollX), sy:Math.round(scrollY)})""")
+    # and a spot on the sheet with nothing on it — a press on a word is a different gesture
+    spot = await T.page.evaluate(
+        """()=>{for(let dy=0;dy<320;dy+=20){
+                  const x=Math.round(innerWidth*0.52), y=Math.round(innerHeight*0.56)+dy;
+                  const e=document.elementFromPoint(x,y);
+                  if(e&&e.closest(".page")&&!e.classList.contains("tspan")
+                     &&!e.closest(".anno")&&!e.closest(".tspan"))return {x,y};}
+                return null;}""")
+    if not spot or room["x"] < 180 or room["y"] < 300 or room["sx"] < 80:
+        return False, {"why": "no blank sheet to press on, or nowhere to pan to",
+                       "room": room, "spot": spot}
+
+    async def pan_try(mode, mods=()):
+        await T.pick(mode)
+        # back to where the blank spot was measured, so all four attempts press the same place
+        await T.page.evaluate("()=>window.scrollTo(100,340)")
+        await T.page.wait_for_timeout(300)
+        before = await T.page.evaluate("()=>[Math.round(window.scrollX),Math.round(window.scrollY)]")
+        a = (spot["x"], spot["y"])
+        await T.drag(a, (a[0] - 80, a[1] - 160), mods=mods)
+        after = await T.page.evaluate("()=>[Math.round(window.scrollX),Math.round(window.scrollY)]")
+        left = await T.page.evaluate(
+            """()=>({marquee:document.querySelectorAll('.marquee').length,
+                     nA:S.annos.length, nL:S.lines.length,
+                     cursor:(document.querySelector('.page[data-idx="0"]')||{style:{}}).style.cursor})""")
+        return {"dx": after[0] - before[0], "dy": after[1] - before[1], **left}
+
+    hand = await pan_try("pan")
+    arrow = await pan_try("select")
+    # 6gb's borrow: Shift under the arrow pans, Shift under the hand marquees instead
+    lent = await pan_try("select", mods=("Shift",))
+    taken = await pan_try("pan", mods=("Shift",))
+
+    out = {"Pan": hand, "Select": arrow, "Select+Shift": lent, "Pan+Shift": taken}
+    # the sheet moves by the drag, within a pixel or two of rounding
+    moved = (abs(hand["dy"] - 160) <= 3 and abs(hand["dx"] - 80) <= 3
+             and hand["marquee"] == 0 and hand["nA"] == 0 and hand["nL"] == 0)
+    # the same drag with the arrow in hand moves nothing and leaves no stray marquee behind
+    marqueed = (arrow["dy"] == 0 and arrow["dx"] == 0 and arrow["marquee"] == 0
+                and arrow["nA"] == 0)
+    borrowed = (abs(lent["dy"] - 160) <= 3 and abs(lent["dx"] - 80) <= 3
+                and taken["dy"] == 0 and taken["dx"] == 0)
+    # and the grab cursor is put down again at the end of the gesture
+    tidy = hand["cursor"] in ("", "grab")
+    return (moved and marqueed and borrowed and tidy), out
+
+
+@case("Find walks the sheet's own words")
+async def t_find(T):
+    """6nq — the audit's second gap: Find had no named case at all, in either file.
+
+    Typed into, it counts what is on the sheet, lights the first one up, and Enter and Shift+Enter
+    walk forwards and back through the rest. Escape puts the box and the highlight away. The needle
+    is taken from the document being tested rather than written in, so this says nothing about which
+    fixture it runs on.
+    """
+    await T.reset()
+    # pick a word that is really on page 1, and more than once, so there is somewhere to walk to
+    needle = await T.page.evaluate(
+        """()=>{const n={};
+           (S.pages[0].items||[]).forEach(it=>String(it.str||"").split(/[^A-Za-z]+/)
+             .forEach(w=>{ if(w.length>=4) n[w.toLowerCase()]=(n[w.toLowerCase()]||0)+1; }));
+           const k=Object.keys(n).sort((a,b)=>n[b]-n[a]);
+           return k.length?k[0]:null;}""")
+    if not needle:
+        return False, {"why": "the fixture's first page has no word to search for"}
+
+    await T.show_ribbon()
+    r = await T.rect("#findInput")
+    if not r:
+        return False, {"why": "there is no Find box in the ribbon"}
+    await T.page.mouse.click(r["cx"], r["cy"])
+    await T.type(needle)
+    await T.page.wait_for_timeout(700)          # the 200ms debounce, and the 360ms highlight
+
+    async def read():
+        return await T.page.evaluate(
+            """()=>({count:(document.getElementById("findCount")||{}).textContent||"",
+                     box:(document.getElementById("findInput")||{}).value||"",
+                     hits:document.querySelectorAll(".tspan.findhit").length,
+                     hit:((document.querySelector(".tspan.findhit")||{}).textContent||"")
+                           .trim().slice(0,60)})""")
+
+    first = await read()
+    await T.key("Enter")
+    await T.page.wait_for_timeout(600)
+    second = await read()
+    await T.page.keyboard.down("Shift")
+    await T.key("Enter")
+    await T.page.keyboard.up("Shift")
+    await T.page.wait_for_timeout(600)
+    back = await read()
+    await T.key("Escape")
+    await T.page.wait_for_timeout(500)
+    gone = await read()
+
+    out = {"needle": needle, "first": first, "Enter": second, "Shift+Enter": back,
+           "Escape": gone}
+    total = 0
+    if "/" in first["count"]:
+        try:
+            total = int(first["count"].split("/")[1])
+        except ValueError:
+            total = 0
+    ok = (first["count"] == f"1/{total}" and total >= 2
+          and first["hits"] == 1 and needle in first["hit"].lower()
+          and second["count"] == f"2/{total}"
+          and back["count"] == f"1/{total}"
+          and gone["box"] == "" and gone["count"] == "" and gone["hits"] == 0)
+    return ok, out
 
 
 async def main():

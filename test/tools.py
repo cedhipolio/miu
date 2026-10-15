@@ -3474,8 +3474,19 @@ async def main():
                              chequer:(!!bgp
                                &&(getComputedStyle(bgp).backgroundImage||"").indexOf("gradient")>=0
                                &&(cs.backgroundImage||"none")==="none"),
-                             centred:(Math.abs((br.left+br.width/2)-(sr.left+sr.width/2))<6
-                                    &&Math.abs((br.top+br.height/2)-(sr.top+sr.height/2))<6) };
+                             /* 6nl — centred in the room that is LEFT, not in the stage's border
+                                box. The stage now carries the padding that holds the picture clear
+                                of the floating tool rail on the left and the floating dock at the
+                                foot, so its content box is deliberately off-centre inside it —
+                                and the content box is where the picture belongs. */
+                             centred:(()=>{ const scs=getComputedStyle(stage);
+                               const pv=n=>parseFloat(scs[n])||0;
+                               const cl=sr.left+pv("borderLeftWidth")+pv("paddingLeft");
+                               const crt=sr.right-pv("borderRightWidth")-pv("paddingRight");
+                               const ct=sr.top+pv("borderTopWidth")+pv("paddingTop");
+                               const cb=sr.bottom-pv("borderBottomWidth")-pv("paddingBottom");
+                               return Math.abs((br.left+br.width/2)-(cl+crt)/2)<6
+                                   && Math.abs((br.top+br.height/2)-(ct+cb)/2)<6; })() };
                  const frng=m.querySelector(".sk-edfree input[type=range]");
                  out.hasFree=!!frng;
                  const was=[cv.width,cv.height];
@@ -6506,8 +6517,14 @@ async def main():
                  const thick=(first<0)?0:(last-first+1);
                  const P=S.pages[0];
                  const pxPerPt=cv.width/(a.nw*P.w1);
-                 /* and one more gesture is one more step, not a stack of them */
-                 const uBtn=btn("Undo"); const before=!!(uBtn&&!uBtn.disabled);
+                 /* and one more gesture is one more step, not a stack of them.
+                    6nn moved Undo and Redo out of the rail and into the right-hand column, so this
+                    looks for them across the whole editor rather than inside `.sk-edbar`. The
+                    demand is unchanged: the button must be there, must be live after a stroke, and
+                    must take the whole stroke back. */
+                 const uBtn=[...document.querySelectorAll(".sk-edit button")]
+                              .find(b=>b.textContent.trim().endsWith("Undo"));
+                 const before=!!(uBtn&&!uBtn.disabled);
                  if(uBtn)uBtn.click(); await nap(160);
                  const d2=g2.getImageData(col,0,1,cv.height).data;
                  let gone=true;

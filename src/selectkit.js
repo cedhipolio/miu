@@ -1,3 +1,9 @@
+/* 6n5 — the PAGE's status writer, taken by name here at load, before anything in this file shadows
+   it. A top-level `const` is a binding and not a property of `window`, so a shadowed scope cannot
+   reach the outer one through `window.setStatus` — it has to be captured while it is still in
+   view. This file is packed last, so `setStatus` is already initialised when this line runs. */
+const SK_PAGE_STATUS=setStatus;
+
 /* =================================================================================================
    THE SELECT TOOL'S OWN KIT
    =================================================================================================
@@ -741,6 +747,97 @@ let SK_ED=null;
 /* 6ha — `opts.onSave(dataUrl)` takes the result somewhere OTHER than a mark on the sheet, which is how
    a markup in the library is edited: same editor, same tools, and the picture goes back to the library
    entry instead of to a page. `opts.title` names the card while it is open. */
+/* ==================================================================================================
+   6nd — THE EDITOR'S TOOLS WEAR CED'S OWN ICONS.
+   Ced sent seventeen marks and said which tool each belongs to: "apply the following icons on edit
+   photo respectively: erase, restore, line erase, restore all, auto, pen, fill, wand, lasso,
+   invert, deselect, fill and unfill (under wand), rotate right and left, flip horizontal and
+   vertical, and crop."
+
+   They are TRACED, not redrawn — `tools/traceicon.py`, the same tracer the bucket and the app's
+   own icon set went through. Redrawing a mark by eye gets the idea and loses the drawing: the
+   eraser's exact split, the brush's two bands, the angle of the pen's squiggle. Each one is the
+   artwork's own contour simplified with Douglas-Peucker at a tolerance just wide enough to swallow
+   the antialiased staircase, scaled into a 24-unit box, holes kept as their own subpaths and the
+   whole emitted `fill-rule:evenodd`. Three of the sources were low-resolution — the flip-vertical
+   pair and the two turn discs — so those were smoothed 4x with Lanczos before tracing and given a
+   wider tolerance, or every jag in the original would have become a vertex here.
+
+   One source carried a stock-library watermark under the artwork. It was cropped off before the
+   trace rather than tidied afterwards; the first pass kept it and sized both discs to a tenth of
+   the box to make room for it.
+
+   Everything is drawn in `currentColor`, so a tool takes the button's ink and turns white when the
+   button is on — which is why the two marks Ced sent in colour (the blue sparkle, the red cross)
+   get their colour from CSS instead, where it can step aside for the selected state.
+   ================================================================================================== */
+const ED_ICO_PATHS={
+  erase:      "M14.50 18.08L5.36 8.94L11.44 2.86L12.87 1.53L14.20 0.61L14.91 0.41L15.93 0.51L16.85 0.92L17.77 1.63L22.31 6.28L22.93 7.40L23.03 8.53L22.52 9.75L21.91 10.57L14.55 18.03ZM23.08 23.49L7.35 23.49L6.13 22.98L5.31 22.37L1.17 18.23L0.15 16.70L-0.05 15.98L-0.05 15.37L0.15 14.66L1.07 13.33L2.40 11.90L3.98 10.31L13.12 19.46L11.13 21.45L22.98 21.45L23.69 21.75L23.95 22.21L23.95 22.83L23.59 23.29L23.13 23.44Z",
+  restore:    "M15.81 16.04L7.01 7.24L8.33 5.93L8.78 5.72L9.31 5.72L9.59 5.83L11.27 6.80L11.97 7.12L12.28 7.19L13.05 7.19L13.75 6.98L14.34 6.59L14.75 6.16L16.15 3.81L17.51 1.75L18.10 0.98L18.68 0.44L19.10 0.19L19.49 0.05L19.87 -0.02L20.50 -0.02L21.20 0.16L21.62 0.37L22.22 0.82L22.48 1.12L22.86 1.78L23.07 2.59L23.07 3.18L22.97 3.67L22.62 4.37L22.11 4.92L21.10 5.69L19.73 6.59L16.76 8.41L16.43 8.75L16.08 9.31L15.87 9.97L15.87 10.78L15.94 11.09L16.15 11.62L17.30 13.64L17.34 14.27L17.16 14.69L15.83 16.02ZM20.59 3.74L20.92 3.62L21.25 3.29L21.39 2.97L21.43 2.73L21.36 2.34L21.18 2.03L21.03 1.87L20.61 1.66L20.40 1.63L20.08 1.66L19.66 1.87L19.43 2.13L19.29 2.45L19.33 3.08L19.54 3.43L19.77 3.62L20.12 3.76L20.57 3.76ZM13.75 18.10L4.95 9.31L6.54 7.71L15.34 16.51L13.77 18.09ZM9.59 23.98L9.38 23.98L9.13 23.81L7.71 22.36L7.64 21.83L7.71 21.03L7.96 20.12L8.29 19.36L7.64 20.22L7.15 21.13L6.89 21.32L6.75 21.32L6.47 21.15L3.83 18.47L3.76 18.12L3.76 17.25L3.83 16.76L4.11 15.71L4.58 14.68L4.08 15.29L3.59 16.02L3.03 17.07L2.80 17.23L2.66 17.23L2.45 17.13L1.00 15.67L0.89 15.50L0.89 15.29L1.24 14.34L1.84 13.15L2.75 11.76L3.87 10.39L4.48 9.78L13.28 18.58L12.33 19.59L11.28 20.96L10.55 22.15L10.13 22.99L9.81 23.79L9.60 23.97Z",
+  wipe:       "M13.71 18.28L3.71 18.28L0.97 15.59L0.69 15.21L0.58 14.88L0.58 14.21L0.91 13.55L3.54 10.98L8.02 15.46L8.24 15.57L8.63 15.57L8.96 15.40L9.21 14.99L9.15 14.43L4.62 9.84L11.78 2.68L12.50 2.35L13.05 2.35L13.38 2.46L13.71 2.68L20.60 9.57L20.88 10.18L20.88 10.78L20.60 11.39L13.74 18.25ZM23.12 21.59L0.83 21.59L0.44 21.43L0.03 20.96L-0.03 20.18L0.14 19.85L0.44 19.55L0.88 19.38L23.06 19.38L23.56 19.60L23.81 19.85L23.97 20.18L23.97 20.79L23.86 21.07L23.50 21.43L23.14 21.57Z",
+  restoreall: "M14.20 22.29L12.28 22.20L10.45 21.77L9.61 21.45L8.67 20.98L7.78 20.41L7.43 20.11L9.00 18.49L9.19 18.54L9.56 18.82L10.36 19.24L11.81 19.76L12.98 19.95L14.39 19.95L15.33 19.80L16.08 19.62L16.83 19.34L18.05 18.68L18.75 18.16L19.90 17.02L20.70 15.84L21.12 14.95L21.54 13.55L21.68 12.28L21.63 11.02L21.35 9.66L20.88 8.48L20.32 7.50L19.90 6.94L19.12 6.12L18.05 5.27L16.59 4.52L15.09 4.10L14.39 4.01L12.98 4.01L12.05 4.15L10.55 4.62L9.33 5.27L8.62 5.79L7.52 6.89L6.63 8.20L6.16 9.28L5.84 10.45L5.84 10.73L5.74 11.06L5.72 11.98L9.12 12.00L4.55 16.57L-0.02 12.00L3.40 11.95L3.40 11.20L3.49 10.36L3.73 9.28L4.10 8.16L4.71 6.89L5.09 6.28L6.16 4.92L7.31 3.87L8.25 3.21L9.38 2.60L10.17 2.27L11.25 1.95L12.61 1.71L14.20 1.66L15.14 1.76L16.31 1.99L17.58 2.41L18.66 2.93L19.83 3.68L20.67 4.38L21.63 5.39L22.48 6.56L22.99 7.50L23.60 9.09L23.84 10.08L23.98 11.11L23.98 12.84L23.84 13.88L23.60 14.86L23.18 16.03L22.62 17.16L22.10 17.95L21.30 18.94L20.30 19.90L18.98 20.84L17.91 21.40L16.64 21.87L15.14 22.20L14.23 22.27ZM14.02 14.27L13.36 14.27L12.84 14.13L12.28 13.80L11.74 13.22L11.51 12.75L11.37 11.95L11.55 11.06L11.88 10.55L12.28 10.15L12.84 9.82L13.36 9.68L14.02 9.68L14.53 9.82L15.05 10.10L15.54 10.59L15.77 10.97L15.96 11.48L16.01 11.81L15.96 12.47L15.77 12.98L15.54 13.36L15.05 13.85L14.53 14.13L14.04 14.25Z",
+  auto:       "M12.12 23.94L11.82 23.94L11.59 23.82L11.32 23.44L10.37 19.95L10.02 18.95L9.31 17.59L8.48 16.46L7.39 15.37L6.86 14.96L6.15 14.48L4.97 13.89L0.24 12.47L-0.03 12.09L-0.03 11.79L0.09 11.56L0.47 11.29L3.96 10.34L4.97 9.99L6.15 9.40L7.45 8.45L8.78 7.06L9.49 6.00L10.02 4.94L10.37 3.93L11.32 0.44L11.59 0.12L11.82 0.00L12.12 0.00L12.35 0.12L12.62 0.44L13.57 3.93L13.92 4.94L14.45 6.00L15.40 7.36L16.49 8.45L17.62 9.28L18.98 9.99L19.98 10.34L23.47 11.29L23.85 11.56L23.97 11.79L23.97 12.09L23.70 12.47L18.98 13.89L17.91 14.42L17.08 14.96L16.55 15.37L15.40 16.52L14.63 17.59L13.92 18.95L13.57 19.95L12.62 23.44L12.50 23.67L12.15 23.91Z",
+  pen:        "M6.09 17.84L5.72 17.79L5.37 17.48L5.32 16.97L6.40 11.53L6.49 11.30L17.72 0.07L17.91 -0.02L18.28 -0.02L18.47 0.07L23.09 4.69L23.18 4.92L23.18 5.20L23.09 5.39L11.81 16.66L6.12 17.81ZM8.13 16.08L10.90 15.52L7.64 12.26L7.57 12.33L7.05 15.09L8.11 16.10ZM20.86 23.98L20.30 23.93L20.04 23.67L19.62 22.69L19.24 22.12L18.52 21.35L17.95 20.93L17.39 20.60L16.45 20.23L15.09 19.90L13.88 19.76L12.80 19.76L12.05 19.85L10.88 20.18L9.61 20.79L7.36 22.34L5.72 23.23L4.22 23.70L2.81 23.74L2.16 23.55L1.55 23.18L1.10 22.69L0.91 22.31L0.77 21.75L0.82 20.86L1.05 20.25L1.43 19.69L2.25 18.91L3.61 18.16L4.12 17.98L4.50 17.98L4.80 18.23L4.90 18.42L4.90 18.84L4.80 19.03L4.41 19.29L3.52 19.66L2.95 20.04L2.27 20.72L2.09 21.09L2.04 21.47L2.13 21.80L2.32 22.12L2.53 22.34L2.95 22.52L3.75 22.52L4.83 22.20L6.19 21.54L8.53 19.90L9.98 19.15L10.88 18.82L12.23 18.49L13.03 18.40L14.20 18.40L15.75 18.63L16.97 19.01L18.05 19.48L19.12 20.18L19.99 21.00L20.79 22.12L21.26 23.16L21.30 23.34L21.26 23.62L21.05 23.88L20.88 23.95Z",
+  bucket:     "M10.60 23.99L9.95 23.99L9.30 23.87L8.57 23.58L8.21 23.36L7.90 23.12L1.35 16.57L1.01 16.11L0.80 15.70L0.55 14.95L0.48 14.11L0.58 13.39L0.80 12.74L1.16 12.11L1.35 11.87L2.09 11.13L8.51 4.92L5.45 1.83L5.28 1.40L5.28 0.96L5.35 0.72L5.52 0.43L5.83 0.16L6.26 -0.01L6.72 -0.01L6.93 0.06L7.20 0.21L19.01 12.01L19.42 12.62L19.63 13.10L19.75 13.51L19.85 14.21L19.83 14.76L19.75 15.17L19.54 15.82L19.32 16.23L19.01 16.67L12.46 23.22L12.10 23.48L11.59 23.75L11.06 23.92L10.61 23.98ZM17.49 14.33L17.46 14.06L17.37 13.85L17.20 13.60L10.22 6.62L3.44 13.18L3.14 13.48L2.92 13.85L2.85 14.16L2.88 14.34L17.48 14.34ZM21.31 23.99L20.85 23.99L20.37 23.89L19.84 23.65L19.48 23.38L19.27 23.18L19.01 22.82L18.79 22.36L18.67 21.81L18.67 21.42L18.72 21.15L18.89 20.62L19.08 20.16L19.78 18.81L20.65 17.42L20.83 17.28L20.97 17.23L21.19 17.23L21.38 17.31L21.59 17.51L22.38 18.81L23.08 20.16L23.42 21.06L23.49 21.42L23.49 21.81L23.37 22.36L23.16 22.82L22.89 23.18L22.69 23.38L22.32 23.65L21.79 23.89L21.32 23.98Z",
+  wand:       "M8.47 10.78L8.35 10.04L7.99 8.87L7.63 8.15L7.05 7.29L6.44 6.64L5.54 5.97L4.82 5.61L3.89 5.36L4.32 5.29L4.86 5.11L5.49 4.80L6.30 4.21L6.91 3.60L7.45 2.88L7.99 1.85L8.31 0.90L8.44 0.00L8.49 0.00L8.49 0.32L8.67 1.13L8.94 1.89L9.34 2.70L9.93 3.51L10.72 4.30L11.57 4.89L12.43 5.25L13.04 5.36L12.20 5.56L11.44 5.92L10.63 6.51L9.97 7.16L9.39 7.97L8.94 8.83L8.58 9.95L8.49 10.76ZM19.41 8.58L19.38 8.24L19.11 7.29L18.66 6.44L18.26 5.90L17.79 5.43L17.07 4.93L16.39 4.66L16.01 4.59L16.62 4.44L17.34 4.08L18.01 3.53L18.39 3.11L19.02 2.07L19.25 1.49L19.38 0.90L19.38 0.63L19.47 0.72L19.47 0.99L19.61 1.53L19.88 2.21L20.60 3.29L21.03 3.71L21.66 4.17L22.11 4.39L22.85 4.59L22.06 4.80L21.61 5.02L21.12 5.38L20.51 5.99L20.15 6.48L19.79 7.16L19.56 7.79L19.43 8.56ZM4.19 23.98L3.78 23.98L3.47 23.84L1.24 21.61L1.10 21.30L1.10 20.89L1.24 20.53L14.23 7.54L14.54 7.41L15.04 7.41L15.35 7.54L17.54 9.73L17.72 10.22L17.67 10.58L17.54 10.85L4.55 23.84L4.21 23.95ZM13.08 13.78L16.55 10.31L14.77 8.53L11.32 11.98L11.32 12.07L13.06 13.80ZM19.41 18.57L19.38 18.28L19.20 17.65L18.89 17.02L18.53 16.53L18.10 16.10L17.65 15.78L17.38 15.65L16.77 15.49L17.29 15.33L17.74 15.11L18.06 14.88L18.62 14.32L19.02 13.69L19.20 13.28L19.38 12.65L19.38 12.34L19.43 12.34L19.52 12.92L19.65 13.33L20.20 14.27L20.58 14.70L21.25 15.20L22.04 15.49L21.48 15.65L20.98 15.92L20.24 16.62L19.70 17.52L19.43 18.55Z",
+  lasso:      "M8.96 1.62L8.79 1.54L8.50 0.56L9.11 0.39L10.04 0.24L11.95 0.29L12.02 0.47L11.78 1.40L10.19 1.37L8.99 1.59ZM16.26 3.48L15.13 2.64L13.98 2.03L14.23 0.96L14.50 1.03L15.62 1.62L17.17 2.77L16.29 3.45ZM5.09 4.85L4.21 4.51L4.09 4.38L4.48 3.55L5.31 2.42L5.98 1.81L6.42 1.52L6.69 2.33L6.73 2.67L6.27 3.04L5.85 3.50L5.51 3.99L5.12 4.82ZM19.40 7.35L19.22 7.32L18.78 6.49L17.85 5.12L18.71 4.46L19.42 5.36L20.35 6.93L20.33 7.05L19.42 7.32ZM3.92 10.43L2.82 10.21L3.31 8.89L3.55 7.67L3.60 6.73L3.82 6.76L4.68 7.18L4.68 7.57L4.48 8.79L4.38 8.99L4.29 9.53L3.94 10.41ZM18.17 23.71L18.10 23.68L15.58 18.51L12.81 22.31L12.42 22.75L12.42 8.55L12.88 8.82L23.98 16.92L19.00 16.95L18.93 17.02L21.38 22.07L18.20 23.68ZM22.14 12.78L20.84 11.83L20.55 10.56L20.20 9.62L20.20 9.48L20.28 9.40L21.28 9.13L21.82 10.90L22.16 12.76ZM18.73 22.16L19.79 21.65L19.86 21.58L19.86 21.43L19.76 21.33L17.12 15.84L20.50 15.80L13.57 10.73L13.54 19.27L13.69 19.18L15.40 16.78L15.77 16.36L18.59 22.11L18.71 22.19ZM0.05 15.72L-0.02 15.21L0.22 14.18L0.56 13.44L1.05 12.76L1.47 12.34L2.69 12.49L2.72 12.56L1.40 14.28L1.15 14.82L1.10 15.45L0.07 15.70ZM4.21 19.89L3.43 19.74L2.25 19.25L1.57 18.76L0.76 17.90L0.83 17.83L1.96 17.63L2.50 18.07L3.09 18.42L3.77 18.66L4.31 18.76L4.33 19.18L4.24 19.86ZM10.14 20.23L9.16 19.93L8.28 19.79L7.79 19.79L7.74 19.74L6.56 19.79L6.54 19.47L6.64 18.69L7.05 18.61L8.33 18.66L9.26 18.81L10.14 19.05L10.16 20.20Z",
+  invert:     "M3.79 23.99L3.12 23.96L2.64 23.85L2.19 23.69L1.87 23.53L1.39 23.21L0.89 22.75L0.44 22.11L0.23 21.65L0.01 20.85L-0.01 20.61L-0.01 3.36L0.04 2.96L0.28 2.19L0.52 1.73L0.89 1.23L1.39 0.76L1.87 0.44L2.19 0.28L2.64 0.12L3.36 -0.01L20.61 -0.01L21.15 0.07L21.79 0.28L22.24 0.52L22.75 0.89L23.11 1.25L23.53 1.87L23.75 2.32L23.96 3.12L23.99 4.85L23.93 5.07L23.80 5.31L23.49 5.59L23.09 5.72L22.75 5.69L22.40 5.53L22.12 5.23L21.99 4.85L21.96 3.31L21.88 3.04L21.75 2.77L21.59 2.56L21.49 2.49L16.71 7.28L17.13 7.73L17.45 8.16L17.75 8.61L18.07 9.23L18.25 9.68L18.47 10.37L18.57 10.88L18.65 11.57L18.65 12.40L18.57 13.09L18.47 13.60L18.25 14.29L18.07 14.75L17.67 15.49L17.32 16.00L16.95 16.45L16.45 16.95L15.89 17.40L15.36 17.75L14.69 18.09L14.29 18.25L13.49 18.49L12.40 18.65L11.57 18.65L11.07 18.60L10.37 18.47L9.68 18.25L9.23 18.07L8.48 17.67L7.73 17.13L7.25 16.71L2.49 21.47L2.49 21.52L2.69 21.69L3.04 21.88L3.31 21.96L3.81 21.99L4.00 22.04L4.21 22.15L4.49 22.43L4.65 22.83L4.65 23.15L4.60 23.33L4.49 23.55L4.35 23.72L4.00 23.93L3.80 23.97ZM20.61 23.99L8.43 23.99L8.05 23.85L7.75 23.57L7.59 23.23L7.56 22.88L7.64 22.59L7.75 22.40L8.05 22.12L8.43 21.99L20.51 21.99L20.93 21.88L21.20 21.75L21.59 21.41L21.75 21.20L21.88 20.93L21.99 20.51L21.99 7.84L22.04 7.63L22.17 7.39L22.40 7.16L22.59 7.05L22.88 6.97L23.23 7.00L23.57 7.16L23.80 7.39L23.93 7.63L23.99 7.84L23.99 20.61L23.93 21.01L23.69 21.79L23.45 22.24L23.08 22.75L22.59 23.21L22.11 23.53L21.79 23.69L21.33 23.85L21.01 23.93L20.63 23.97ZM8.73 15.25L15.27 8.72L15.27 8.67L15.09 8.49L14.69 8.17L14.32 7.93L13.84 7.69L13.04 7.43L12.29 7.32L11.41 7.35L10.83 7.45L10.40 7.59L9.52 8.01L8.85 8.52L8.49 8.88L8.12 9.36L7.67 10.19L7.45 10.83L7.32 11.65L7.32 12.29L7.37 12.75L7.45 13.15L7.67 13.79L8.12 14.61L8.49 15.09L8.67 15.27L8.72 15.27Z",
+  deselect:   "M12.43 23.98L11.52 23.98L11.48 23.94L10.48 23.89L8.92 23.59L7.28 23.03L5.76 22.25L4.46 21.34L3.10 20.06L2.10 18.80L1.15 17.16L0.76 16.25L0.45 15.34L0.11 13.78L-0.02 12.43L-0.02 11.52L0.11 10.18L0.54 8.32L1.15 6.80L2.10 5.16L3.10 3.90L3.90 3.10L5.29 2.01L6.37 1.36L7.71 0.76L8.92 0.37L10.48 0.06L11.48 0.02L11.52 -0.02L12.43 -0.02L14.04 0.15L15.34 0.45L16.68 0.93L17.59 1.36L19.10 2.32L20.06 3.10L21.34 4.46L22.12 5.55L22.90 6.97L23.50 8.62L23.81 9.92L23.94 10.92L23.98 12.43L23.85 13.78L23.50 15.34L23.03 16.68L22.25 18.19L21.64 19.10L20.86 20.06L19.49 21.34L18.19 22.25L16.68 23.03L15.34 23.50L14.04 23.81L12.45 23.96ZM15.05 17.63L15.34 17.52L16.53 16.33L17.39 15.42L17.57 15.08L17.52 14.69L17.26 14.34L14.92 12.00L17.44 9.40L17.57 9.14L17.57 8.88L17.39 8.53L15.34 6.43L15.16 6.35L14.86 6.35L14.60 6.52L12.04 9.08L9.53 6.61L9.23 6.43L8.88 6.43L8.58 6.61L7.62 7.52L6.48 8.66L6.39 8.84L6.39 9.14L6.61 9.44L9.16 11.96L6.52 14.60L6.35 14.95L6.43 15.25L8.58 17.35L8.88 17.52L9.23 17.52L9.57 17.31L12.04 14.84L14.64 17.48L15.03 17.65Z",
+  fillsel:    "M12.58 23.96L11.26 23.96L9.10 23.46L7.86 22.88L6.46 21.89L5.17 20.52L4.43 19.37L3.68 17.46L3.43 16.06L3.43 14.65L3.77 12.91L4.51 10.76L5.50 8.69L7.82 4.97L11.54 0.17L11.83 -0.04L12.37 0.17L15.60 4.39L15.68 4.63L15.02 5.38L15.10 6.37L15.89 6.99L16.47 6.99L17.13 6.58L17.67 7.28L19.74 11.59L20.48 14.81L20.40 16.63L19.90 18.46L19.41 19.53L18.41 20.94L17.46 21.89L16.06 22.88L14.32 23.63L12.62 23.92ZM16.39 4.10L16.06 4.10L15.77 3.81L15.85 1.82L16.30 1.61L16.68 1.99L16.68 3.72L16.43 4.06ZM17.88 4.68L17.34 4.55L17.26 4.14L17.42 3.89L18.70 2.69L18.95 2.69L19.24 2.98L19.16 3.48L17.92 4.63ZM16.47 6.58L15.97 6.58L15.52 6.21L15.43 5.46L15.60 5.21L16.06 4.92L16.84 5.21L17.01 6.04L16.51 6.54ZM14.28 6.12L14.52 5.63L14.23 5.34L12.33 5.34L12.12 5.54L12.12 5.96L12.33 6.17L14.23 6.17ZM19.12 6.25L18.12 6.17L17.83 5.79L17.92 5.54L18.12 5.34L20.11 5.34L20.32 5.54L20.32 5.96L20.11 6.17L19.16 6.21ZM13.78 8.77L15.19 7.28L14.90 6.83L14.57 6.83L13.20 8.19L13.28 8.69L13.74 8.81ZM16.26 9.85L16.47 9.81L16.68 9.43L16.68 7.86L16.47 7.49L15.97 7.49L15.77 7.78L15.77 9.52L16.22 9.89Z",
+  clearsel:   "M12.66 23.96L10.68 23.88L9.10 23.46L7.86 22.88L6.29 21.72L5.01 20.28L4.01 18.46L3.43 15.97L3.43 14.81L3.85 12.66L4.68 10.34L5.75 8.19L7.74 5.05L11.46 0.25L12.08 -0.04L12.62 0.50L15.27 4.14L15.06 4.51L14.65 4.59L11.92 1.20L10.22 3.23L7.49 7.03L5.67 10.34L4.76 12.74L4.43 14.15L4.43 16.55L5.34 19.12L6.08 20.19L8.11 21.97L10.01 22.80L11.42 23.05L13.16 22.97L14.65 22.55L16.30 21.64L17.92 20.11L18.58 19.12L19.24 17.63L19.57 15.97L19.57 14.73L19.24 12.99L18.66 11.26L16.76 7.45L17.05 6.99L17.59 7.12L19.16 10.10L20.07 12.58L20.48 14.73L20.40 16.63L19.90 18.46L19.24 19.78L18.33 21.02L17.05 22.22L16.06 22.88L14.07 23.71L12.70 23.92ZM16.22 4.10L15.89 4.10L15.60 3.81L15.68 1.82L16.06 1.61L16.51 1.99L16.51 3.72L16.26 4.06ZM17.71 4.68L17.17 4.55L17.17 3.97L18.37 2.77L18.79 2.69L19.08 2.98L19.08 3.31L18.83 3.64L17.75 4.63ZM16.22 6.58L15.81 6.58L15.35 6.21L15.35 5.30L15.89 4.92L16.68 5.21L16.84 6.04L16.26 6.54ZM13.82 6.25L12.17 6.17L11.88 5.79L11.96 5.54L12.50 5.26L14.15 5.34L14.36 5.54L14.36 5.96L13.86 6.21ZM19.94 6.17L17.96 6.17L17.67 5.79L17.75 5.54L17.96 5.34L19.70 5.26L20.15 5.54L19.99 6.12ZM13.57 8.81L13.24 8.81L13.03 8.61L13.20 7.94L14.40 6.83L14.73 6.83L14.94 7.03L15.02 7.28L14.86 7.61L13.61 8.77ZM16.14 9.89L15.60 9.60L15.60 7.70L16.14 7.41L16.51 7.78L16.51 9.52L16.18 9.85Z",
+  turnleft:   "M13.22 23.89L9.62 23.79L6.13 22.52L3.22 20.25L1.22 17.50L-0.05 13.37L-0.05 10.52L0.69 7.56L2.80 4.07L5.29 1.90L7.82 0.63L10.57 -0.00L14.17 0.11L18.61 1.90L21.30 4.39L22.57 6.29L23.95 11.15L23.84 13.80L22.68 17.39L21.41 19.40L19.03 21.67L16.07 23.26L13.27 23.84ZM12.32 17.71L14.59 16.92L16.33 15.07L17.07 12.42L16.65 10.31L14.59 7.82L11.84 6.98L11.52 5.71L8.46 7.30L8.67 7.93L11.21 9.41L11.68 9.25L11.84 8.14L13.64 8.56L15.07 9.78L15.81 11.26L15.91 13.06L15.49 14.33L13.85 16.07L12.58 16.60L10.68 16.60L9.09 15.75L8.30 15.91L8.30 16.55L9.73 17.44L12.26 17.76Z",
+  turnright:  "M13.32 23.89L9.20 23.68L6.03 22.41L2.59 19.51L1.32 17.60L0.16 14.22L-0.05 11.15L0.79 7.45L2.59 4.39L4.86 2.22L6.77 1.06L9.73 0.11L13.43 -0.00L16.07 0.63L18.61 1.90L20.99 3.96L22.68 6.40L23.95 10.52L23.95 13.37L22.68 17.50L20.99 19.93L18.61 21.99L15.86 23.37L13.37 23.84ZM12.95 17.71L15.22 16.92L15.59 15.91L14.80 15.75L13.22 16.60L11.31 16.60L10.04 16.07L8.19 13.80L8.09 11.26L8.83 9.78L10.04 8.67L12.05 8.14L12.21 9.25L12.69 9.41L15.59 7.45L12.48 5.60L12.05 6.98L10.36 7.30L8.78 8.25L7.14 10.63L7.14 14.11L8.09 15.81L9.30 16.92L11.52 17.76L12.90 17.76Z",
+  fliph:      "M14.70 11.81L14.42 11.72L14.33 8.47L5.77 8.47L3.72 9.40L2.23 10.88L2.14 8.56L2.51 7.26L3.26 5.95L4.84 4.37L6.88 3.44L14.33 3.26L14.42 0.00L14.70 -0.09L21.67 5.77L14.79 11.72ZM9.30 23.91L2.14 17.86L9.12 11.81L9.40 11.91L9.49 15.16L17.86 15.16L19.53 14.60L21.58 12.93L21.67 15.07L21.30 16.37L20.56 17.67L18.98 19.26L18.05 19.81L16.00 20.37L9.49 20.37L9.40 23.81Z",
+  flipv:      "M18.05 21.70L17.73 21.66L17.89 21.59L16.97 20.75L15.87 19.16L15.12 18.56L14.93 18.04L14.02 17.27L13.99 16.94L13.84 17.01L13.81 16.73L12.01 14.86L12.02 14.47L15.31 14.45L15.27 5.83L15.15 5.96L15.11 5.30L14.36 3.78L13.28 2.48L12.90 2.31L16.04 2.46L16.07 2.67L16.56 2.70L17.87 3.40L19.17 4.69L19.56 5.59L19.94 5.86L20.34 7.79L20.46 7.65L20.47 14.43L23.99 14.50L23.09 15.45L22.90 15.96L22.15 16.57L21.78 17.27L21.21 17.67L20.12 19.26L19.37 19.87L19.17 20.38L18.26 21.15L18.06 21.69ZM10.89 21.72L8.65 21.70L7.38 21.35L7.32 21.13L6.07 20.58L4.59 19.10L4.37 18.39L4.26 18.58L4.06 18.14L3.66 16.20L3.54 16.33L3.53 9.55L-0.01 9.47L1.79 7.42L1.82 7.14L2.91 6.12L2.94 5.84L3.68 5.25L3.88 4.72L4.97 3.69L5.00 3.41L5.86 2.64L5.89 2.31L6.28 2.45L7.34 3.96L7.92 4.35L8.46 5.25L9.76 6.55L9.95 7.06L11.99 9.14L11.98 9.52L8.63 9.54L8.66 18.01L9.60 20.24L10.90 21.71Z",
+  crop:       "M23.92 11.54L22.83 11.54L22.45 11.41L22.20 10.16L21.37 8.07L20.36 6.48L19.15 5.10L17.73 3.93L15.80 2.84L15.68 2.97L15.60 3.97L15.39 4.18L12.67 0.63L12.96 0.50L13.80 0.67L16.22 1.42L17.98 2.34L19.65 3.60L21.37 5.39L22.62 7.32L23.54 9.49L23.96 11.50ZM17.39 19.07L15.76 19.02L15.72 17.31L8.20 17.31L7.44 16.98L6.82 16.26L6.56 15.51L6.56 8.15L4.85 8.11L4.81 6.48L6.52 6.44L6.56 4.89L6.69 4.77L8.24 4.81L8.24 15.43L8.45 15.64L18.98 15.64L19.11 15.76L19.11 17.27L17.56 17.31L17.44 17.44L17.44 19.02ZM17.39 14.05L15.89 14.05L15.76 13.92L15.76 8.32L15.55 8.11L9.95 8.11L9.91 6.48L15.64 6.44L16.64 6.86L17.02 7.23L17.44 8.07L17.44 14.01ZM11.12 23.41L8.86 22.91L7.36 22.33L6.10 21.66L4.18 20.24L2.63 18.61L1.55 17.02L0.54 14.84L-0.04 12.42L1.46 12.42L1.88 14.26L2.80 16.26L3.89 17.85L5.44 19.40L6.86 20.40L7.94 20.99L8.24 20.95L8.32 20.03L8.53 19.74L11.16 23.12L11.16 23.37Z",
+};
+const edIco=k=>'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
+  '<path fill="currentColor" fill-rule="evenodd" d="'+ED_ICO_PATHS[k]+'"/></svg>';
+/* ==================================================================================================
+   6nf — AUTO IS HOLOGRAPHIC. Ced sent a picture of an iridescent sheet: "make the color of auto be
+   like this (holographic)."
+
+   The stops are SAMPLED from that picture, across the brightest band of it, rather than picked by
+   eye from the word "holographic": lilac at one end, then the pale blue, the cyan it turns through,
+   the mint on the far side of that, and the warm grey-pink it lands on. Read off at eight points
+   along the perpendicular to the band — #c6d2fe, #b0d7fc, #6cf7fe, #51f9fc, #81fff2, #bdfbc5,
+   #e1e3d9, #e9d0da — and laid on the same diagonal the sheet runs on.
+
+   The gradient is `objectBoundingBox`, so it fits the glyph at whatever size the rail draws it, and
+   it carries its own id. Auto is an ACTION and never takes the `on` state, which is the one place a
+   fixed-colour glyph would disappear — every other coloured glyph here still gets its colour from
+   CSS, where the selected state can take it back. */
+const ED_ICO_AUTO=
+  '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+
+    '<defs><linearGradient id="skHolo" x1="0" y1="1" x2="1" y2="0">'+
+      '<stop offset="0" stop-color="#c2b7fc"/>'+
+      '<stop offset="0.16" stop-color="#c6d2fe"/>'+
+      '<stop offset="0.34" stop-color="#9cdffb"/>'+
+      '<stop offset="0.50" stop-color="#51f9fc"/>'+
+      '<stop offset="0.64" stop-color="#81fff2"/>'+
+      '<stop offset="0.78" stop-color="#bdfbc5"/>'+
+      '<stop offset="0.90" stop-color="#e1e3d9"/>'+
+      '<stop offset="1" stop-color="#e9d0da"/>'+
+    '</linearGradient></defs>'+
+    '<path fill="url(#skHolo)" fill-rule="evenodd" d="'+ED_ICO_PATHS.auto+'"/>'+
+  '</svg>';
+/* 6nd — and the five that had no artwork. Ced: "all shapes icon should be thicker." These were
+   typographic glyphs, whose weight is the font's and not ours, so they are drawn here at a stroke
+   the rest of the set can stand beside: 3 units in a 24-unit box, round caps, round joins. */
+/* `style="fill:none"` and not the `fill` attribute: `.sk-edg svg{fill:currentColor}` is a
+   stylesheet rule and beats a presentation attribute, which is how the first cut of these came out
+   as a solid square, a solid disc and a solid rounded rect instead of outlines. An inline style
+   beats the stylesheet, which is the honest place for "this one is drawn in line, not in mass". */
+const edStroke=body=>'<svg viewBox="0 0 24 24" style="fill:none" stroke="currentColor" '+
+  'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '+
+  'aria-hidden="true" focusable="false">'+body+'</svg>';
+const ED_ICO_LINE   =edStroke('<path d="M4.2 19.8 19.8 4.2"/>');
+const ED_ICO_ARROW  =edStroke('<path d="M4.4 19.6 19.2 4.8"/><path d="M11.4 4.8h7.8v7.8"/>');
+const ED_ICO_BOX    =edStroke('<rect x="3.6" y="5.6" width="16.8" height="12.8" rx="1.8"/>');
+const ED_ICO_ELLIPSE=edStroke('<ellipse cx="12" cy="12" rx="8.8" ry="7.2"/>');
+const ED_ICO_SHAPE  =edStroke('<rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2.2" '+
+                              'stroke-dasharray="4.4 3.4"/>');
+
 function skEditor(a,opts){
   if(!a||a.kind!=="img"||!a.src){ toast("Select a snapshot first"); return; }
   if(SK_ED)return;
@@ -749,15 +846,56 @@ function skEditor(a,opts){
   const head=document.createElement("div"); head.className="sk-edhead";
   const ttl=document.createElement("div"); ttl.className="sk-edtitle";
   ttl.textContent=(opts&&opts.title)||"Edit picture";
-  const hint=document.createElement("div"); hint.className="sk-edhint";
-  /* 6ig/6ip — one line, and it says the two things the buttons do not: Shift-wheel sizes the brush,
-     Ctrl-wheel zooms the picture. */
-  /* 6kq — and the drawing tools get their one line too: that they go INTO the picture. */
-  hint.textContent="Erase and Restore are brushes — hold and sweep. Pen, Line, Arrow, Box and "+
-                   "Ellipse draw into the picture itself, in the ink and weight set below; Shift "+
-                   "holds a line to 45° and a box to a square. "+
-                   "Shift-scroll resizes the brush; Ctrl-scroll zooms.";
-  head.appendChild(ttl); head.appendChild(hint);
+  /* ==================================================================================================
+     6ng — AND THE PARAGRAPH IS GONE. Ced, with a shot of it: "also remove the paragraphs here."
+
+     It was two lines of prose explaining what Erase and Restore are, what the five drawing tools do
+     and which modifier does what with the wheel — written when the tools were words on a top bar
+     and there was nowhere else to say any of it. Every one of those tools now carries a drawn mark,
+     its name on hover and its own sentence in the tooltip (6nd, 6ne), so the paragraph was saying a
+     third time what the button already says twice, at the cost of 40px off the top of the picture.
+
+     The two things it said that no tool says — that the wheel sizes the brush with Shift and zooms
+     with Ctrl — are gestures rather than tools, so they move onto the controls they belong to: the
+     brush slider's tooltip and the zoom buttons'. Nothing is lost, it is just filed where it is
+     looked for.
+     ================================================================================================== */
+  /* ==================================================================================================
+     6n5 — AND A LINE FOR WHAT THE EDITOR HAS JUST SAID.
+     Ced: "auto has stopped working in edit photo."
+
+     Auto has not stopped working — measured on four pictures, it removes the strays and fills behind
+     the ink in 96-546ms, and refuses a block of text exactly as it is meant to. What stopped was the
+     TELLING. Every message in here goes through `setStatus`, which writes to `#status` in the page
+     chrome and to `#miniStatus` on the quick bar — and this editor is `position:fixed; inset:0` at
+     z-index 4700, so it covers both. Press Auto on a picture it declines and the explanation of why,
+     which is a paragraph long and the whole point of 6mg, is painted underneath the dialog.
+
+     So the editor gets a line of its own, and `skEdWire` shadows `setStatus` with one that writes to
+     both. Nothing else changes: every call site in here already says the right thing to the right
+     person, it just had nowhere to put it.
+     ================================================================================================== */
+  /* 6no — AND THE EXPLANATION BLOCK GOES. Ced: "the explanation tab here is not needed", with a
+     shot of Auto's three-line success paragraph across the top of the dialog.
+
+     6n5 added it because every message in here was being painted underneath a dialog that covers
+     the window, and Auto looked dead as a result. That is still true, so the channel stays — but a
+     paragraph that sits there forever is not what it was for. It is a one-line notice now, over the
+     picture rather than above it, and an ordinary message fades after a few seconds. An ERROR
+     stays, because the one that matters — Auto declining, and why — is the one worth reading. */
+  const say=document.createElement("div"); say.className="sk-edsay"; say.hidden=true;
+  head.appendChild(ttl);
+  /* 6ne — THE NAME, ON HOVER, AT ONCE. Ced: "make the hover to the icon have tool name to have
+     ease of understanding to user." Every button already carries a `title`, but a native tooltip
+     waits about a second and then shows the whole sentence — which is the right thing to read when
+     you are wondering what a tool DOES and the wrong thing when you are hunting for the one called
+     Lasso. The word appears beside the button immediately; the sentence still arrives after it, on
+     the browser's own schedule, so nothing is lost.
+
+     It is one floating chip rather than a `::after` on each button, because the rail scrolls
+     (`overflow-y:auto`) and anything drawn outside a scrolling box is clipped by it. */
+  const tip=document.createElement("div"); tip.className="sk-edtip"; tip.hidden=true;
+  card.appendChild(tip); card.appendChild(say);   /* 6no — the notice floats over the stage */
   /* ==================================================================================================
      6n3 — THE TOOLS GO DOWN THE LEFT, AND THE SLIDERS GO TO THE FLOOR.
      Ced: "instead of a top bar, make the tool bar on the left of the photo ui for better space
@@ -779,10 +917,29 @@ function skEditor(a,opts){
        `base`  — the lowest strip: the two long sliders, then Undo and Redo, as asked;
        `foot`  — Cancel and Save, which were already there.
      ================================================================================================== */
+  /* ==================================================================================================
+     6nn — TWO COLUMNS, AND EVERY TOOL GROUP ITS OWN TAB.
+     Ced: "in edit photo, put all the tool tabs on the left and stack individual tools. the main tab,
+     the brush, rotate, and border. while the undo redo and zoom are stacked on the right."
+
+     6nh floated the tools and 6nk broke the bottom strip into separate panels; this is the same idea
+     carried to its end. The left column stacks the tool tab, the brush, the turn and the border —
+     each a tab of its own, in the order Ced listed them — and the right column stacks the history
+     and the zoom. Nothing sits across the foot of the picture any more, so the stage is as tall as
+     the card and only as narrow as the two columns make it.
+     ================================================================================================== */
   const body=document.createElement("div"); body.className="sk-edbody";
+  const colL=document.createElement("div"); colL.className="sk-edcol-l";
+  const colR=document.createElement("div"); colR.className="sk-edcol-r";
   const bar=document.createElement("div"); bar.className="sk-edbar sk-edrail";
   const bar2=document.createElement("div"); bar2.className="sk-edbar sk-edctx";
   const bar3=document.createElement("div"); bar3.className="sk-edbar sk-edbase";
+  /* 6ni — and the two strips go into a DOCK. Ced: "incorporate them inside the ui", with the tools
+     already floating (6nh). They were two plates lying on the card below the stage; they are one
+     panel now, of the same make as the tool rail, resting over the foot of the stage. The stage
+     keeps its full height and the picture is held clear of the dock by the stage's own bottom
+     padding, exactly as it is held clear of the rail by the left padding. */
+
   const stage=document.createElement("div"); stage.className="sk-edstage";
   const box=document.createElement("div"); box.className="sk-edwrap";
   const cv=document.createElement("canvas"); cv.className="sk-edcanvas";
@@ -830,9 +987,9 @@ function skEditor(a,opts){
      over every part of the editor. */
   box.appendChild(cv); box.appendChild(ov); stage.appendChild(box); card.appendChild(ring);
   const foot=document.createElement("div"); foot.className="sk-edfoot";
-  body.appendChild(bar); body.appendChild(stage);
-  card.appendChild(head); card.appendChild(body);
-  card.appendChild(bar2); card.appendChild(bar3); card.appendChild(foot);
+  colL.appendChild(bar); colL.appendChild(bar2); colL.appendChild(bar3);
+  body.appendChild(colL); body.appendChild(stage); body.appendChild(colR);
+  card.appendChild(head); card.appendChild(body); card.appendChild(foot);
   wrap.appendChild(card); document.body.appendChild(wrap);
 
   /* 6gs — the picture AS IT WAS FIRST MADE, kept on the mark so it is saved and reopened with it.
@@ -866,9 +1023,129 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      element is worse than a lookup. Not guarded — if the row is missing the sliders have nowhere to
      go, and a lookup that fails should be visible rather than quietly putting them back on the
      tool row. */
-  const bar3=bar2.parentElement.querySelector(".sk-edbase");
+  const bar3=wrap.querySelector(".sk-edbase");
+  /* 6ne — the name chip, found the same way everything else across this boundary is */
+  const _tip=wrap.querySelector(".sk-edtip");
+  const tipShow=b=>{
+    if(!_tip||!b)return;
+    const nm=(b.dataset&&b.dataset.name)||"";
+    if(!nm)return;
+    _tip.textContent=nm; _tip.hidden=false;
+    const r=b.getBoundingClientRect(), cr=_tip.parentElement.getBoundingClientRect();
+    /* 6nn — clear of the COLUMN, not of the button. The tools are a grid now, so a chip placed
+       beside the button it names lands on top of the button next to it. */
+    const col=b.closest(".sk-edcol-l")||b.closest(".sk-edcol-r");
+    const edge=col?col.getBoundingClientRect().right:r.right;
+    _tip.style.left=Math.round(edge-cr.left+10)+"px";
+    _tip.style.top =Math.round(r.top+r.height/2-cr.top-_tip.offsetHeight/2)+"px";
+  };
+  const tipHide=()=>{ if(_tip)_tip.hidden=true; };
+  /* ==================================================================================================
+     6ni — A SLIDER SHOWS HOW FAR ALONG IT IS. Ced sent one: a pill track, the part behind the thumb
+     filled in blue, a round white thumb, and the reading in a bubble riding above it.
+
+     A native range cannot paint its own filled portion — `::-moz-range-progress` exists and the
+     WebKit side has no equivalent — so the fill is a background gradient sized by a custom
+     property, and the bubble is placed by a second one. Both are written on the ROW rather than on
+     the input, because the bubble is a sibling of the track and has to read the same number.
+
+     `--bx` is in PIXELS and not a percentage: the thumb's centre travels between half a thumb in
+     from each end, so a bubble placed at a flat percentage of the width drifts off it by half a
+     thumb at each extreme. Measured at the editor's own width that is 9px, which is most of the
+     thumb. The colours are sampled from Ced's picture: #0077e4 to #0054b0 across the fill,
+     #d5d5d5 for the track, a white thumb on a #a8a6a9 ring. */
+  const THUMB=18;
+  const edSyncRange=inp=>{
+    const row=inp.closest(".sk-edsize"); if(!row)return;
+    const mn=+inp.min||0, mx=(+inp.max||100), v=+inp.value;
+    const f=(mx>mn)?Math.max(0,Math.min(1,(v-mn)/(mx-mn))):0;
+    const w=inp.getBoundingClientRect().width||inp.offsetWidth||0;
+    /* the bubble hangs off the ROW and the thumb travels inside the INPUT, which starts after the
+       label — so the input's own offset has to be added or the reading floats over the word. */
+    const ox=inp.offsetLeft||0;
+    row.style.setProperty("--v",(f*100).toFixed(2)+"%");
+    row.style.setProperty("--bx",(ox+THUMB/2+f*Math.max(0,w-THUMB)).toFixed(1)+"px");
+  };
+  const edSyncRanges=()=>{
+    try{ wrap.querySelectorAll(".sk-edsize input[type=range]").forEach(edSyncRange); }catch(e){}
+  };
+  wrap.addEventListener("input",e=>{
+    const t=e.target;
+    if(t&&t.matches&&t.matches('.sk-edsize input[type=range]'))edSyncRange(t);
+  },true);
+  window.addEventListener("resize",edSyncRanges);
+  /* the sliders are also moved from code — the wheel sizes the brush, a turn commits and the handle
+     follows the picture — and those write `value` without firing `input`. One sweep after the editor
+     has settled, and a sweep from each of those paths, keeps the paint honest. */
+  requestAnimationFrame(()=>requestAnimationFrame(edSyncRanges));
+  /* 6nl — the room the dock takes is MEASURED, not guessed. Its height changes with which setting
+     the tool in hand shows — the brush row, the ink row with its swatch, the wand's three chips —
+     so a constant in the stylesheet is either too big for one of them or too small for another,
+     and too small means the picture slides under the panels. The stage's bottom padding follows
+     the dock's own height, with the same 10px of air above it that the panels have below them. */
+  /* ==================================================================================================
+     6nn — THE PICTURE IS HELD CLEAR OF BOTH COLUMNS, BY MEASUREMENT.
+     The stage runs the full width of the card and the columns float over it, so what keeps the
+     picture out from under them is the stage's own padding. It is read off the columns rather than
+     repeated as a constant: the left one is as wide as its widest tab and the right one as wide as
+     its buttons, and both change with the theme's metrics. Written to the element's own style
+     because `.sk-edstage{...padding:8px...}` is a shorthand later in the sheet and would reset any
+     longhand rule here (6nl found that the hard way — a wide picture slid under the tools).
+     ================================================================================================== */
+  let _fitDock=null;
+  {
+    const fitCols=()=>{
+      if(!stage)return;
+      const sr=stage.getBoundingClientRect();
+      if(!sr.width)return;
+      const L=wrap.querySelector(".sk-edcol-l"), R=wrap.querySelector(".sk-edcol-r");
+      if(L){ const r=L.getBoundingClientRect();
+        if(r.width)stage.style.paddingLeft=Math.max(8,Math.round(r.right-sr.left+10))+"px"; }
+      if(R){ const r=R.getBoundingClientRect();
+        if(r.width)stage.style.paddingRight=Math.max(8,Math.round(sr.right-r.left+10))+"px"; }
+      stage.style.paddingBottom="";        /* 6nn — nothing sits across the foot any more */
+      try{ dropBox(); }catch(e){}
+      if(!zoomUser){ try{ fitZoom(); }catch(e){} }
+    };
+    /* registered, not run: `fitZoom` is a `const` further down and calling this now would reach
+       into its temporal dead zone. The first run is the explicit one just before the first fit. */
+    _fitDock=fitCols;
+    try{ if(window.ResizeObserver){ const ro=new ResizeObserver(fitCols);
+      const L=wrap.querySelector(".sk-edcol-l"), R=wrap.querySelector(".sk-edcol-r");
+      if(L)ro.observe(L); if(R)ro.observe(R); } }catch(e){}
+    window.addEventListener("resize",fitCols);
+  }
+  bar.addEventListener("pointerover",e=>{ const b=e.target.closest&&e.target.closest(".sk-edb");
+    if(b)tipShow(b); });
+  bar.addEventListener("pointerout",e=>{ const b=e.target.closest&&e.target.closest(".sk-edb");
+    const to=e.relatedTarget;
+    if(b&&(!to||!to.closest||!to.closest(".sk-edb")))tipHide(); });
+  bar.addEventListener("pointerdown",tipHide);
+  bar.addEventListener("scroll",tipHide,{passive:true});
+  /* 6n5 — the editor's own voice. This SHADOWS the global `setStatus` for the whole of `skEdWire`,
+     so all forty-odd call sites below reach the line the user can actually see without one of them
+     being touched; the page's strip is still written too, so the activity log keeps its copy. It is
+     declared first because a shadowing `const` is in its temporal dead zone until it is. */
+  const _edSay=wrap.querySelector(".sk-edsay");
+  let _sayT=0;
+  const setStatus=(t,isErr)=>{
+    if(_edSay){
+      _edSay.textContent=t||""; _edSay.classList.toggle("err",!!isErr); _edSay.hidden=!t;
+      /* 6no — an ordinary message has been read by the time it has been there five seconds; an
+         error is the one that has to still be there when the eye gets back to it. */
+      clearTimeout(_sayT);
+      if(t&&!isErr)_sayT=setTimeout(()=>{ try{ _edSay.hidden=true; }catch(e){} },5000);
+    }
+    try{ SK_PAGE_STATUS(t,isErr); }catch(e){}
+  };
   opts=opts||{};
   let tool="erase", brush=18, tol=40, fillCol="#ffffff", done=false;
+  /* 6nl — has the HAND set the zoom? Until it has, the picture stays fitted, so the dock reserving
+     its room (or giving some back) re-fits rather than leaving the picture hanging past the bottom
+     of a stage that just got shorter. The Fit button clears it, because pressing Fit is asking for
+     exactly that behaviour back. Declared up here with the rest of the state because `fitDock`,
+     written far above the zoom controls, reads it. */
+  let zoomUser=false;
   /* =================================================================================================
      6kq — DRAWING INSIDE THE PICTURE. Ced: "add lines and shapes tool in edit picture with
      corresponding editing tools."
@@ -1032,8 +1309,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
        exactly like the glyphs either side of it. Anything that is not markup is still text. */
     const gl=document.createElement("span"); gl.className="sk-edg";
     if(/^\s*<svg\b/i.test(String(glyph||"")))gl.innerHTML=glyph; else gl.textContent=glyph;
-    const tx=document.createElement("span"); tx.textContent=label;
+    const tx=document.createElement("span"); tx.className="sk-edt"; tx.textContent=label;
     b.appendChild(gl); b.appendChild(tx);
+    if(label)b.dataset.name=label;      /* 6ne — what the hover chip says */
     b.onclick=fn; where.appendChild(b); return b;
   };
   /* 6n3 — a group may say how it packs: the rail stacks its buttons in a column, but the five zoom
@@ -1107,24 +1385,24 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
               /* 6lf — and it carries the ink it is about to draw with */
               try{ ring.style.setProperty("--sk-ink",drawCol); }catch(e){} }
     sizeRing(); };
-  bErase  =mkb(gTools,"Erase","◧",()=>setTool("erase"),true,
+  bErase  =mkb(gTools,"Erase",edIco("erase"),()=>setTool("erase"),true,
                "Rub the picture out — hold and sweep","erase");
   /* 6gk — Ced: "the erase should have a restore counterpart." It paints back the picture as it came
      in, from a copy kept aside when the editor opened, so an over-eager sweep is mended by brushing
      over it rather than undone wholesale. */
-  bRestore=mkb(gTools,"Restore","↺",()=>setTool("restore"),false,
+  bRestore=mkb(gTools,"Restore",edIco("restore"),()=>setTool("restore"),false,
                "Brush the original picture back where you erased it","restore");
   /* 6gs — Ced: "add a feature in edit photo where it recognizes the ends of lines in erase function so
      the erasing is easier." A brush has to be traced along a line and stops wherever the hand stops;
      what you actually mean is "this line, all of it". Click one and the connected run of ink is taken,
      end to end — the ends are where the ink stops, which is exactly what the flood finds. */
-  bWipe   =mkb(gTools,"Erase line","✂",()=>setTool("wipe"),false,
+  bWipe   =mkb(gTools,"Erase line",edIco("wipe"),()=>setTool("wipe"),false,
                "Click a line and the whole run goes, end to end — Shift selects it instead","wipe");
   /* 6j3 — RESTORE ALL. Ced: "add restore button on edit photo." Restore beside it is a BRUSH — you
      paint the original back where you rubbed too far — and there was no way to say "put all of it
      back" short of undoing one step at a time. This is that button: the picture as it came in, in one
      press, and it is one undo step like anything else. */
-  mkb(gTools,"Restore all","↺↺",()=>{
+  mkb(gTools,"Restore all",edIco("restoreall"),()=>{
     if(!orig){ setStatus("Nothing to restore from.",true); return; }
     pushGeo();
     if(cv.width!==orig.width||cv.height!==orig.height){
@@ -1140,15 +1418,15 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      knows them, and each one is the gesture it looks like: pen is freehand, the other four are drawn
      from one corner to the other. Shift constrains — a line to the nearest 45°, a box to a square, an
      ellipse to a circle. */
-  drawBtns.pen    =mkb(gDraw,"Pen","✎",()=>setTool("pen"),false,
+  drawBtns.pen    =mkb(gDraw,"Pen",edIco("pen"),()=>setTool("pen"),false,
                        "Draw freehand into the picture","pen");
-  drawBtns.line   =mkb(gDraw,"Line","╱",()=>setTool("line"),false,
+  drawBtns.line   =mkb(gDraw,"Line",ED_ICO_LINE,()=>setTool("line"),false,
                        "Drag a straight line — Shift holds it to 45°","line");
-  drawBtns.arrow  =mkb(gDraw,"Arrow","↗",()=>setTool("arrow"),false,
+  drawBtns.arrow  =mkb(gDraw,"Arrow",ED_ICO_ARROW,()=>setTool("arrow"),false,
                        "Drag an arrow — the head lands where you let go","arrow");
-  drawBtns.rect   =mkb(gDraw,"Box","▭",()=>setTool("rect"),false,
+  drawBtns.rect   =mkb(gDraw,"Box",ED_ICO_BOX,()=>setTool("rect"),false,
                        "Drag a box — Shift makes it square","rect");
-  drawBtns.ellipse=mkb(gDraw,"Ellipse","◯",()=>setTool("ellipse"),false,
+  drawBtns.ellipse=mkb(gDraw,"Ellipse",ED_ICO_ELLIPSE,()=>setTool("ellipse"),false,
                        "Drag an ellipse — Shift makes it a circle","ellipse");
   /* 6la — THE BUCKET. Ced: "add fill option (like bucket)". `Fill selection` paints what the wand
      has already chosen, behind the ink, which is the job for putting a ground under a capture. A
@@ -1159,16 +1437,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      base. Traced in the picture's own proportions (it was 358x404, which is the viewBox) so the shape
      is his and not an approximation of it, and drawn in `currentColor` so it is the same ink as every
      other glyph on the bar. */
-  const BUCKET_SVG=
-    '<svg viewBox="0 0 358 404" fill="currentColor" aria-hidden="true" focusable="false">'+
-      '<path d="M75 150 A104 104 0 0 1 283 150" fill="none" stroke="currentColor" stroke-width="17" '+
-        'stroke-linecap="round"/>'+
-      '<rect x="137" y="13" width="84" height="45" rx="22"/>'+
-      '<rect x="57" y="136" width="244" height="23" rx="11"/>'+
-      '<path d="M70 169 L288 169 L252 364 L106 364 Z"/>'+
-      '<rect x="93" y="373" width="172" height="23" rx="11"/>'+
-    '</svg>';
-  drawBtns.bucket=mkb(gDraw,"Fill",BUCKET_SVG,()=>setTool("bucket"),false,
+  /* 6nd — the old traced bucket is gone: Ced sent a new one, and it is in ED_ICO_PATHS
+     with the rest of the set rather than alone here. */
+  drawBtns.bucket=mkb(gDraw,"Fill",edIco("bucket"),()=>setTool("bucket"),false,
                       "Click a space and it takes the ink colour — Shift to pick the space first","bucket");
   /* =================================================================================================
      6la — AUTO. Ced: "have a automatic mode that will read the photo and will do what it should do.
@@ -1182,7 +1453,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      was indistinguishable from a button that does nothing. The bar says what it is doing and the
      window is given a frame to paint that before the thread is taken. */
   let autoBusy=false;
-  mkb(gTools,"Auto","✺",async()=>{
+  mkb(gTools,"Auto",ED_ICO_AUTO,async()=>{
     if(autoBusy)return;
     autoBusy=true;
     setStatus("Auto: reading the picture…");
@@ -1214,26 +1485,26 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
               " with a free end. A line that crosses right through the shape is left: it closes on "+
               "the outline at both ends, so take it with Erase line. Undo puts all of this back.");
   },false,"Find the subject, take the stray lines off it, and fill it behind the ink — one press","auto");
-  bWand   =mkb(gSel,"Wand","✦",()=>setTool("wand"),false,
+  bWand   =mkb(gSel,"Wand",edIco("wand"),()=>setTool("wand"),false,
                "Click a space to select it — Shift adds another","wand");
   /* 6gt — Ced: "add a lasso effect on edit photo." For everything the wand cannot reach: draw round
      it by hand and what you drew round is selected, through the same three chips. */
-  bLasso  =mkb(gSel,"Lasso","◌",()=>setTool("lasso"),false,
+  bLasso  =mkb(gSel,"Lasso",edIco("lasso"),()=>setTool("lasso"),false,
                "Draw round a region by hand — Shift adds it, Alt takes it out","lasso");
   /* 6la — SHAPED SELECT. Ced: "shaped select - within magic wand type tool". The lasso is for a
      region with no shape to it; most of what wants selecting on a drawing is a rectangle, and
      drawing one by hand round it is both slower and worse. It answers to the same three chips. */
-  bShapeSel=mkb(gSel,"Shape","▱",()=>setTool("shapesel"),false,
+  bShapeSel=mkb(gSel,"Shape",ED_ICO_SHAPE,()=>setTool("shapesel"),false,
                "Drag a rectangle or an ellipse over what you want — Shift adds, Alt takes out","shapesel");
-  bInv    =mkb(gSel,"Invert","⧉",()=>{
+  bInv    =mkb(gSel,"Invert",edIco("invert"),()=>{
     push();
     mask=skMaskInvert(mask,cv.width*cv.height);
     skMaskShow(ov,mask); say();
     setStatus("Selection inverted.");
   },false,"Swap the selection for everything else","invert");
-  bClr    =mkb(gSel,"Deselect","✕",()=>{ push(); mask=null; skMaskShow(ov,null); say(); },false,
+  bClr    =mkb(gSel,"Deselect",edIco("deselect"),()=>{ push(); mask=null; skMaskShow(ov,null); say(); },false,
                "Drop the selection","deselect");
-  bFill   =mkb(gFill,"Fill sel.","■",()=>{
+  bFill   =mkb(gFill,"Fill sel.",edIco("fillsel"),()=>{
     if(!mask||!skMaskCount(mask)){ setStatus("Pick a region with the wand first.",true); return; }
     push();
     skMaskFill(g,cv,mask,fillCol);
@@ -1242,7 +1513,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   /* 6gq — Ced: "add an erase selected feature in edit photos to erase the selected area by magic wand
      tool." The fill's opposite: everything selected is taken out, ink and ground alike. Wand the thing
      you do not want — or wand what you DO want and invert — and it is gone in one press. */
-  bErase2=mkb(gFill,"Clear sel.","\u2327",()=>{
+  bErase2=mkb(gFill,"Clear sel.",edIco("clearsel"),()=>{
     if(!mask||!skMaskCount(mask)){ setStatus("Pick a region with the wand first.",true); return; }
     push();
     skMaskErase(g,cv,mask);
@@ -1255,11 +1526,17 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   gFill.appendChild(col);
 
   /* ---- 6n3 — the settings go to the context strip, the view to the rail, the history to the floor */
-  const gSet=group(bar2), gView=group(bar3,"sk-edview"), gHist=group(bar3,"sk-edhist");
+  /* 6nn — the right column is found, not closed over: it is built in `skEditor` and this is
+     `skEdWire`, the far side of the same boundary the chequer and the dock are found across. */
+  const colR=wrap.querySelector(".sk-edcol-r");
+  const gSet=group(bar2), gView=group(colR,"sk-edview sk-edpanel"), gHist=group(colR,"sk-edhist sk-edpanel");
   const brushRow=document.createElement("label"); brushRow.className="sk-edsize";
   brushRow.appendChild(document.createTextNode("Brush"));
   const rng=document.createElement("input");
   rng.type="range"; rng.min="2"; rng.max="120"; rng.step="1"; rng.value=String(brush);
+  /* 6ng — the gesture the removed paragraph used to carry */
+  rng.title="How wide Erase, Restore and the Pen paint, in picture pixels \u2014 "+
+            "or hold Shift and scroll over the picture";
   const num=document.createElement("span"); num.className="sk-ednum"; num.textContent=brush+"px";
   rng.oninput=()=>{ brush=+rng.value; num.textContent=brush+"px"; sizeRing(); };
   brushRow.appendChild(rng); brushRow.appendChild(num);
@@ -1285,6 +1562,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     nibRow.appendChild(b);
   });
   brushRow.appendChild(nibRow);
+  brushRow.classList.add("sk-edpanel");   /* 6nl */
   gSet.appendChild(brushRow);
   const tolRow=document.createElement("label"); tolRow.className="sk-edsize";
   tolRow.appendChild(document.createTextNode("Tolerance"));
@@ -1292,7 +1570,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   trng.type="range"; trng.min="0"; trng.max="160"; trng.step="1"; trng.value=String(tol);
   const tnum=document.createElement("span"); tnum.className="sk-ednum"; tnum.textContent=String(tol);
   trng.oninput=()=>{ tol=+trng.value; tnum.textContent=String(tol); };
-  tolRow.appendChild(trng); tolRow.appendChild(tnum); gSet.appendChild(tolRow);
+  tolRow.appendChild(trng); tolRow.appendChild(tnum);
+  tolRow.classList.add("sk-edpanel");     /* 6nl */
+  gSet.appendChild(tolRow);
   /* =================================================================================================
      6kq — WHAT THE DRAWING TOOLS DRAW WITH. It sits beside the brush size and the tolerance because
      it is the same kind of thing: a setting for the tool in the hand, shown only while that tool is
@@ -1324,6 +1604,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   bInkFill.title="Paint the inside of a box or an ellipse as well as its edge";
   bInkFill.onclick=()=>{ drawFill=!drawFill; bInkFill.classList.toggle("on",drawFill); };
   inkRow.appendChild(bInkFill);
+  inkRow.classList.add("sk-edpanel");     /* 6nl */
   gSet.appendChild(inkRow);
   /* 6la — what Shape select draws with, and how wide a crowd Auto looks for */
   shapeRow=document.createElement("label"); shapeRow.className="sk-edsize";
@@ -1337,6 +1618,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         z.classList.toggle("on", /ellipse/i.test(z.textContent)===shapeSelEll)); };
     shapeRow.appendChild(b);
   });
+  shapeRow.classList.add("sk-edpanel");   /* 6nl */
   gSet.appendChild(shapeRow);
   /* 6gk — what the next wand click does to the selection. It sits with the tolerance, because both are
      settings for the tool in your hand rather than actions of their own. */
@@ -1353,12 +1635,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         Object.keys(modeBtns).forEach(z=>modeBtns[z].classList.toggle("on",z===k)); };
       modeBtns[k]=b; modeRow.appendChild(b);
     });
+  modeRow.classList.add("sk-edpanel");    /* 6nl */
   gSet.appendChild(modeRow);
 
   /* 6gk — AND IT ZOOMS. A capture is several times the resolution of the screen now, so the editor
      has to be able to get close enough to rub out one line of it. Fit, −, +, and ctrl-wheel; the
      stage scrolls when the picture is bigger than it. */
   let zoom=1, fit=1;
+
   const applyZoom=()=>{
     const W=Math.max(1,Math.round(cv.width*zoom)), H=Math.max(1,Math.round(cv.height*zoom));
     cv.style.width=ov.style.width=W+"px";
@@ -1370,19 +1654,31 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const setZoom=z=>{ zoom=Math.max(0.05,Math.min(8,z)); applyZoom(); dropBox(); };
   /* 6gr — measured off the STAGE, which is now a fixed box: the fit is the fit in the room there is,
      and zooming afterwards never changes that room. */
+  /* 6nl — THE FIT IS TO THE ROOM THAT IS LEFT, NOT TO THE WHOLE STAGE.
+     This measured the stage's border box less a flat 26px, which was right when the stage was
+     nothing but the picture. It now carries the padding that holds the picture clear of the
+     floating rail and the floating dock — 142px on the left and about 137 at the foot — and
+     ignoring that fitted a 560x760 capture to a box 137px taller than the one it had to sit in, so
+     it hung out of the bottom of the stage. `clientWidth`/`clientHeight` are the padding box, so
+     the padding comes off them explicitly. */
   const fitZoom=()=>{
-    const r=stage.getBoundingClientRect();
-    const availW=Math.max(160,(r.width||900)-26);
-    const availH=Math.max(160,(r.height||520)-26);
+    const cs=getComputedStyle(stage);
+    const px=n=>parseFloat(cs[n])||0;
+    const cw=(stage.clientWidth||stage.getBoundingClientRect().width||900)
+             -px("paddingLeft")-px("paddingRight");
+    const ch=(stage.clientHeight||stage.getBoundingClientRect().height||520)
+             -px("paddingTop")-px("paddingBottom");
+    const availW=Math.max(120,cw-10);
+    const availH=Math.max(120,ch-10);
     fit=Math.min(availW/cv.width,availH/cv.height);
     setZoom(Math.min(1,fit));
   };
-  mkb(gView,"","−",()=>setZoom(zoom/1.25),false,"Zoom out","zoomout");
+  mkb(gView,"","−",()=>{zoomUser=true;setZoom(zoom/1.25);},false,"Zoom out \u2014 or hold Ctrl and scroll over the picture","zoomout");
   zoomTag=document.createElement("span"); zoomTag.className="sk-ednum sk-edzoom";
   gView.appendChild(zoomTag);
-  mkb(gView,"","＋",()=>setZoom(zoom*1.25),false,"Zoom in","zoomin");
-  mkb(gView,"Fit","⤢",()=>fitZoom(),false,"Fit the picture in the window","fit");
-  mkb(gView,"1:1","▣",()=>setZoom(1),false,"Every pixel of the capture, one for one","oneone");
+  mkb(gView,"","＋",()=>{zoomUser=true;setZoom(zoom*1.25);},false,"Zoom in \u2014 or hold Ctrl and scroll over the picture","zoomin");
+  mkb(gView,"Fit","⤢",()=>{zoomUser=false;fitZoom();},false,"Fit the picture in the window","fit");
+  mkb(gView,"1:1","▣",()=>{zoomUser=true;setZoom(1);},false,"Every pixel of the capture, one for one","oneone");
   /* 6gt — AND THE PICTURE TURNS. Ced: "add a rotate tool to rotate the photo itself within the edit
      photo." A quarter at a time, losslessly — the pixels are redrawn with the sides swapped rather
      than resampled, so four turns are exactly what you started with. It is an editing step like any
@@ -1409,8 +1705,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     setStatus("Turned a quarter "+(dir<0?"anticlockwise":"clockwise")+
               " — the mark takes the new proportions when you save.");
   };
-  mkb(gTurn,"Rotate left","⟲",()=>turnPic(-1),false,"Turn the picture a quarter anticlockwise","turnleft");
-  mkb(gTurn,"Rotate right","⟳",()=>turnPic(1),false,"Turn the picture a quarter clockwise","turnright");
+  mkb(gTurn,"Rotate left",edIco("turnleft"),()=>turnPic(-1),false,"Turn the picture a quarter anticlockwise","turnleft");
+  mkb(gTurn,"Rotate right",edIco("turnright"),()=>turnPic(1),false,"Turn the picture a quarter clockwise","turnright");
   /* 6i6 — and the two mirrors, beside the two turns */
   const flipPic=axis=>{
     pushGeo();
@@ -1430,8 +1726,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     applyZoom(); dropBox();
     setStatus(axis==="h"?"Flipped left to right." : "Flipped top to bottom.");
   };
-  mkb(gTurn,"Flip H","⇋",()=>flipPic("h"),false,"Mirror the picture left to right","fliph");
-  mkb(gTurn,"Flip V","⇵",()=>flipPic("v"),false,"Mirror the picture top to bottom","flipv");
+  mkb(gTurn,"Flip H",edIco("fliph"),()=>flipPic("h"),false,"Mirror the picture left to right","fliph");
+  mkb(gTurn,"Flip V",edIco("flipv"),()=>flipPic("v"),false,"Mirror the picture top to bottom","flipv");
   /* 6gz — CROP. Ced: "add crop on edit photo to crop the final photo." A snapshot is dragged out over
      a drawing and almost always brings a margin of something else with it; erasing that margin leaves
      it as empty pixels the mark still has to carry and still has to be sized around. A crop takes it
@@ -1555,7 +1851,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      forth costs nothing in quality. The canvas grows to hold the corners, and the mark on the sheet
      grows with it, because a pixel is still worth the same amount of paper. */
   const freeRow=document.createElement("label"); freeRow.className="sk-edsize sk-edfree";
-  freeRow.appendChild(document.createTextNode("Free"));
+  freeRow.appendChild(document.createTextNode("Rotate"));   /* 6n6 — Ced: "rename it to Rotate" */
   const frng=document.createElement("input");
   /* 6iq — A CALMER SLIDER. Ced: "make the rotate slider just be less dramatic." Across the whole 360°
      a pixel of travel was about a degree and a half, so the one thing the free turn is for — taking a
@@ -1563,7 +1859,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      quarter-degree steps now, which is the range a hand-held picture actually needs; the four quarter
      turns beside it are how you go further, and the grip on the picture itself turns freely. */
   frng.type="range"; frng.min="-30"; frng.max="30"; frng.step="0.25"; frng.value="0";
-  frng.title="Straighten the picture — ±30°, a quarter of a degree at a time. Let go to apply. "+
+  frng.title="The picture\u2019s own angle — \u00b130\u00b0, a quarter of a degree at a time. The handle sits where the picture sits; let go to apply. "+
              "For more, use the quarter turns, or drag the ↻ grip on the picture itself";
   const fnum=document.createElement("span"); fnum.className="sk-ednum"; fnum.textContent="0°";
   const fmtDeg=d=>((Math.round(d*100)/100)+"°");
@@ -1617,7 +1913,12 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     try{ if(spinBase)spinBase.width=spinBase.height=0;
          if(spinOrigBase)spinOrigBase.width=spinOrigBase.height=0; }catch(e){}
     spinBase=null; spinOrigBase=null; spinAcc=0;
+    /* 6n6 — and the handle goes back to the middle with it, because the angle it was reading is no
+       longer an angle of anything. A declaration rather than a const for the same reason this
+       function is one: it is called from `push`, which is written far above the slider. */
+    try{ _freeSync&&_freeSync(); }catch(e){}
   }
+  let _freeSync=null;
   const snapCanvas=src=>{ const t=document.createElement("canvas");
     t.width=src.width; t.height=src.height; t.getContext("2d").drawImage(src,0,0); return t; };
   /* the fully transparent border round what is actually drawn, in pixels */
@@ -1692,11 +1993,33 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
               ((trimL||trimT||trimR||trimB)?" and trimmed to the picture":"")+
               " — the mark takes the new shape when you save.");
   };
-  frng.addEventListener("input",()=>preview(+frng.value));
-  const commitFree=()=>{ const deg=+frng.value; frng.value="0"; preview(0); if(deg)turnFree(deg); };
+  /* ==================================================================================================
+     6n6 — THE SLIDER IS THE ANGLE, NOT A NUDGE. Ced: "free slider is not working good."
+
+     It read as a nudge and behaved as one: every release committed the value as a RELATIVE turn and
+     then snapped the handle back to 0. So the reading never told you where the picture actually was,
+     and getting from 12 degrees to 15 meant dragging to 3 and knowing why. Worse, a turn committed
+     at 12 and then a drag to 12 again gave 24.
+
+     The mechanism underneath was already absolute — 6m0's `spinAcc` is the run's total angle and
+     every commit resamples the run's BASE by that total, which is why +10 then -10 gives the
+     original back pixel for pixel. The slider just was not wired to it. It is now: the handle sits
+     at the picture's own angle, a drag previews the DIFFERENCE as a CSS turn, and the release
+     commits that difference so `spinAcc` lands on exactly what the handle says.
+
+     Anything that ends a run of free turns — a brush stroke, a crop, a quarter turn, Restore all —
+     makes the base no longer the truth, so `spinAcc` goes back to 0 and the handle goes with it.
+     ================================================================================================== */
+  const freeSync=()=>{ frng.value=String(((spinAcc+180)%360+360)%360-180);
+    fnum.textContent=fmtDeg(+frng.value); try{ edSyncRange(frng); }catch(e){} };
+  _freeSync=freeSync;
+  frng.addEventListener("input",()=>preview(+frng.value-spinAcc));
+  const commitFree=()=>{ const want=+frng.value, d=want-spinAcc;
+    preview(0); if(d)turnFree(d); freeSync(); };
   ["change","pointerup","pointercancel"].forEach(ev=>
     frng.addEventListener(ev,()=>{ setTimeout(commitFree,0); }));
   freeRow.appendChild(frng); freeRow.appendChild(fnum);
+  freeRow.classList.add("sk-edpanel");    /* 6nl */
   bar3.appendChild(freeRow);                      /* 6n0 — on the sliders' own row, not the tool row */
   /* 6iq — and the grips on the picture drive the same turn. The drag previews with the same CSS
      rotation the slider uses, and the release commits it through `turnFree`, so there is one
@@ -1761,7 +2084,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const row=document.createElement("label"); row.className="sk-edsize sk-edborder";
     row.appendChild(document.createTextNode("Border"));
     const brng=document.createElement("input");
-    brng.type="range"; brng.min="0"; brng.max="12"; brng.step="1";
+    brng.type="range"; brng.min="0"; brng.max="12"; brng.step="0.1";   /* 6np */
     brng.value="0";
     brng.title="Thicken the edge of the cut-out shape, in pixels — 0 for none. "+
                "A picture with no transparent edge has no outline to thicken.";
@@ -1782,9 +2105,23 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
        `bordBase` and `bordOrig` are the UNPADDED pixels, so the size is rebuilt from scratch at
        every step of the drag: v=0 returns the canvas to exactly the size it started at, and going
        6 → 3 does not leave the padding from 6 behind. */
+    /* ==================================================================================================
+       6np — THE BORDER IS CONTINUOUS. Ced: "the stops in border tool in edit picture is too much.
+       make it more seamless like a slider."
+
+       It was `step="1"` over 0..12 — thirteen stops — because the thing underneath is a box
+       dilation and a dilation's radius is a whole number of pixels. So the slider could only ever
+       be thirteen positions however fine its step was made.
+
+       The fraction is painted instead of rounded away. The outline is drawn twice: the mask grown
+       by the WHOLE part at full strength, and the ring between that and one pixel further out at
+       the FRACTION's strength. At 3.0 that second pass is skipped; at 3.4 the outermost pixel of
+       the outline is at 40% and the eye reads a border four tenths of a pixel thicker. The slider
+       is `step="0.1"` now — 121 positions — and the thickening is smooth between them.
+       ================================================================================================== */
     const bordDraw=()=>{
       bordRaf=0;
-      const v=Math.round(bordWant);
+      const vf=Math.max(0,bordWant), v=Math.ceil(vf);
       if(!bordBase){
         bordBase=g.getImageData(0,0,cv.width,cv.height);
         if(orig){ bordOrig=document.createElement("canvas");
@@ -1798,10 +2135,24 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       if(cv.width!==W||cv.height!==H){ cv.width=ov.width=W; cv.height=ov.height=H; }
       g.clearRect(0,0,W,H);
       g.putImageData(bordBase,pad,pad);
-      if(v>0){
+      if(vf>0){
         try{
           const m=skInkMask(g,cv,40);
-          skMaskFill(g,cv,skMaskGrow(m,W,H,v),(a&&a.col)||"#fa3237");
+          const col=(a&&a.col)||"#fa3237";
+          const whole=Math.floor(vf), frac=vf-whole;
+          if(whole>0)skMaskFill(g,cv,skMaskGrow(m,W,H,whole),col);
+          if(frac>0.02){
+            /* the ring one pixel further out, at the fraction's strength. `skMaskFill` paints
+               BEHIND what is already drawn, so the ring has to be a mask of its own rather than a
+               second full grow — otherwise the stronger pass would be the one underneath. */
+            const inner=whole>0?skMaskGrow(m,W,H,whole):m;
+            const outer=skMaskGrow(m,W,H,whole+1);
+            const ring=new Uint8Array(outer.length);
+            for(let i=0;i<outer.length;i++)ring[i]=(outer[i]&&!inner[i])?1:0;
+            g.save(); g.globalAlpha=frac;
+            skMaskFill(g,cv,ring,col);
+            g.restore();
+          }
         }catch(e){}
       }
       /* the untouched copy Restore brushes from is padded the same way, or a restored stroke would
@@ -1831,12 +2182,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     bnum.textContent="none";
     /* 6n0/6n3 — the border row joins the free one on the base strip, and Undo/Redo are moved to the
        end of it so the floor reads left to right as Ced asked for it: free, border, undo, redo. */
-    row.appendChild(brng); row.appendChild(bnum); bar3.appendChild(row);
-    bar3.appendChild(gHist); bar3.appendChild(gView);
+    row.appendChild(brng); row.appendChild(bnum);
+    row.classList.add("sk-edpanel");      /* 6nl */
+    bar3.appendChild(row);
+    colR.appendChild(gHist); colR.appendChild(gView);   /* 6nn — history above zoom, on the right */
   }
   /* 6m1 — one button for both halves of the gesture: it opens the box on the picture's edges, and
      once the box is up it is the Apply. Enter does the same from the keyboard, Escape puts it away. */
-  bCrop=mkb(gTurn,"Crop","◱",()=>{
+  bCrop=mkb(gTurn,"Crop",edIco("crop"),()=>{
     if(cropBox){ cropApply(); return; }
     setTool("crop");
   },false,"Crop the picture — the box starts on its edges; push the sides in, then Apply","crop");
@@ -1858,12 +2211,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       const v=Math.max(+drng.min,Math.min(+drng.max,Math.round((drawPt+dir*st)*4)/4));
       if(v===drawPt)return;
       drawPt=v; drng.value=String(v); dsay(); sizeRing();
+      try{ edSyncRange(drng); }catch(e){}
       return;
     }
     const step=Math.max(1,Math.round(brush*0.16));
     const v=Math.max(+rng.min,Math.min(+rng.max,brush+dir*step));
     if(v===brush)return;
     brush=v; rng.value=String(v); num.textContent=v+"px"; sizeRing();
+    try{ edSyncRange(rng); }catch(e){}
     say&&say();
   };
   const wheel=e=>{
@@ -1875,7 +2230,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     }
     if(e.ctrlKey||e.metaKey){
       e.preventDefault(); e.stopPropagation();
-      setZoom(zoom*(e.deltaY<0?1.12:1/1.12));
+      zoomUser=true; setZoom(zoom*(e.deltaY<0?1.12:1/1.12));   /* 6nl */
       return true;
     }
     return false;
@@ -2444,6 +2799,9 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if((e.ctrlKey||e.metaKey)&&(k==="y"||(k==="z"&&e.shiftKey))){ e.preventDefault(); e.stopPropagation(); bRedo.click(); return; }
   }
   document.addEventListener("keydown",keys,true);
+  /* 6nl — the dock reserves its room BEFORE the first fit, or the picture is fitted to a stage
+     that is about to get shorter and ends up hanging past the bottom of it. */
+  try{ _fitDock&&_fitDock(); }catch(e){}
   fitZoom(); setTool("erase"); say(); syncHist();
   /* 6gs — and the history this picture already has comes back with it: this session's if the editor
      has been open on it before, otherwise the tail written to the browser last time. */
