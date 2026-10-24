@@ -40,6 +40,7 @@
         "toolpop.js",
         "selbar.js",
         "selectkit.js",
+        "customtools.js",
         "harden.js"
       ]
     ],
@@ -60,6 +61,7 @@
     "toolpop.js",
     "selbar.js",
     "selectkit.js",
+    "customtools.js",
     "harden.js"
   ]
 }

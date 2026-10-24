@@ -1,6 +1,6 @@
 {
   "name": "mark-it-up",
-  "version": "60.0.0",
+  "version": "63.0.0",
   "private": true,
   "description": "Single-file PDF redlining tool for mount analyses and construction drawings",
   "type": "module",

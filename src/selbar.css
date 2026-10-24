@@ -618,7 +618,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
   display:flex;flex-direction:column;gap:10px;align-items:flex-start;
   overflow-y:auto;overflow-x:visible;overscroll-behavior:contain;
   pointer-events:none;scrollbar-width:thin}
-.sk-edcol-l{left:10px;width:214px}
+.sk-edcol-l{left:10px;width:282px}   /* v62 — six tools across */
 .sk-edcol-r{right:10px;align-items:flex-end}
 .sk-edcol-l>*,.sk-edcol-r>*{pointer-events:auto;flex:0 0 auto}
 
@@ -634,7 +634,7 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
 /* the tool grid inside its tab */
 .sk-edrail{display:flex;flex-direction:column;width:100%;margin:0;padding:4px 6px;
   align-items:stretch;justify-content:flex-start;flex-wrap:nowrap}
-.sk-edrail .sk-edgrp{display:grid;grid-template-columns:repeat(4,38px);gap:5px;padding:7px 0;
+.sk-edrail .sk-edgrp{display:grid;grid-template-columns:repeat(6,38px);gap:5px;padding:7px 0;
   justify-content:center;border-right:none;border-bottom:1px dotted var(--ske-sep)}
 .sk-edrail .sk-edgrp:last-child{border-bottom:none}
 .sk-edrail .sk-edb{width:38px;height:38px;padding:0;gap:0;justify-content:center;
@@ -665,6 +665,9 @@ html:not(.light) .sk-edsay.err{color:#ffd9da}
 .sk-edcol-r .sk-edgrp.sk-edpanel{padding:6px 8px;gap:5px;align-items:center;
   border-right:none;flex-direction:column}
 .sk-edcol-r .sk-edzoom{order:-1}
+/* v62 — history and zoom ride at the head of the left column, each one row */
+.sk-edcol-l .sk-edgrp.sk-edhist.sk-edpanel,.sk-edcol-l .sk-edgrp.sk-edview.sk-edpanel{flex-direction:row;flex-wrap:wrap;
+  align-items:center;justify-content:center;gap:6px;padding:7px 10px;border-right:none}
 
 /* the settings for the tool in the hand — not tools, so not in the rail */
 .sk-edctx{justify-content:flex-start;gap:10px;margin:0;min-height:0}
@@ -791,6 +794,8 @@ html.light .sk-edb[data-k="auto"] .sk-edg svg path{stroke:rgba(40,46,60,.45);str
 /* 6gj — the selection is shown on its own canvas over the picture, so nothing it draws can end up
    saved into the picture itself */
 .sk-edov{position:absolute;left:0;top:0;display:block;pointer-events:none;image-rendering:auto}
+/* v62 — the lines and shapes drawn in the editor live on this layer until Save, under the selection overlay */
+.sk-edobj{position:absolute;left:0;top:0;display:block;pointer-events:none;image-rendering:auto;z-index:2}
 /* 6gq — the brush, drawn where the pointer is and at the size it will actually rub out. Two rings, one
    light and one dark, so it reads on a white drawing and on a dark one alike. */
 /* 6my — on the CARD, not on the dimmed overlay. 6mu lifted the ring out of the stage so the

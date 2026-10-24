@@ -785,8 +785,8 @@ const ED_ICO_PATHS={
   deselect:   "M12.43 23.98L11.52 23.98L11.48 23.94L10.48 23.89L8.92 23.59L7.28 23.03L5.76 22.25L4.46 21.34L3.10 20.06L2.10 18.80L1.15 17.16L0.76 16.25L0.45 15.34L0.11 13.78L-0.02 12.43L-0.02 11.52L0.11 10.18L0.54 8.32L1.15 6.80L2.10 5.16L3.10 3.90L3.90 3.10L5.29 2.01L6.37 1.36L7.71 0.76L8.92 0.37L10.48 0.06L11.48 0.02L11.52 -0.02L12.43 -0.02L14.04 0.15L15.34 0.45L16.68 0.93L17.59 1.36L19.10 2.32L20.06 3.10L21.34 4.46L22.12 5.55L22.90 6.97L23.50 8.62L23.81 9.92L23.94 10.92L23.98 12.43L23.85 13.78L23.50 15.34L23.03 16.68L22.25 18.19L21.64 19.10L20.86 20.06L19.49 21.34L18.19 22.25L16.68 23.03L15.34 23.50L14.04 23.81L12.45 23.96ZM15.05 17.63L15.34 17.52L16.53 16.33L17.39 15.42L17.57 15.08L17.52 14.69L17.26 14.34L14.92 12.00L17.44 9.40L17.57 9.14L17.57 8.88L17.39 8.53L15.34 6.43L15.16 6.35L14.86 6.35L14.60 6.52L12.04 9.08L9.53 6.61L9.23 6.43L8.88 6.43L8.58 6.61L7.62 7.52L6.48 8.66L6.39 8.84L6.39 9.14L6.61 9.44L9.16 11.96L6.52 14.60L6.35 14.95L6.43 15.25L8.58 17.35L8.88 17.52L9.23 17.52L9.57 17.31L12.04 14.84L14.64 17.48L15.03 17.65Z",
   fillsel:    "M12.58 23.96L11.26 23.96L9.10 23.46L7.86 22.88L6.46 21.89L5.17 20.52L4.43 19.37L3.68 17.46L3.43 16.06L3.43 14.65L3.77 12.91L4.51 10.76L5.50 8.69L7.82 4.97L11.54 0.17L11.83 -0.04L12.37 0.17L15.60 4.39L15.68 4.63L15.02 5.38L15.10 6.37L15.89 6.99L16.47 6.99L17.13 6.58L17.67 7.28L19.74 11.59L20.48 14.81L20.40 16.63L19.90 18.46L19.41 19.53L18.41 20.94L17.46 21.89L16.06 22.88L14.32 23.63L12.62 23.92ZM16.39 4.10L16.06 4.10L15.77 3.81L15.85 1.82L16.30 1.61L16.68 1.99L16.68 3.72L16.43 4.06ZM17.88 4.68L17.34 4.55L17.26 4.14L17.42 3.89L18.70 2.69L18.95 2.69L19.24 2.98L19.16 3.48L17.92 4.63ZM16.47 6.58L15.97 6.58L15.52 6.21L15.43 5.46L15.60 5.21L16.06 4.92L16.84 5.21L17.01 6.04L16.51 6.54ZM14.28 6.12L14.52 5.63L14.23 5.34L12.33 5.34L12.12 5.54L12.12 5.96L12.33 6.17L14.23 6.17ZM19.12 6.25L18.12 6.17L17.83 5.79L17.92 5.54L18.12 5.34L20.11 5.34L20.32 5.54L20.32 5.96L20.11 6.17L19.16 6.21ZM13.78 8.77L15.19 7.28L14.90 6.83L14.57 6.83L13.20 8.19L13.28 8.69L13.74 8.81ZM16.26 9.85L16.47 9.81L16.68 9.43L16.68 7.86L16.47 7.49L15.97 7.49L15.77 7.78L15.77 9.52L16.22 9.89Z",
   clearsel:   "M12.66 23.96L10.68 23.88L9.10 23.46L7.86 22.88L6.29 21.72L5.01 20.28L4.01 18.46L3.43 15.97L3.43 14.81L3.85 12.66L4.68 10.34L5.75 8.19L7.74 5.05L11.46 0.25L12.08 -0.04L12.62 0.50L15.27 4.14L15.06 4.51L14.65 4.59L11.92 1.20L10.22 3.23L7.49 7.03L5.67 10.34L4.76 12.74L4.43 14.15L4.43 16.55L5.34 19.12L6.08 20.19L8.11 21.97L10.01 22.80L11.42 23.05L13.16 22.97L14.65 22.55L16.30 21.64L17.92 20.11L18.58 19.12L19.24 17.63L19.57 15.97L19.57 14.73L19.24 12.99L18.66 11.26L16.76 7.45L17.05 6.99L17.59 7.12L19.16 10.10L20.07 12.58L20.48 14.73L20.40 16.63L19.90 18.46L19.24 19.78L18.33 21.02L17.05 22.22L16.06 22.88L14.07 23.71L12.70 23.92ZM16.22 4.10L15.89 4.10L15.60 3.81L15.68 1.82L16.06 1.61L16.51 1.99L16.51 3.72L16.26 4.06ZM17.71 4.68L17.17 4.55L17.17 3.97L18.37 2.77L18.79 2.69L19.08 2.98L19.08 3.31L18.83 3.64L17.75 4.63ZM16.22 6.58L15.81 6.58L15.35 6.21L15.35 5.30L15.89 4.92L16.68 5.21L16.84 6.04L16.26 6.54ZM13.82 6.25L12.17 6.17L11.88 5.79L11.96 5.54L12.50 5.26L14.15 5.34L14.36 5.54L14.36 5.96L13.86 6.21ZM19.94 6.17L17.96 6.17L17.67 5.79L17.75 5.54L17.96 5.34L19.70 5.26L20.15 5.54L19.99 6.12ZM13.57 8.81L13.24 8.81L13.03 8.61L13.20 7.94L14.40 6.83L14.73 6.83L14.94 7.03L15.02 7.28L14.86 7.61L13.61 8.77ZM16.14 9.89L15.60 9.60L15.60 7.70L16.14 7.41L16.51 7.78L16.51 9.52L16.18 9.85Z",
-  turnleft:   "M13.22 23.89L9.62 23.79L6.13 22.52L3.22 20.25L1.22 17.50L-0.05 13.37L-0.05 10.52L0.69 7.56L2.80 4.07L5.29 1.90L7.82 0.63L10.57 -0.00L14.17 0.11L18.61 1.90L21.30 4.39L22.57 6.29L23.95 11.15L23.84 13.80L22.68 17.39L21.41 19.40L19.03 21.67L16.07 23.26L13.27 23.84ZM12.32 17.71L14.59 16.92L16.33 15.07L17.07 12.42L16.65 10.31L14.59 7.82L11.84 6.98L11.52 5.71L8.46 7.30L8.67 7.93L11.21 9.41L11.68 9.25L11.84 8.14L13.64 8.56L15.07 9.78L15.81 11.26L15.91 13.06L15.49 14.33L13.85 16.07L12.58 16.60L10.68 16.60L9.09 15.75L8.30 15.91L8.30 16.55L9.73 17.44L12.26 17.76Z",
-  turnright:  "M13.32 23.89L9.20 23.68L6.03 22.41L2.59 19.51L1.32 17.60L0.16 14.22L-0.05 11.15L0.79 7.45L2.59 4.39L4.86 2.22L6.77 1.06L9.73 0.11L13.43 -0.00L16.07 0.63L18.61 1.90L20.99 3.96L22.68 6.40L23.95 10.52L23.95 13.37L22.68 17.50L20.99 19.93L18.61 21.99L15.86 23.37L13.37 23.84ZM12.95 17.71L15.22 16.92L15.59 15.91L14.80 15.75L13.22 16.60L11.31 16.60L10.04 16.07L8.19 13.80L8.09 11.26L8.83 9.78L10.04 8.67L12.05 8.14L12.21 9.25L12.69 9.41L15.59 7.45L12.48 5.60L12.05 6.98L10.36 7.30L8.78 8.25L7.14 10.63L7.14 14.11L8.09 15.81L9.30 16.92L11.52 17.76L12.90 17.76Z",
+  turnleft:   "M9.97 23.98L10.03 23.98L10.21 23.86L10.36 23.80L10.57 23.65L10.72 23.59L10.78 23.53L10.93 23.47L10.99 23.41L11.14 23.35L11.20 23.29L11.35 23.23L11.41 23.17L11.56 23.11L11.62 23.05L11.77 22.99L11.83 22.93L11.98 22.87L12.05 22.81L12.20 22.75L12.26 22.69L12.62 22.51L12.83 22.36L12.98 22.30L13.04 22.24L13.19 22.18L13.25 22.12L13.40 22.06L13.46 22.00L13.61 21.94L13.67 21.88L13.82 21.82L13.88 21.76L14.03 21.70L14.09 21.64L14.24 21.58L14.30 21.52L14.45 21.46L14.51 21.40L14.87 21.22L15.08 21.07L15.23 21.01L15.29 20.95L15.44 20.89L15.50 20.83L15.65 20.77L15.71 20.71L15.86 20.65L15.92 20.59L16.07 20.53L16.13 20.47L16.28 20.41L16.34 20.35L16.49 20.29L16.55 20.23L16.70 20.17L16.76 20.11L17.12 19.93L17.33 19.78L17.69 19.60L17.77 19.52L17.72 19.48L17.57 19.42L17.51 19.36L17.36 19.30L17.30 19.24L17.15 19.18L17.09 19.12L16.94 19.06L16.88 19.00L16.73 18.94L16.67 18.88L16.31 18.70L16.10 18.55L15.95 18.49L15.89 18.43L15.74 18.37L15.68 18.31L15.53 18.25L15.47 18.19L15.32 18.13L15.26 18.07L15.11 18.01L15.05 17.95L14.90 17.89L14.84 17.83L14.69 17.77L14.63 17.71L14.48 17.65L14.42 17.59L14.27 17.53L14.21 17.47L13.85 17.29L13.64 17.14L13.49 17.08L13.43 17.02L13.28 16.96L13.22 16.90L13.07 16.84L13.01 16.78L12.86 16.72L12.80 16.66L12.65 16.60L12.59 16.54L12.44 16.48L12.38 16.42L12.23 16.36L12.17 16.30L12.02 16.24L11.95 16.18L11.80 16.12L11.74 16.06L11.59 15.99L11.38 15.84L11.23 15.78L11.17 15.72L11.02 15.66L10.96 15.60L10.81 15.54L10.75 15.48L10.60 15.42L10.54 15.36L10.39 15.30L10.33 15.24L10.18 15.18L10.00 15.06L9.96 15.08L9.96 17.66L9.94 17.68L9.91 17.65L9.85 17.65L9.82 17.62L9.76 17.62L9.73 17.59L9.40 17.50L9.25 17.41L8.98 17.32L8.95 17.29L8.92 17.29L8.89 17.26L8.86 17.26L8.83 17.23L8.44 17.05L8.38 16.99L8.29 16.96L8.23 16.90L8.14 16.87L8.08 16.81L7.78 16.63L7.54 16.45L7.42 16.33L7.39 16.33L7.24 16.18L7.21 16.18L6.44 15.41L6.44 15.38L6.17 15.08L6.11 14.96L6.02 14.87L6.02 14.84L5.78 14.51L5.75 14.42L5.60 14.21L5.60 14.18L5.57 14.15L5.57 14.12L5.54 14.09L5.54 14.06L5.51 14.03L5.51 14.00L5.30 13.61L5.30 13.55L5.21 13.40L5.18 13.25L5.12 13.16L5.12 13.10L5.09 13.07L5.09 13.01L4.97 12.71L4.91 12.41L4.88 12.38L4.88 12.26L4.85 12.23L4.82 11.95L4.79 11.92L4.79 11.77L4.76 11.74L4.76 11.59L4.73 11.56L4.73 11.29L4.70 11.26L4.70 10.15L4.73 10.12L4.73 9.82L4.76 9.79L4.76 9.61L4.79 9.58L4.79 9.43L4.82 9.40L4.85 9.10L4.88 9.07L4.94 8.74L5.00 8.62L5.00 8.53L5.03 8.50L5.03 8.44L5.06 8.41L5.15 8.08L5.30 7.78L5.30 7.72L5.33 7.69L5.33 7.66L5.36 7.63L5.36 7.60L5.39 7.57L5.39 7.54L5.42 7.51L5.42 7.48L5.45 7.45L5.63 7.06L5.69 7.00L5.81 6.76L5.99 6.49L6.08 6.40L6.14 6.28L6.26 6.16L6.38 5.98L6.56 5.80L6.56 5.77L7.12 5.21L7.15 5.21L7.48 4.91L7.51 4.91L7.60 4.82L7.63 4.82L7.72 4.73L7.75 4.73L7.84 4.64L8.11 4.46L8.20 4.43L8.47 4.25L8.50 4.25L8.53 4.22L8.56 4.22L8.59 4.19L8.62 4.19L9.01 3.98L9.07 3.98L9.22 3.89L9.28 3.89L9.52 3.77L9.79 3.68L9.88 3.68L10.00 3.62L10.09 3.62L10.21 3.56L10.33 3.56L10.48 3.50L10.60 3.50L10.78 3.44L10.93 3.44L10.96 3.41L11.17 3.41L11.20 3.38L11.50 3.38L11.53 3.35L12.47 3.35L12.50 3.38L12.80 3.38L12.83 3.41L13.04 3.41L13.07 3.44L13.22 3.44L13.25 3.47L13.52 3.50L13.67 3.56L13.79 3.56L13.91 3.62L14.12 3.65L14.15 3.68L14.48 3.77L14.57 3.83L14.63 3.83L14.72 3.89L14.93 3.95L14.96 3.98L14.99 3.98L15.02 4.01L15.05 4.01L15.08 4.04L15.11 4.04L15.14 4.07L15.17 4.07L15.20 4.10L15.59 4.28L15.65 4.34L15.80 4.40L15.86 4.46L16.04 4.55L16.25 4.70L16.49 4.91L16.64 5.00L16.82 5.18L16.85 5.18L17.50 5.83L17.50 5.86L17.65 6.01L17.65 6.04L17.89 6.31L17.89 6.34L18.04 6.52L18.19 6.79L18.31 6.94L18.37 7.09L18.43 7.15L18.43 7.18L18.46 7.21L18.46 7.24L18.67 7.63L18.67 7.69L18.85 8.05L18.85 8.11L18.88 8.14L18.88 8.20L18.91 8.23L18.91 8.29L19.03 8.59L19.03 8.68L19.09 8.80L19.15 9.04L19.15 9.16L19.18 9.19L19.18 9.31L19.21 9.34L19.24 9.70L19.27 9.73L19.27 9.94L19.30 9.97L19.30 11.23L19.27 11.26L19.27 11.53L19.24 11.56L19.24 11.77L19.21 11.95L19.18 11.98L19.18 12.11L19.15 12.14L19.15 12.26L19.12 12.29L19.06 12.62L19.03 12.65L18.97 12.92L18.88 13.10L18.82 13.34L18.73 13.49L18.64 13.76L18.86 13.89L18.92 13.89L19.31 14.10L19.37 14.10L19.40 14.13L19.43 14.13L19.82 14.34L19.88 14.34L20.28 14.55L20.34 14.55L20.37 14.58L20.40 14.58L20.79 14.79L20.85 14.79L21.24 15.00L21.30 15.00L21.66 15.18L21.70 15.14L21.73 15.02L21.85 14.81L21.85 14.75L21.91 14.66L21.91 14.60L22.03 14.36L22.03 14.30L22.06 14.27L22.06 14.21L22.09 14.18L22.09 14.12L22.21 13.82L22.21 13.73L22.30 13.52L22.30 13.43L22.33 13.40L22.33 13.31L22.42 13.04L22.42 12.92L22.45 12.89L22.45 12.77L22.48 12.74L22.48 12.62L22.54 12.44L22.54 12.26L22.60 12.02L22.60 11.77L22.63 11.74L22.63 11.41L22.66 11.38L22.66 10.57L22.69 10.54L22.69 10.24L22.66 10.21L22.66 9.76L22.63 9.73L22.63 9.46L22.60 9.43L22.60 9.22L22.57 9.01L22.54 8.98L22.54 8.83L22.51 8.80L22.51 8.68L22.48 8.65L22.45 8.38L22.42 8.35L22.42 8.26L22.39 8.23L22.39 8.14L22.36 8.11L22.30 7.78L22.24 7.66L22.24 7.57L22.21 7.54L22.21 7.48L22.18 7.45L22.18 7.39L22.15 7.36L22.06 7.03L22.00 6.94L22.00 6.88L21.94 6.79L21.94 6.73L21.88 6.64L21.82 6.43L21.67 6.16L21.67 6.10L21.64 6.07L21.46 5.68L21.40 5.62L21.31 5.41L21.25 5.35L21.22 5.26L21.16 5.20L21.13 5.11L21.07 5.05L21.04 4.96L20.98 4.90L20.80 4.60L20.71 4.51L20.71 4.48L20.47 4.18L20.47 4.15L20.23 3.87L20.23 3.84L20.05 3.63L19.78 3.36L19.78 3.33L19.37 2.93L19.34 2.93L19.04 2.63L18.83 2.45L18.80 2.45L18.68 2.33L18.65 2.33L18.53 2.21L18.29 2.03L18.17 1.97L18.08 1.88L18.05 1.88L17.99 1.82L17.96 1.82L17.63 1.58L17.33 1.43L17.27 1.37L17.06 1.28L17.00 1.22L16.97 1.22L16.94 1.19L16.91 1.19L16.52 0.98L16.46 0.98L16.25 0.86L16.19 0.86L16.04 0.77L15.98 0.77L15.74 0.65L15.68 0.65L15.65 0.62L15.59 0.62L15.56 0.59L15.50 0.59L15.47 0.56L15.41 0.56L15.38 0.53L15.32 0.53L15.02 0.41L14.81 0.38L14.69 0.32L14.60 0.32L14.33 0.23L14.21 0.23L14.18 0.20L13.91 0.17L13.88 0.14L13.73 0.14L13.52 0.08L13.31 0.08L13.28 0.05L13.01 0.05L12.98 0.02L12.56 0.02L12.53 -0.02L11.47 -0.02L11.44 0.02L11.02 0.02L10.99 0.05L10.72 0.05L10.69 0.08L10.51 0.08L10.48 0.11L10.12 0.14L10.09 0.17L9.97 0.17L9.94 0.20L9.67 0.23L9.64 0.26L9.31 0.32L9.19 0.38L9.10 0.38L8.98 0.44L8.89 0.44L8.86 0.47L8.80 0.47L8.77 0.50L8.71 0.50L8.68 0.53L8.35 0.62L8.26 0.68L8.20 0.68L8.11 0.74L7.90 0.80L7.75 0.89L7.69 0.89L7.48 1.01L7.42 1.01L7.18 1.13L7.12 1.19L6.85 1.31L6.79 1.37L6.43 1.55L6.37 1.61L6.34 1.61L6.28 1.67L6.25 1.67L6.19 1.73L5.89 1.91L5.59 2.15L5.56 2.15L5.44 2.27L5.41 2.27L5.29 2.39L5.11 2.51L4.87 2.75L4.84 2.75L4.07 3.51L4.07 3.54L3.89 3.72L3.89 3.75L3.59 4.09L3.59 4.12L3.41 4.33L3.35 4.45L3.26 4.54L3.26 4.57L3.20 4.63L3.20 4.66L2.96 4.99L2.93 5.08L2.87 5.14L2.84 5.23L2.69 5.44L2.69 5.47L2.66 5.50L2.66 5.53L2.63 5.56L2.63 5.59L2.60 5.62L2.60 5.65L2.57 5.68L2.57 5.71L2.54 5.74L2.54 5.77L2.51 5.80L2.51 5.83L2.48 5.86L2.48 5.89L2.27 6.28L2.27 6.34L2.18 6.49L2.18 6.55L2.03 6.85L1.97 7.09L1.91 7.18L1.82 7.45L1.82 7.54L1.76 7.66L1.76 7.75L1.70 7.87L1.64 8.20L1.61 8.23L1.61 8.35L1.58 8.38L1.55 8.62L1.52 8.65L1.52 8.80L1.49 8.83L1.49 8.98L1.46 9.01L1.46 9.19L1.43 9.22L1.43 9.43L1.40 9.46L1.40 9.70L1.37 9.73L1.37 10.18L1.34 10.21L1.34 11.32L1.37 11.35L1.37 11.71L1.40 11.74L1.40 11.98L1.43 12.02L1.43 12.20L1.46 12.23L1.49 12.56L1.52 12.59L1.52 12.71L1.55 12.74L1.58 13.01L1.61 13.04L1.61 13.13L1.64 13.16L1.70 13.49L1.76 13.61L1.76 13.70L1.79 13.73L1.79 13.79L1.82 13.82L1.82 13.88L1.85 13.91L1.85 13.97L1.88 14.00L1.97 14.33L2.03 14.42L2.03 14.48L2.09 14.57L2.15 14.78L2.24 14.93L2.24 14.99L2.27 15.02L2.27 15.05L2.30 15.08L2.30 15.11L2.33 15.14L2.33 15.17L2.36 15.20L2.36 15.23L2.39 15.26L2.39 15.29L2.42 15.32L2.42 15.35L2.45 15.38L2.45 15.41L2.48 15.44L2.66 15.83L2.72 15.89L2.78 16.04L2.84 16.10L2.96 16.34L3.02 16.40L3.02 16.43L3.08 16.49L3.26 16.79L3.35 16.88L3.53 17.15L3.65 17.27L3.77 17.45L3.92 17.60L3.92 17.63L4.19 17.90L4.19 17.93L4.78 18.52L4.81 18.52L5.05 18.76L5.08 18.76L5.38 19.03L5.41 19.03L5.74 19.30L5.86 19.36L5.95 19.45L6.22 19.63L6.31 19.66L6.46 19.78L6.76 19.93L6.82 19.99L7.15 20.14L7.39 20.29L7.45 20.29L7.72 20.44L7.78 20.44L7.93 20.53L7.99 20.53L8.23 20.65L8.29 20.65L8.32 20.68L8.38 20.68L8.41 20.71L8.47 20.71L8.50 20.74L8.56 20.74L8.59 20.77L8.65 20.77L8.68 20.80L8.74 20.80L8.77 20.83L8.83 20.83L9.13 20.95L9.22 20.95L9.49 21.04L9.61 21.04L9.64 21.07L9.73 21.07L9.96 21.15L9.96 23.97Z",   /* v61 — Ced's circular arrow, mirrored */
+  turnright:  "M14.03 23.98L13.97 23.98L13.79 23.86L13.64 23.80L13.43 23.65L13.28 23.59L13.22 23.53L13.07 23.47L13.01 23.41L12.86 23.35L12.80 23.29L12.65 23.23L12.59 23.17L12.44 23.11L12.38 23.05L12.23 22.99L12.17 22.93L12.02 22.87L11.95 22.81L11.80 22.75L11.74 22.69L11.38 22.51L11.17 22.36L11.02 22.30L10.96 22.24L10.81 22.18L10.75 22.12L10.60 22.06L10.54 22.00L10.39 21.94L10.33 21.88L10.18 21.82L10.12 21.76L9.97 21.70L9.91 21.64L9.76 21.58L9.70 21.52L9.55 21.46L9.49 21.40L9.13 21.22L8.92 21.07L8.77 21.01L8.71 20.95L8.56 20.89L8.50 20.83L8.35 20.77L8.29 20.71L8.14 20.65L8.08 20.59L7.93 20.53L7.87 20.47L7.72 20.41L7.66 20.35L7.51 20.29L7.45 20.23L7.30 20.17L7.24 20.11L6.88 19.93L6.67 19.78L6.31 19.60L6.23 19.52L6.28 19.48L6.43 19.42L6.49 19.36L6.64 19.30L6.70 19.24L6.85 19.18L6.91 19.12L7.06 19.06L7.12 19.00L7.27 18.94L7.33 18.88L7.69 18.70L7.90 18.55L8.05 18.49L8.11 18.43L8.26 18.37L8.32 18.31L8.47 18.25L8.53 18.19L8.68 18.13L8.74 18.07L8.89 18.01L8.95 17.95L9.10 17.89L9.16 17.83L9.31 17.77L9.37 17.71L9.52 17.65L9.58 17.59L9.73 17.53L9.79 17.47L10.15 17.29L10.36 17.14L10.51 17.08L10.57 17.02L10.72 16.96L10.78 16.90L10.93 16.84L10.99 16.78L11.14 16.72L11.20 16.66L11.35 16.60L11.41 16.54L11.56 16.48L11.62 16.42L11.77 16.36L11.83 16.30L11.98 16.24L12.05 16.18L12.20 16.12L12.26 16.06L12.41 15.99L12.62 15.84L12.77 15.78L12.83 15.72L12.98 15.66L13.04 15.60L13.19 15.54L13.25 15.48L13.40 15.42L13.46 15.36L13.61 15.30L13.67 15.24L13.82 15.18L14.00 15.06L14.04 15.08L14.04 17.66L14.06 17.68L14.09 17.65L14.15 17.65L14.18 17.62L14.24 17.62L14.27 17.59L14.60 17.50L14.75 17.41L15.02 17.32L15.05 17.29L15.08 17.29L15.11 17.26L15.14 17.26L15.17 17.23L15.56 17.05L15.62 16.99L15.71 16.96L15.77 16.90L15.86 16.87L15.92 16.81L16.22 16.63L16.46 16.45L16.58 16.33L16.61 16.33L16.76 16.18L16.79 16.18L17.56 15.41L17.56 15.38L17.83 15.08L17.89 14.96L17.98 14.87L17.98 14.84L18.22 14.51L18.25 14.42L18.40 14.21L18.40 14.18L18.43 14.15L18.43 14.12L18.46 14.09L18.46 14.06L18.49 14.03L18.49 14.00L18.70 13.61L18.70 13.55L18.79 13.40L18.82 13.25L18.88 13.16L18.88 13.10L18.91 13.07L18.91 13.01L19.03 12.71L19.09 12.41L19.12 12.38L19.12 12.26L19.15 12.23L19.18 11.95L19.21 11.92L19.21 11.77L19.24 11.74L19.24 11.59L19.27 11.56L19.27 11.29L19.30 11.26L19.30 10.15L19.27 10.12L19.27 9.82L19.24 9.79L19.24 9.61L19.21 9.58L19.21 9.43L19.18 9.40L19.15 9.10L19.12 9.07L19.06 8.74L19.00 8.62L19.00 8.53L18.97 8.50L18.97 8.44L18.94 8.41L18.85 8.08L18.70 7.78L18.70 7.72L18.67 7.69L18.67 7.66L18.64 7.63L18.64 7.60L18.61 7.57L18.61 7.54L18.58 7.51L18.58 7.48L18.55 7.45L18.37 7.06L18.31 7.00L18.19 6.76L18.01 6.49L17.92 6.40L17.86 6.28L17.74 6.16L17.62 5.98L17.44 5.80L17.44 5.77L16.88 5.21L16.85 5.21L16.52 4.91L16.49 4.91L16.40 4.82L16.37 4.82L16.28 4.73L16.25 4.73L16.16 4.64L15.89 4.46L15.80 4.43L15.53 4.25L15.50 4.25L15.47 4.22L15.44 4.22L15.41 4.19L15.38 4.19L14.99 3.98L14.93 3.98L14.78 3.89L14.72 3.89L14.48 3.77L14.21 3.68L14.12 3.68L14.00 3.62L13.91 3.62L13.79 3.56L13.67 3.56L13.52 3.50L13.40 3.50L13.22 3.44L13.07 3.44L13.04 3.41L12.83 3.41L12.80 3.38L12.50 3.38L12.47 3.35L11.53 3.35L11.50 3.38L11.20 3.38L11.17 3.41L10.96 3.41L10.93 3.44L10.78 3.44L10.75 3.47L10.48 3.50L10.33 3.56L10.21 3.56L10.09 3.62L9.88 3.65L9.85 3.68L9.52 3.77L9.43 3.83L9.37 3.83L9.28 3.89L9.07 3.95L9.04 3.98L9.01 3.98L8.98 4.01L8.95 4.01L8.92 4.04L8.89 4.04L8.86 4.07L8.83 4.07L8.80 4.10L8.41 4.28L8.35 4.34L8.20 4.40L8.14 4.46L7.96 4.55L7.75 4.70L7.51 4.91L7.36 5.00L7.18 5.18L7.15 5.18L6.50 5.83L6.50 5.86L6.35 6.01L6.35 6.04L6.11 6.31L6.11 6.34L5.96 6.52L5.81 6.79L5.69 6.94L5.63 7.09L5.57 7.15L5.57 7.18L5.54 7.21L5.54 7.24L5.33 7.63L5.33 7.69L5.15 8.05L5.15 8.11L5.12 8.14L5.12 8.20L5.09 8.23L5.09 8.29L4.97 8.59L4.97 8.68L4.91 8.80L4.85 9.04L4.85 9.16L4.82 9.19L4.82 9.31L4.79 9.34L4.76 9.70L4.73 9.73L4.73 9.94L4.70 9.97L4.70 11.23L4.73 11.26L4.73 11.53L4.76 11.56L4.76 11.77L4.79 11.95L4.82 11.98L4.82 12.11L4.85 12.14L4.85 12.26L4.88 12.29L4.94 12.62L4.97 12.65L5.03 12.92L5.12 13.10L5.18 13.34L5.27 13.49L5.36 13.76L5.14 13.89L5.08 13.89L4.69 14.10L4.63 14.10L4.60 14.13L4.57 14.13L4.18 14.34L4.12 14.34L3.72 14.55L3.66 14.55L3.63 14.58L3.60 14.58L3.21 14.79L3.15 14.79L2.76 15.00L2.70 15.00L2.34 15.18L2.30 15.14L2.27 15.02L2.15 14.81L2.15 14.75L2.09 14.66L2.09 14.60L1.97 14.36L1.97 14.30L1.94 14.27L1.94 14.21L1.91 14.18L1.91 14.12L1.79 13.82L1.79 13.73L1.70 13.52L1.70 13.43L1.67 13.40L1.67 13.31L1.58 13.04L1.58 12.92L1.55 12.89L1.55 12.77L1.52 12.74L1.52 12.62L1.46 12.44L1.46 12.26L1.40 12.02L1.40 11.77L1.37 11.74L1.37 11.41L1.34 11.38L1.34 10.57L1.31 10.54L1.31 10.24L1.34 10.21L1.34 9.76L1.37 9.73L1.37 9.46L1.40 9.43L1.40 9.22L1.43 9.01L1.46 8.98L1.46 8.83L1.49 8.80L1.49 8.68L1.52 8.65L1.55 8.38L1.58 8.35L1.58 8.26L1.61 8.23L1.61 8.14L1.64 8.11L1.70 7.78L1.76 7.66L1.76 7.57L1.79 7.54L1.79 7.48L1.82 7.45L1.82 7.39L1.85 7.36L1.94 7.03L2.00 6.94L2.00 6.88L2.06 6.79L2.06 6.73L2.12 6.64L2.18 6.43L2.33 6.16L2.33 6.10L2.36 6.07L2.54 5.68L2.60 5.62L2.69 5.41L2.75 5.35L2.78 5.26L2.84 5.20L2.87 5.11L2.93 5.05L2.96 4.96L3.02 4.90L3.20 4.60L3.29 4.51L3.29 4.48L3.53 4.18L3.53 4.15L3.77 3.87L3.77 3.84L3.95 3.63L4.22 3.36L4.22 3.33L4.63 2.93L4.66 2.93L4.96 2.63L5.17 2.45L5.20 2.45L5.32 2.33L5.35 2.33L5.47 2.21L5.71 2.03L5.83 1.97L5.92 1.88L5.95 1.88L6.01 1.82L6.04 1.82L6.37 1.58L6.67 1.43L6.73 1.37L6.94 1.28L7.00 1.22L7.03 1.22L7.06 1.19L7.09 1.19L7.48 0.98L7.54 0.98L7.75 0.86L7.81 0.86L7.96 0.77L8.02 0.77L8.26 0.65L8.32 0.65L8.35 0.62L8.41 0.62L8.44 0.59L8.50 0.59L8.53 0.56L8.59 0.56L8.62 0.53L8.68 0.53L8.98 0.41L9.19 0.38L9.31 0.32L9.40 0.32L9.67 0.23L9.79 0.23L9.82 0.20L10.09 0.17L10.12 0.14L10.27 0.14L10.48 0.08L10.69 0.08L10.72 0.05L10.99 0.05L11.02 0.02L11.44 0.02L11.47 -0.02L12.53 -0.02L12.56 0.02L12.98 0.02L13.01 0.05L13.28 0.05L13.31 0.08L13.49 0.08L13.52 0.11L13.88 0.14L13.91 0.17L14.03 0.17L14.06 0.20L14.33 0.23L14.36 0.26L14.69 0.32L14.81 0.38L14.90 0.38L15.02 0.44L15.11 0.44L15.14 0.47L15.20 0.47L15.23 0.50L15.29 0.50L15.32 0.53L15.65 0.62L15.74 0.68L15.80 0.68L15.89 0.74L16.10 0.80L16.25 0.89L16.31 0.89L16.52 1.01L16.58 1.01L16.82 1.13L16.88 1.19L17.15 1.31L17.21 1.37L17.57 1.55L17.63 1.61L17.66 1.61L17.72 1.67L17.75 1.67L17.81 1.73L18.11 1.91L18.41 2.15L18.44 2.15L18.56 2.27L18.59 2.27L18.71 2.39L18.89 2.51L19.13 2.75L19.16 2.75L19.93 3.51L19.93 3.54L20.11 3.72L20.11 3.75L20.41 4.09L20.41 4.12L20.59 4.33L20.65 4.45L20.74 4.54L20.74 4.57L20.80 4.63L20.80 4.66L21.04 4.99L21.07 5.08L21.13 5.14L21.16 5.23L21.31 5.44L21.31 5.47L21.34 5.50L21.34 5.53L21.37 5.56L21.37 5.59L21.40 5.62L21.40 5.65L21.43 5.68L21.43 5.71L21.46 5.74L21.46 5.77L21.49 5.80L21.49 5.83L21.52 5.86L21.52 5.89L21.73 6.28L21.73 6.34L21.82 6.49L21.82 6.55L21.97 6.85L22.03 7.09L22.09 7.18L22.18 7.45L22.18 7.54L22.24 7.66L22.24 7.75L22.30 7.87L22.36 8.20L22.39 8.23L22.39 8.35L22.42 8.38L22.45 8.62L22.48 8.65L22.48 8.80L22.51 8.83L22.51 8.98L22.54 9.01L22.54 9.19L22.57 9.22L22.57 9.43L22.60 9.46L22.60 9.70L22.63 9.73L22.63 10.18L22.66 10.21L22.66 11.32L22.63 11.35L22.63 11.71L22.60 11.74L22.60 11.98L22.57 12.02L22.57 12.20L22.54 12.23L22.51 12.56L22.48 12.59L22.48 12.71L22.45 12.74L22.42 13.01L22.39 13.04L22.39 13.13L22.36 13.16L22.30 13.49L22.24 13.61L22.24 13.70L22.21 13.73L22.21 13.79L22.18 13.82L22.18 13.88L22.15 13.91L22.15 13.97L22.12 14.00L22.03 14.33L21.97 14.42L21.97 14.48L21.91 14.57L21.85 14.78L21.76 14.93L21.76 14.99L21.73 15.02L21.73 15.05L21.70 15.08L21.70 15.11L21.67 15.14L21.67 15.17L21.64 15.20L21.64 15.23L21.61 15.26L21.61 15.29L21.58 15.32L21.58 15.35L21.55 15.38L21.55 15.41L21.52 15.44L21.34 15.83L21.28 15.89L21.22 16.04L21.16 16.10L21.04 16.34L20.98 16.40L20.98 16.43L20.92 16.49L20.74 16.79L20.65 16.88L20.47 17.15L20.35 17.27L20.23 17.45L20.08 17.60L20.08 17.63L19.81 17.90L19.81 17.93L19.22 18.52L19.19 18.52L18.95 18.76L18.92 18.76L18.62 19.03L18.59 19.03L18.26 19.30L18.14 19.36L18.05 19.45L17.78 19.63L17.69 19.66L17.54 19.78L17.24 19.93L17.18 19.99L16.85 20.14L16.61 20.29L16.55 20.29L16.28 20.44L16.22 20.44L16.07 20.53L16.01 20.53L15.77 20.65L15.71 20.65L15.68 20.68L15.62 20.68L15.59 20.71L15.53 20.71L15.50 20.74L15.44 20.74L15.41 20.77L15.35 20.77L15.32 20.80L15.26 20.80L15.23 20.83L15.17 20.83L14.87 20.95L14.78 20.95L14.51 21.04L14.39 21.04L14.36 21.07L14.27 21.07L14.04 21.15L14.04 23.97Z",   /* v61 — Ced: "rotate icons on edit photo should be changed to this" */
   fliph:      "M14.70 11.81L14.42 11.72L14.33 8.47L5.77 8.47L3.72 9.40L2.23 10.88L2.14 8.56L2.51 7.26L3.26 5.95L4.84 4.37L6.88 3.44L14.33 3.26L14.42 0.00L14.70 -0.09L21.67 5.77L14.79 11.72ZM9.30 23.91L2.14 17.86L9.12 11.81L9.40 11.91L9.49 15.16L17.86 15.16L19.53 14.60L21.58 12.93L21.67 15.07L21.30 16.37L20.56 17.67L18.98 19.26L18.05 19.81L16.00 20.37L9.49 20.37L9.40 23.81Z",
   flipv:      "M18.05 21.70L17.73 21.66L17.89 21.59L16.97 20.75L15.87 19.16L15.12 18.56L14.93 18.04L14.02 17.27L13.99 16.94L13.84 17.01L13.81 16.73L12.01 14.86L12.02 14.47L15.31 14.45L15.27 5.83L15.15 5.96L15.11 5.30L14.36 3.78L13.28 2.48L12.90 2.31L16.04 2.46L16.07 2.67L16.56 2.70L17.87 3.40L19.17 4.69L19.56 5.59L19.94 5.86L20.34 7.79L20.46 7.65L20.47 14.43L23.99 14.50L23.09 15.45L22.90 15.96L22.15 16.57L21.78 17.27L21.21 17.67L20.12 19.26L19.37 19.87L19.17 20.38L18.26 21.15L18.06 21.69ZM10.89 21.72L8.65 21.70L7.38 21.35L7.32 21.13L6.07 20.58L4.59 19.10L4.37 18.39L4.26 18.58L4.06 18.14L3.66 16.20L3.54 16.33L3.53 9.55L-0.01 9.47L1.79 7.42L1.82 7.14L2.91 6.12L2.94 5.84L3.68 5.25L3.88 4.72L4.97 3.69L5.00 3.41L5.86 2.64L5.89 2.31L6.28 2.45L7.34 3.96L7.92 4.35L8.46 5.25L9.76 6.55L9.95 7.06L11.99 9.14L11.98 9.52L8.63 9.54L8.66 18.01L9.60 20.24L10.90 21.71Z",
   crop:       "M23.92 11.54L22.83 11.54L22.45 11.41L22.20 10.16L21.37 8.07L20.36 6.48L19.15 5.10L17.73 3.93L15.80 2.84L15.68 2.97L15.60 3.97L15.39 4.18L12.67 0.63L12.96 0.50L13.80 0.67L16.22 1.42L17.98 2.34L19.65 3.60L21.37 5.39L22.62 7.32L23.54 9.49L23.96 11.50ZM17.39 19.07L15.76 19.02L15.72 17.31L8.20 17.31L7.44 16.98L6.82 16.26L6.56 15.51L6.56 8.15L4.85 8.11L4.81 6.48L6.52 6.44L6.56 4.89L6.69 4.77L8.24 4.81L8.24 15.43L8.45 15.64L18.98 15.64L19.11 15.76L19.11 17.27L17.56 17.31L17.44 17.44L17.44 19.02ZM17.39 14.05L15.89 14.05L15.76 13.92L15.76 8.32L15.55 8.11L9.95 8.11L9.91 6.48L15.64 6.44L16.64 6.86L17.02 7.23L17.44 8.07L17.44 14.01ZM11.12 23.41L8.86 22.91L7.36 22.33L6.10 21.66L4.18 20.24L2.63 18.61L1.55 17.02L0.54 14.84L-0.04 12.42L1.46 12.42L1.88 14.26L2.80 16.26L3.89 17.85L5.44 19.40L6.86 20.40L7.94 20.99L8.24 20.95L8.32 20.03L8.53 19.74L11.16 23.12L11.16 23.37Z",
@@ -969,6 +969,8 @@ function skEditor(a,opts){
   const box=document.createElement("div"); box.className="sk-edwrap";
   const cv=document.createElement("canvas"); cv.className="sk-edcanvas";
   const ov=document.createElement("canvas"); ov.className="sk-edov";
+  /* v62 — the layer the drawn lines and shapes live on until Save (see "LIVE SHAPES" below) */
+  const ol=document.createElement("canvas"); ol.className="sk-edobj";
   /* 6gq — Ced: "make sure the brush is visible in the UI of the edit photos in snapshot so erasing is
      not confusing." A ring the size of the brush, following the pointer, so you can see what a sweep
      will take before you take it. */
@@ -1010,7 +1012,7 @@ function skEditor(a,opts){
      because the edge is where you are being careful. It hangs off the editor's own full-window
      overlay now and is positioned in client coordinates, so it is never clipped by anything and is
      over every part of the editor. */
-  box.appendChild(cv); box.appendChild(ov); stage.appendChild(box); card.appendChild(ring);
+  box.appendChild(cv); box.appendChild(ol); box.appendChild(ov); stage.appendChild(box); card.appendChild(ring);
   const foot=document.createElement("div"); foot.className="sk-edfoot";
   colL.appendChild(bar); colL.appendChild(bar2); colL.appendChild(bar3);
   body.appendChild(colL); body.appendChild(stage); body.appendChild(colR);
@@ -1043,6 +1045,10 @@ function skEditor(a,opts){
   SK_ED=wrap;
 }
 function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
+  /* v62 — the live-shape layer skEditor put in the box (made there rather than passed, so the long
+     argument list is unchanged for anything else that builds an editor) */
+  const ol=box.querySelector(".sk-edobj")||(()=>{ const c=document.createElement("canvas");
+    c.className="sk-edobj"; box.insertBefore(c,ov); return c; })();
   /* 6n0 — the sliders' row, found rather than passed: this is the far side of the same function
      boundary the chequer is found across in 6m0, and a fourteenth positional argument for one
      element is worse than a lookup. Not guarded — if the row is missing the sliders have nowhere to
@@ -1244,7 +1250,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     c.getContext("2d").drawImage(src,0,0); return c; };
   const shot=()=>({cv:snapCv(cv),
                    w:cv.width,h:cv.height,rot:picRot,
-                   mask:mask?Uint8Array.from(mask):null});
+                   mask:mask?Uint8Array.from(mask):null,
+                   objs:objs.map(o=>Object.assign({},o))});     /* v62 — the live shapes too */
   /* 6gz — A CROP THROWS PIXELS AWAY, so a step that changes the picture's SHAPE carries the untouched
      original with it as well. Only those steps do: a brush stroke is a picture and nothing else, and
      doubling every step's memory to cover the two rare ones would halve how far back the history goes.
@@ -1277,6 +1284,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     else if(r!==picRot){ turnOrig(((r-picRot)%4+4)%4); picRot=r; }
     if(cv.width!==w||cv.height!==h){ cv.width=ov.width=w; cv.height=ov.height=h; applyZoom(); dropBox(); }
     drawBack(g,st,w,h); mask=st.mask?Uint8Array.from(st.mask):null;
+    objs=Array.isArray(st.objs)?st.objs.map(o=>Object.assign({},o)):[]; objSel=-1; drawObjs();
     skMaskShow(ov,mask); say(); };
   /* 6m0 — ANY change to the pixels ends a run of free turns, because the base a run resamples from is
      the picture as it was before the run and would silently throw away whatever has been done since.
@@ -1288,13 +1296,139 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
      operation goes through `push`, and anything that changes the picture makes the slider's starting
      point stale. Its own push is the one exception, so a drag can go up and back down again. */
   let bordBase=null, bordOrig=null, bordHold=false, bordPushed=false;
+
+  /* =================================================================================================
+     v62 — LIVE SHAPES. Ced: "for added lines, shapes in edit photo, make them movable and dont flatten
+     them yet unless saved."
+     A line, arrow, box or ellipse is kept as an object — two points, a colour, a weight — on its own
+     layer over the picture, and drawn into the pixels only when the picture is saved (or when a turn,
+     flip, crop or Restore all changes what a pixel position means; that step keeps them live, so Undo
+     brings them back movable). Each history step carries them, so Undo and Redo move them too.
+     ================================================================================================= */
+  let objs=[], objSel=-1;
+  function paintObj(ctx,o){
+        const tool=o.tool, w=o.w, x0=o.x0, y0=o.y0, X1=o.x1, Y1=o.y1, drawCol=o.col, drawFill=!!o.fill;
+        ctx.save();
+        ctx.strokeStyle=drawCol; ctx.fillStyle=drawCol;
+        /* 6lf — SHARP CORNERS. Ced: "make the shapes all have sharp corners."
+           `lineJoin:"round"` put a radius on all four corners of a box — at 12pt on a 1200px capture
+           that is a 24px fillet, which reads as a rounded rectangle and not as the box that was
+           drawn — and `lineCap:"round"` hung half a stroke width past each end of a line, so a line
+           dragged to a corner overshot it. A box, a line and an arrow are drawing instruments and a
+           drawing instrument has corners. `miter` for the join, `butt` for the cap, and a miter limit
+           high enough that a shallow corner stays a point instead of being cut square by the default
+           limit of 10.
+           The PEN keeps its round cap and join and is not drawn here: a freehand stroke is dabs joined
+           end to end, and butt caps would leave a notch at every one of them. */
+        ctx.lineWidth=w; ctx.lineCap="butt"; ctx.lineJoin="miter"; ctx.miterLimit=24;
+        if(tool==="line"||tool==="arrow"){
+          const dx=X1-x0, dy=Y1-y0, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+          if(tool==="arrow"){
+            /* the shaft stops short of the head, so the point is a point and not a blob */
+            const hl=Math.max(w*3.4,w+2), hw=hl*0.52;
+            ctx.beginPath(); ctx.moveTo(x0,y0);
+            ctx.lineTo(X1-ux*hl*0.8,Y1-uy*hl*0.8); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(X1,Y1);
+            ctx.lineTo(X1-ux*hl-uy*hw, Y1-uy*hl+ux*hw);
+            ctx.lineTo(X1-ux*hl+uy*hw, Y1-uy*hl-ux*hw);
+            ctx.closePath(); ctx.fill();
+          }else{
+            ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(X1,Y1); ctx.stroke();
+          }
+        }else{
+          const X=Math.min(x0,X1), Y=Math.min(y0,Y1);
+          const W=Math.abs(X1-x0), H=Math.abs(Y1-y0);
+          ctx.beginPath();
+          if(tool==="ellipse")ctx.ellipse(X+W/2,Y+H/2,Math.max(0.5,W/2),Math.max(0.5,H/2),0,0,Math.PI*2);
+          else ctx.rect(X,Y,W,H);
+          if(drawFill)ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+  function drawObjs(){
+    if(ol.width!==cv.width||ol.height!==cv.height){ ol.width=cv.width; ol.height=cv.height; }
+    ol.style.width=cv.style.width; ol.style.height=cv.style.height;
+    const c=ol.getContext("2d"); c.clearRect(0,0,ol.width,ol.height);
+    objs.forEach(o=>paintObj(c,o));
+    const o=objs[objSel]; if(!o)return;
+    const z=Math.max(0.05,zoom), hs=5/z, pad=Math.max(o.w/2,0)+4/z;
+    c.save(); c.lineWidth=1.25/z; c.strokeStyle="#2f7be0"; c.setLineDash([4/z,3/z]);
+    if(o.tool==="line"||o.tool==="arrow"){
+      c.beginPath(); c.moveTo(o.x0,o.y0); c.lineTo(o.x1,o.y1); c.stroke();
+    }else{
+      const X=Math.min(o.x0,o.x1)-pad, Y=Math.min(o.y0,o.y1)-pad;
+      c.strokeRect(X,Y,Math.abs(o.x1-o.x0)+2*pad,Math.abs(o.y1-o.y0)+2*pad);
+    }
+    c.setLineDash([]); c.fillStyle="#fff";
+    objHandles(o).forEach(([hx,hy])=>{ c.beginPath(); c.rect(hx-hs,hy-hs,2*hs,2*hs); c.fill(); c.stroke(); });
+    c.restore();
+  }
+  /* the ends of a line; the four corners of a box or an ellipse's frame (0 and 1 are its two
+     defining corners, 2 and 3 the other two) */
+  function objHandles(o){
+    if(o.tool==="line"||o.tool==="arrow")return [[o.x0,o.y0],[o.x1,o.y1]];
+    return [[o.x0,o.y0],[o.x1,o.y1],[o.x1,o.y0],[o.x0,o.y1]];
+  }
+  function objHit(x,y){
+    const z=Math.max(0.05,zoom), tol=7/z;
+    for(let i=objs.length-1;i>=0;i--){
+      const o=objs[i];
+      if(i===objSel){ const H=objHandles(o);
+        for(let h=0;h<H.length;h++)if(Math.hypot(x-H[h][0],y-H[h][1])<=tol+2/z)return {i,h}; }
+      const near=Math.max(o.w/2,0)+tol;
+      if(o.tool==="line"||o.tool==="arrow"){
+        const dx=o.x1-o.x0, dy=o.y1-o.y0, L2=dx*dx+dy*dy||1;
+        const t=Math.max(0,Math.min(1,((x-o.x0)*dx+(y-o.y0)*dy)/L2));
+        if(Math.hypot(x-(o.x0+t*dx),y-(o.y0+t*dy))<=near)return {i,h:-1};
+        continue;
+      }
+      const X0=Math.min(o.x0,o.x1), X1=Math.max(o.x0,o.x1), Y0=Math.min(o.y0,o.y1), Y1=Math.max(o.y0,o.y1);
+      if(o.tool==="ellipse"){
+        const rx=Math.max(0.5,(X1-X0)/2), ry=Math.max(0.5,(Y1-Y0)/2), cx=X0+rx, cy=Y0+ry;
+        const d=Math.hypot((x-cx)/rx,(y-cy)/ry), rr=Math.min(rx,ry);
+        if((o.fill&&d<=1)||Math.abs(d-1)*rr<=near)return {i,h:-1};
+        continue;
+      }
+      const inside=x>=X0-near&&x<=X1+near&&y>=Y0-near&&y<=Y1+near;
+      const edge=inside&&(Math.abs(x-X0)<=near||Math.abs(x-X1)<=near||Math.abs(y-Y0)<=near||Math.abs(y-Y1)<=near);
+      if(edge||(o.fill&&inside))return {i,h:-1};
+    }
+    return null;
+  }
+  /* the picture takes them: on Save, or before an operation that changes what a pixel position means */
+  function flattenObjs(){
+    if(!objs.length)return;
+    objs.forEach(o=>paintObj(g,o));
+    objs=[]; objSel=-1; drawObjs(); picChanged=true;
+  }
+  /* a selected shape shows its own ink in the row, and a change in the row restyles it */
+  let _inkSync=false;
+  function inkFromObj(o){
+    if(!o)return; _inkSync=true;
+    try{ drawCol=o.col; dcol.value=o.col; drawPt=o.pt||drawPt; drng.value=String(drawPt); dsay();
+         drawFill=!!o.fill; if(bInkFill)bInkFill.classList.toggle("on",drawFill);
+         try{ edSyncRange(drng); }catch(e){} }
+    finally{ _inkSync=false; }
+  }
+  function restyleSel(){
+    const o=objs[objSel]; if(!o||_inkSync)return;
+    const w=drawPx();
+    if(o.col===drawCol&&o.w===w&&!!o.fill===!!drawFill)return;
+    push(); o.col=drawCol; o.w=w; o.pt=drawPt; o.fill=drawFill; drawObjs();
+  }
   const push=()=>{ try{ if(!_inFreeTurn)endSpinRun();
                         if(!bordHold){ bordBase=null; bordOrig=null; bordPushed=false; }
                         undo.push(shot()); while(undo.length>HIST_MAX)undo.shift();
                          redo.length=0; syncHist(); }catch(e){} };
   const pushGeo=()=>{ try{ if(!_inFreeTurn)endSpinRun();
                            undo.push(geoShot()); while(undo.length>HIST_MAX)undo.shift();
-                           redo.length=0; syncHist(); }catch(e){} };
+                           redo.length=0; syncHist(); }catch(e){}
+                       /* v62 — a turn, flip, crop or Restore all changes what a pixel position
+                          means, so the live shapes are drawn in first; the step just taken holds
+                          them live, so Undo brings them back movable */
+                       flattenObjs(); };
   /* the ORIGINAL is turned with the picture, so Restore still brushes back the right pixels in the
      right places however many times the picture has been turned. Turned in place, because the restore
      brush closes over this very canvas. */
@@ -1363,6 +1497,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const DRAW_TOOLS=["pen","line","arrow","rect","ellipse","bucket"];   /* 6kq, 6la */
   const isDrawTool=t=>DRAW_TOOLS.indexOf(t)>=0;
   const setTool=t=>{ tool=t;
+    if(objSel>=0&&!(t==="line"||t==="arrow"||t==="rect"||t==="ellipse")){ objSel=-1; try{ drawObjs(); }catch(e){} }
     try{ dropBox(); }catch(e){}          /* 6ha — the rows below change height; the picture moves */
     /* 6lf — THE PEN HAS A SIZE, SO THE PEN HAS A RING.
        Ced: "in pen, also preview the size of the pen in cursor and apply the shift rule where it
@@ -1554,7 +1689,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   /* 6nn — the right column is found, not closed over: it is built in `skEditor` and this is
      `skEdWire`, the far side of the same boundary the chequer and the dock are found across. */
   const colR=wrap.querySelector(".sk-edcol-r");
-  const gSet=group(bar2), gView=group(colR,"sk-edview sk-edpanel"), gHist=group(colR,"sk-edhist sk-edpanel");
+  /* v62 — ONE COLUMN. Ced: "i think 6 max is better. and also, fit the other tools from right to the
+     left as well." The tool grid is six across, which makes the left column wide enough to carry
+     the history and the zoom as two short rows at its head — so the right column goes, and the
+     picture gets that side of the stage back. */
+  const colL=wrap.querySelector(".sk-edcol-l");
+  const gSet=group(bar2), gHist=group(colL,"sk-edhist sk-edpanel"), gView=group(colL,"sk-edview sk-edpanel");
+  try{ colL.insertBefore(gView,colL.firstChild); colL.insertBefore(gHist,colL.firstChild);
+       if(colR)colR.style.display="none"; }catch(e){}
   const brushRow=document.createElement("label"); brushRow.className="sk-edsize";
   brushRow.appendChild(document.createTextNode("Brush"));
   const rng=document.createElement("input");
@@ -1614,6 +1756,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   /* 6lf — the pen's ring is painted in this colour, so it follows the swatch as it is dragged */
   dcol.oninput=()=>{ drawCol=dcol.value;
     try{ if(ring)ring.style.setProperty("--sk-ink",drawCol); }catch(e){} };
+  dcol.onchange=()=>{ try{ restyleSel(); }catch(e){} };
   inkRow.appendChild(dcol);
   const drng=document.createElement("input");
   drng.type="range"; drng.min="0.25"; drng.max="12"; drng.step="0.25"; drng.value=String(drawPt);
@@ -1621,13 +1764,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   const dsay=()=>{ dnum.textContent=drawPt.toFixed(2).replace(/\.?0+$/,"")+" pt"; };
   /* 6lf — and the ring is the weight, so it moves with the slider as well as with the wheel */
   drng.oninput=()=>{ drawPt=+drng.value; dsay(); try{ sizeRing(); }catch(e){} };
+  drng.onchange=()=>{ try{ restyleSel(); }catch(e){} };
   dsay();
   inkRow.appendChild(drng); inkRow.appendChild(dnum);
   bInkFill=document.createElement("button");
   bInkFill.type="button"; bInkFill.className="sk-edm";
   bInkFill.textContent="■ Filled";
   bInkFill.title="Paint the inside of a box or an ellipse as well as its edge";
-  bInkFill.onclick=()=>{ drawFill=!drawFill; bInkFill.classList.toggle("on",drawFill); };
+  bInkFill.onclick=()=>{ drawFill=!drawFill; bInkFill.classList.toggle("on",drawFill); try{ restyleSel(); }catch(e){} };
   inkRow.appendChild(bInkFill);
   inkRow.classList.add("sk-edpanel");     /* 6nl */
   gSet.appendChild(inkRow);
@@ -1672,6 +1816,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const W=Math.max(1,Math.round(cv.width*zoom)), H=Math.max(1,Math.round(cv.height*zoom));
     cv.style.width=ov.style.width=W+"px";
     cv.style.height=ov.style.height=H+"px";
+    try{ drawObjs(); }catch(e){}
     box.style.width=W+"px"; box.style.height=H+"px";
     if(zoomTag)zoomTag.textContent=Math.round(zoom*100)+"%";
     try{ sizeRing(); }catch(e){}
@@ -2148,6 +2293,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       bordRaf=0;
       const vf=Math.max(0,bordWant), v=Math.ceil(vf);
       if(!bordBase){
+        flattenObjs();                 /* v62 — the border is traced round what is drawn, too */
         bordBase=g.getImageData(0,0,cv.width,cv.height);
         if(orig){ bordOrig=document.createElement("canvas");
                   bordOrig.width=orig.width; bordOrig.height=orig.height;
@@ -2210,7 +2356,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     row.appendChild(brng); row.appendChild(bnum);
     row.classList.add("sk-edpanel");      /* 6nl */
     bar3.appendChild(row);
-    colR.appendChild(gHist); colR.appendChild(gView);   /* 6nn — history above zoom, on the right */
+    /* v62 — history and zoom at the head of the one column (6nn had them on the right) */
+    colL.insertBefore(gView,colL.firstChild); colL.insertBefore(gHist,colL.firstChild);
   }
   /* 6m1 — one button for both halves of the gesture: it opens the box on the picture's edges, and
      once the box is up it is the Apply. Enter does the same from the keyboard, Escape puts it away. */
@@ -2640,6 +2787,37 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         window.addEventListener("pointercancel",pup);
         return;
       }
+      /* v62 — LIVE SHAPES. A press on a shape already drawn takes hold of it: its body moves it, an
+         end (or a corner) reshapes it. Anywhere else draws a new one. */
+      if(tool!=="bucket"){
+        const hit=objHit(x,y);
+        if(hit){
+          objSel=hit.i; drawObjs(); push();
+          const o=objs[hit.i], o0=Object.assign({},o);
+          try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+          let moved=false;
+          const mmove=e=>{ const q=at(e), dx=q[0]-x, dy=q[1]-y;
+            if(!moved&&Math.hypot(dx,dy)<1)return; moved=true;
+            if(hit.h===0){ o.x0=o0.x0+dx; o.y0=o0.y0+dy; }
+            else if(hit.h===1){ o.x1=o0.x1+dx; o.y1=o0.y1+dy; }
+            else if(hit.h===2){ o.x1=o0.x1+dx; o.y0=o0.y0+dy; }
+            else if(hit.h===3){ o.x0=o0.x0+dx; o.y1=o0.y1+dy; }
+            else { o.x0=o0.x0+dx; o.y0=o0.y0+dy; o.x1=o0.x1+dx; o.y1=o0.y1+dy; }
+            drawObjs(); };
+          const mup=()=>{ window.removeEventListener("pointermove",mmove);
+            window.removeEventListener("pointerup",mup); window.removeEventListener("pointercancel",mup);
+            if(!moved){ undo.pop(); syncHist(); }
+            inkFromObj(o);
+            setStatus(moved?"Moved — it stays movable until you Save.":
+              "Selected — drag it to move, drag an end to reshape, Delete removes it. Ink, weight and Filled change it.");
+          };
+          window.addEventListener("pointermove",mmove);
+          window.addEventListener("pointerup",mup);
+          window.addEventListener("pointercancel",mup);
+          return;
+        }
+        if(objSel>=0){ objSel=-1; drawObjs(); }
+      }
       let x1=x, y1=y, shifted=false;
       /* where the gesture actually ends, once Shift has had its say */
       const geom=()=>{
@@ -2657,46 +2835,8 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         return [x,y,ax,ay];
       };
       /* ONE painter, used for the preview and for the picture, so what you let go of is what lands */
-      const paintInk=ctx=>{
-        const [x0,y0,X1,Y1]=geom();
-        ctx.save();
-        ctx.strokeStyle=drawCol; ctx.fillStyle=drawCol;
-        /* 6lf — SHARP CORNERS. Ced: "make the shapes all have sharp corners."
-           `lineJoin:"round"` put a radius on all four corners of a box — at 12pt on a 1200px capture
-           that is a 24px fillet, which reads as a rounded rectangle and not as the box that was
-           drawn — and `lineCap:"round"` hung half a stroke width past each end of a line, so a line
-           dragged to a corner overshot it. A box, a line and an arrow are drawing instruments and a
-           drawing instrument has corners. `miter` for the join, `butt` for the cap, and a miter limit
-           high enough that a shallow corner stays a point instead of being cut square by the default
-           limit of 10.
-           The PEN keeps its round cap and join and is not drawn here: a freehand stroke is dabs joined
-           end to end, and butt caps would leave a notch at every one of them. */
-        ctx.lineWidth=w; ctx.lineCap="butt"; ctx.lineJoin="miter"; ctx.miterLimit=24;
-        if(tool==="line"||tool==="arrow"){
-          const dx=X1-x0, dy=Y1-y0, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
-          if(tool==="arrow"){
-            /* the shaft stops short of the head, so the point is a point and not a blob */
-            const hl=Math.max(w*3.4,w+2), hw=hl*0.52;
-            ctx.beginPath(); ctx.moveTo(x0,y0);
-            ctx.lineTo(X1-ux*hl*0.8,Y1-uy*hl*0.8); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(X1,Y1);
-            ctx.lineTo(X1-ux*hl-uy*hw, Y1-uy*hl+ux*hw);
-            ctx.lineTo(X1-ux*hl+uy*hw, Y1-uy*hl-ux*hw);
-            ctx.closePath(); ctx.fill();
-          }else{
-            ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(X1,Y1); ctx.stroke();
-          }
-        }else{
-          const X=Math.min(x0,X1), Y=Math.min(y0,Y1);
-          const W=Math.abs(X1-x0), H=Math.abs(Y1-y0);
-          ctx.beginPath();
-          if(tool==="ellipse")ctx.ellipse(X+W/2,Y+H/2,Math.max(0.5,W/2),Math.max(0.5,H/2),0,0,Math.PI*2);
-          else ctx.rect(X,Y,W,H);
-          if(drawFill)ctx.fill();
-          ctx.stroke();
-        }
-        ctx.restore();
-      };
+      const paintInk=ctx=>{ const [x0,y0,X1,Y1]=geom();
+        paintObj(ctx,{tool,x0,y0,x1:X1,y1:Y1,col:drawCol,w,fill:drawFill}); };
       skOvShow(ov,true);
       const preview=()=>{ og.clearRect(0,0,ov.width,ov.height); paintInk(og); };
       try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
@@ -2711,10 +2851,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
         const [a0,b0,a1,b1]=geom();
         if(Math.hypot(a1-a0,b1-b0)<Math.max(2,w*0.6)){
           setStatus("Too small to draw — drag it out.",true); return; }
-        push(); paintInk(g); picChanged=true;
+        /* v62 — Ced: "for added lines, shapes in edit photo, make them movable and dont flatten them
+           yet unless saved." So it is an object on the layer above the picture, not pixels in it. */
+        push();
+        objs.push({tool, x0:a0, y0:b0, x1:a1, y1:b1, col:drawCol, w, pt:drawPt, fill:drawFill});
+        objSel=objs.length-1; drawObjs(); picChanged=true;
         setStatus((tool==="arrow"?"Arrow":(tool==="line"?"Line":(tool==="rect"?"Box":"Ellipse")))+
-                  " drawn into the picture at "+drawPt+"pt — it is part of the capture now, so it "+
-                  "moves and resizes with it.");
+                  " drawn at "+drawPt+"pt — drag it to move it, drag an end to reshape it. It becomes "+
+                  "part of the picture when you Save.");
       };
       window.addEventListener("pointermove",dmove);
       window.addEventListener("pointerup",dup);
@@ -2761,6 +2905,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   };
   mkf("Cancel",()=>{ close(); });
   mkf("Save",()=>{
+    flattenObjs();                     /* v62 — the live shapes go into the picture now, and only now */
     /* 6ha — a picture that does not live on a page goes back to whoever asked for it */
     if(opts.onSave){
       try{ opts.onSave(cv.toDataURL("image/png"),cv); }
@@ -2819,6 +2964,10 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(e.key==="Escape"&&cropBox){ e.preventDefault(); e.stopPropagation(); setTool("erase");
       setStatus("Crop cancelled — the picture is as it was."); return; }
     if(e.key==="Enter"&&cropBox){ e.preventDefault(); e.stopPropagation(); cropApply(); return; }
+    if(e.key==="Escape"&&objSel>=0){ e.preventDefault(); e.stopPropagation(); objSel=-1; drawObjs(); return; }
+    if((e.key==="Delete"||e.key==="Backspace")&&objSel>=0&&!/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||"")){
+      e.preventDefault(); e.stopPropagation(); push(); objs.splice(objSel,1); objSel=-1; drawObjs();
+      setStatus("Removed."); return; }
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); return; }
     if((e.ctrlKey||e.metaKey)&&k==="z"&&!e.shiftKey){ e.preventDefault(); e.stopPropagation(); bUndo.click(); return; }
     if((e.ctrlKey||e.metaKey)&&(k==="y"||(k==="z"&&e.shiftKey))){ e.preventDefault(); e.stopPropagation(); bRedo.click(); return; }

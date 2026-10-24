@@ -228,19 +228,19 @@
    Ced: "put an arrow on the lower right of the icon." It is its own hit target, so a press on the
    button picks the tool and a press on the corner opens its properties.
    ================================================================================================= */
-#tools .tool.hascaret{position:relative}
-#tools .tool .tcaret{
+#tools .tool.hascaret, #ctools .tool.hascaret{position:relative}
+#tools .tool .tcaret, #ctools .tool .tcaret{
   position:absolute; right:1px; bottom:0; width:13px; height:13px; line-height:11px;
   font-size:var(--fs-1); text-align:center; border-radius:var(--r-xs); cursor:pointer;
   color:var(--muted,#7a8393); opacity:.85;
 }
-#tools .tool .tcaret:hover{background:rgba(127,127,127,.28);color:var(--fg,#111);opacity:1}
-#tools .tool.popped{outline:1.5px solid var(--acc,#2f7be0);outline-offset:-1px}
-#tools .tool.popped .tcaret{color:var(--acc,#2f7be0);opacity:1}
+#tools .tool .tcaret:hover, #ctools .tool .tcaret:hover{background:rgba(127,127,127,.28);color:var(--fg,#111);opacity:1}
+#tools .tool.popped, #ctools .tool.popped{outline:1.5px solid var(--acc,#2f7be0);outline-offset:-1px}
+#tools .tool.popped .tcaret, #ctools .tool.popped .tcaret{color:var(--acc,#2f7be0);opacity:1}
 
 /* the caret has to read on the picked tool too, which is a solid colour block */
-#tools .tool.active .tcaret{color:#fff;opacity:.95}
-#tools .tool.active .tcaret:hover{background:rgba(255,255,255,.3);color:#fff}
+#tools .tool.active .tcaret, #ctools .tool.active .tcaret{color:#fff;opacity:.95}
+#tools .tool.active .tcaret:hover, #ctools .tool.active .tcaret:hover{background:rgba(255,255,255,.3);color:#fff}
 
 /* 6gf — the picture editor's door, a full-width button in the Snapshot panel */
 .tp-imgtools{margin:0 12px 12px}

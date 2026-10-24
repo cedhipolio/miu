@@ -216,11 +216,19 @@ function tpApply(key,value){
   const id=TP_FIELD_INPUT[key];
   if(id){
     const f=document.getElementById(id);
+    /* v62 — the ribbon's fields are shared by every tool and hold whichever tool was last shown. A
+       field write is remembered as the WHOLE set of fields (maStyleNow), so if another tool had been
+       picked up since this panel opened, its colour, size and font were copied into this one. The
+       panel's own tool is put into the fields for the write and the tool in the hand put back after. */
+    const was=(typeof MA_STYLE_TOOL!=="undefined")?MA_STYLE_TOOL:null;
+    const swap=was&&was!==TP_TOOL;
     if(f)tpWith(()=>{
+      if(swap)maShowToolStyle(TP_TOOL);
       f.value=(key==="fillOp")?Math.round(value*100):value;
       f.dispatchEvent(new Event("input",{bubbles:true}));
       f.dispatchEvent(new Event("change",{bubbles:true}));
     });
+    if(swap){ try{ maShowToolStyle(was); }catch(e){} }
   }else{
     MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_STYLES[TP_TOOL]||{},{[key]:value});
     maSaveToolStyles();
@@ -570,7 +578,11 @@ function tpSlider(opts){
       const b=tpEl("button","sb-mi tp-vmi"+(Math.abs(v-cur)<1e-6?" on":""),
                    String(+(+v).toFixed(2))+(opts.suffix||""));
       b.type="button";
-      b.onclick=()=>{ m.remove(); set(v,true); tpRender(); };
+      /* v62 — Ced: "changing properties on dropdown should not exit the dropdown or properties tab
+         immediately." The list stays open with the new value ticked, so a second pick is one click;
+         it closes on a click away or Escape like every other menu. */
+      b.onclick=ev=>{ ev.stopPropagation(); set(v,true);
+        m.querySelectorAll(".tp-vmi.on").forEach(n=>n.classList.remove("on")); b.classList.add("on"); tpRender(); };
       m.appendChild(b);
     });
     document.body.appendChild(m);
@@ -680,7 +692,9 @@ function tpFontPicker(current,onPick){
         b.onclick=()=>{
           const bold=/bold/.test(String(current).slice(fam.length)), ital=/ital/.test(String(current).slice(fam.length));
           const want=r.k+(bold&&ital?"bolditalic":bold?"bold":ital?"ital":"");
-          m.remove(); onPick(MARK_FONTS[want]?want:r.k); tpRender();
+          onPick(MARK_FONTS[want]?want:r.k);
+          list.querySelectorAll(".tp-fontitem.on").forEach(n=>n.classList.remove("on")); b.classList.add("on");
+          tpRender();   /* v62 — the list stays open on the face just chosen */
         };
         list.appendChild(b); any=true;
       });
@@ -1394,6 +1408,7 @@ function tpOpen(tool,anchor,forSelection){
 }
 function tpClose(){
   tpPickerClose();
+  document.querySelectorAll(".tp-vmenu").forEach(n=>n.remove());
   const pop=document.getElementById("toolpop"); if(!pop)return;
   TP_SEL=false;
   pop.setAttribute("hidden",""); pop.setAttribute("aria-hidden","true");
@@ -1439,11 +1454,16 @@ function tpAttachCarets(){
       const pop=document.getElementById("toolpop");
       if(!pop||pop.hasAttribute("hidden"))return;
       if(e.target.closest("#toolpop")||e.target.closest(".tcaret")||e.target.closest(".tp-picker"))return;
+      /* v62 — a value list or the font list belongs to the panel even though it floats outside it:
+         a pick in it used to count as "away" and closed the panel under the pointer */
+      if(e.target.closest(".tp-vmenu"))return;
       if(e.target.closest("#selbar"))return;    /* the bar's own buttons re-open it */
       tpClose();
     },true);
     document.addEventListener("keydown",e=>{
       const pop=document.getElementById("toolpop");
+      const vm=document.querySelector(".tp-vmenu");
+      if(e.key==="Escape"&&vm){ vm.remove(); e.stopPropagation(); return; }
       if(e.key==="Escape"&&pop&&!pop.hasAttribute("hidden")){ tpClose(); e.stopPropagation(); }
     },true);
     window.addEventListener("resize",()=>tpPlace());

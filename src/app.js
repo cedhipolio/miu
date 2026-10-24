@@ -2409,7 +2409,42 @@ const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>r()));
    The sandbox blocks real Workers and blob/script loads, so PDF.js runs on the
    main thread. Loading pdf.worker.min.js as a UMD tag registers
    window.pdfjsWorker, which the fake-worker fallback uses directly — no fetch. */
+/* v63 — AND A REAL WORKER WHEN THE HOST ALLOWS ONE. Ced: "sometimes the tool does not work accordingly
+   or hangs." Measured on his NOH5197 (17 sheets, 11.7 MB of scanned drawings): dragging one redline
+   took 9.4 s for 30 pointer moves, with single frames of 1.8 s and 2.8 s — and the profile was pdf.js
+   decoding JPEGs (`_convertYccToRgb`, `quantizeAndInverse`, `getImageBytes`) on the MAIN thread,
+   because with the fake worker the page renders still going on after the open are run on the same
+   thread as the hand. A real worker takes all of that parsing and decoding off it.
+   The sandbox note above is why this is a TRY: the worker is started from the source the boot already
+   holds (a blob URL — no fetch), it must say "ready" within a few seconds, and if the host refuses
+   workers, or it stays silent, the main-thread path below is used exactly as before. */
+let _workerTried=false;
 async function ensureWorker(){
+  if(!_workerTried){
+    _workerTried=true;
+    try{
+      const src=window.__miuWorkerSrc;
+      const off=/[?&]noworker\b/.test(location.search||"");
+      if(src&&!off&&typeof Worker!=="undefined"&&typeof Blob!=="undefined"&&pdfjsLib.PDFWorker){
+        const url=URL.createObjectURL(new Blob([src],{type:"text/javascript"}));
+        let w=null;
+        try{ w=new Worker(url); }catch(e){ w=null; LOG("worker refused by the host —",e&&e.message); }
+        if(w){
+          const ok=await new Promise(res=>{
+            const t=setTimeout(()=>res(false),4000);
+            w.addEventListener("message",function m(ev){
+              const d=ev&&ev.data;
+              if(d&&d.action==="ready"){ clearTimeout(t); w.removeEventListener("message",m); res(true); } });
+            w.addEventListener("error",()=>{ clearTimeout(t); res(false); });
+          });
+          if(ok){ pdfjsLib.GlobalWorkerOptions.workerPort=w; window.__miuRealWorker=true;
+                  LOG("PDF engine: running in its own worker"); }
+          else { try{ w.terminate(); }catch(e){} LOG("PDF engine: worker did not start — main thread"); }
+        }
+      }
+    }catch(e){ LOG("PDF engine: worker skipped —",e&&e.message); }
+  }
+  if(window.__miuRealWorker)return;
   try{
     if(window.pdfjsWorker){ pdfjsLib.GlobalWorkerOptions.workerSrc=""; }
     else{ pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; }
@@ -3578,6 +3613,25 @@ function _pageWanted(i){
   if(r.bottom<-RENDER_REACH||r.top>window.innerHeight+RENDER_REACH)return null;
   return {pg,dist:Math.abs(r.top+r.height/2-window.innerHeight/2)};
 }
+/* v63 — WHILE A HAND IS DRAGGING A MARK, A PAGE RENDER WAITS. Where the host will not run pdf.js in
+   a worker, a render decodes the sheet's pictures on the same thread as the drag, and on a scanned
+   drawing set that is one to three seconds in which the mark does not follow the pointer — the "hangs"
+   Ced reported. A render does not have to happen in the middle of a drag; it can happen the moment
+   the drag ends. Panning is the exception (the pages coming into view ARE the point of it), and with
+   a real worker none of this is needed. */
+let _handDown=false;
+document.addEventListener("pointerdown",e=>{ if(e.button===0)_handDown=true; },true);
+["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,()=>{ _handDown=false; },true));
+window.addEventListener("blur",()=>{ _handDown=false; });
+function _handBusy(){
+  if(!_handDown||window.__miuRealWorker)return false;
+  if(S.mode==="pan"||document.body.classList.contains("spacepan"))return false;
+  return true;
+}
+async function _waitForHand(){
+  const t0=Date.now();
+  while(_handBusy()&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,60));
+}
 function ensurePageRendered(i){
   i=+i;
   const pg=document.querySelector(`.page[data-idx="${i}"]`);
@@ -3601,6 +3655,7 @@ async function _runRenderQueue(){
         if(w.dist<bestD){ bestD=w.dist; best=i; }
       }
       if(best==null)break;
+      if(_handBusy()){ await _waitForHand(); continue; }    /* v63 — decide again once the hand lets go */
       const e=_rq.get(best); _rq.delete(best);
       try{ await _renderPageNow(best); }catch(err){}
       if(e)e.waiting.forEach(f=>f());
@@ -4405,6 +4460,15 @@ function attachPagePointer(pg,i){
     pg.addEventListener(ev,releaseGesture));
   pg.addEventListener("pointerdown",e=>{
     if(e.button===2)return;   // right-click is handled by contextmenu (redline)
+    /* v61 — A PRESS ON A MARK'S OWN CONTROLS IS NEVER A DRAW. Ced: "sometimes the x is not working",
+       with a capture of a box just drawn, the Box tool still in the hand, and the ✕ clicked again and
+       again. 6hq gives a press with a drawing tool up to the TOOL, and the ✕, the turn, the drag and
+       the grips are all inside the mark — so the press started a new box under the ✕ and the click
+       never reached it. Measured before this line: with Box or Line in the hand a click on the ✕
+       deleted nothing; with Select, Text, Redline or Pen it worked. The furniture handles its own
+       press now, whatever is in the hand. */
+    if(e.target&&e.target.closest&&
+       e.target.closest(".x,.rot,.mov,.edp,.lup,.ldn,.rz,.ggrip,.gh,.lgrip"))return;
     clearStrayMarquees();     /* 6dr — a new press is a clean slate */
     /* 6hq — a press on a MARK belongs to the mark, unless a drawing tool is in the hand, in which
        case it belongs to the tool and the new mark is drawn over the old one. */
@@ -5396,8 +5460,15 @@ function drawPageLines(i){
           const g=mk("g",{class:"lgrip"+(danger?" danger":"")});
           const hit=mk("circle",{cx:bcx+dx,cy:bby+26,r:15,class:"lg-hit"});
           const c=mk("circle",{cx:bcx+dx,cy:bby+26,r:10,class:"lg-ring"});
-          const t=mk("text",{x:bcx+dx,y:bby+30,"text-anchor":"middle","font-size":12,class:"lg-ink"});
-          t.textContent=glyph;
+          let t;
+          if(glyph==="\u2725"){
+            /* v61 — the drag control is Ced's four-arrow mark, the same one a mark and a group wear */
+            t=mk("path",{d:MIU_DRAG_PATH,class:"lg-ink","fill-rule":"evenodd",
+              transform:"translate("+(bcx+dx-6.5)+","+(bby+26-6.5)+") scale("+(13/24)+")"});
+          }else{
+            t=mk("text",{x:bcx+dx,y:bby+30,"text-anchor":"middle","font-size":12,class:"lg-ink"});
+            t.textContent=glyph;
+          }
           const ttl=mk("title",{}); ttl.textContent=title;
           g.appendChild(hit); g.appendChild(c); g.appendChild(t); g.appendChild(ttl);
           g.style.pointerEvents="all"; g.style.cursor=(glyph==="\u21bb")?"grab":(danger?"pointer":"move");
@@ -7504,6 +7575,8 @@ function layoutAnnos(){
     };
     const _press=e=>{
       if(d.classList.contains("editing"))return;     /* already typing in it — leave the caret alone */
+      /* v61 — and the mark's own controls are not the mark: a press on the ✕ or a grip is theirs */
+      if(e.target&&e.target.closest&&e.target.closest(".x,.rot,.mov,.edp,.lup,.ldn,.rz"))return;
       /* 6hq — A TOOL IN THE HAND DRAWS, EVEN OVER SOMETHING.
          Ced: "when using a tool, and you are editing on top of another shape, do not move the shape
          below, make the application of the new shape first." A mark claimed every press that landed on
@@ -10473,6 +10546,7 @@ function resharpenSoon(ms){
         if(r.bottom<-800||r.top>window.innerHeight+800){      /* it moved while we waited */
           delete pg.dataset.soft; unloadPage(i); continue;
         }
+        await _waitForHand();                                 /* v63 */
         try{ await resharpenPage(i); }catch(e){}
         await new Promise(res=>requestAnimationFrame(()=>res()));
       }
@@ -10559,7 +10633,12 @@ async function setZoom(z,anchor,settle){
     if(!p)return null; const r=p.getBoundingClientRect();
     if(!r.width||!r.height)return null;
     const cl=(v)=>Math.max(0,Math.min(1,v));
-    return {fx:cl((_zax-r.left)/r.width), fy:cl((_zay-r.top)/r.height)}; })();
+    /* v63 — and whether an EDGE of the sheet was on screen: zoomed from there, it stays put */
+    const _rl=document.getElementById("rail");
+    const _L=(_rl&&document.body.classList.contains("railon"))?(_rl.getBoundingClientRect().right||0):0;
+    return {fx:cl((_zax-r.left)/r.width), fy:cl((_zay-r.top)/r.height),
+            edgeL:(r.left>=_L-2&&r.left<=window.innerWidth*0.5),
+            edgeR:(r.right<=window.innerWidth+2&&r.right>=window.innerWidth*0.5)}; })();
   /* 6iw — Ced: "do not also limit the zoom to just 350%." On a 34x22 drawing sheet 350% is barely
      enough to read a part number off a detail, let alone put a mark on one. The ceiling is 12x, which
      is as far as a page canvas can be rendered before the memory it needs stops being reasonable, and
@@ -10595,10 +10674,37 @@ async function setZoom(z,anchor,settle){
            the middle of the window instead of wherever the previous scroll left it. When the sheet
            fits, the column's `margin:auto` has already centred it and this asks for the scroll it is
            already at; when it does not fit, this is the only thing that can centre it. */
-        const _mid=window.scrollX+(r.left+r.width/2)-window.innerWidth/2;
-        const wantX=anchor
-          ? Math.max(0,Math.min(maxX,window.scrollX+(r.left+before.fx*r.width)-ax))
-          : Math.max(0,Math.min(maxX,_mid));
+        /* ==========================================================================================
+           v63 — NO GREY BESIDE A SHEET THAT IS WIDER THAN THE WINDOW, AND NO TRIP TO THE MIDDLE.
+           Ced: "if zooming in and out to and from a left or right side, there shouldnt be any open
+           space either sides so it doesnt scroll to the center, if zooming out so much, there could
+           be spaces but make the pdf forced center so it does not need to scroll back."
+           Measured before: a zoom from the right edge left the edge pinned under the pointer with the
+           grey of the margin beyond it, and the + / − buttons (6md) threw the view to the middle of
+           the sheet wherever you had been working. Now every zoom holds the point it was asked about
+           — the pointer for a wheel, the middle of the window for a button or a key — and then:
+             · a sheet WIDER than the room is kept edge to edge: its left edge no further right than
+               the page list, its right edge no further left than the window's edge;
+             · a sheet NARROWER than the room is centred by the column itself, so there is nothing to
+               scroll back to.
+           ========================================================================================== */
+        const _rail=document.getElementById("rail");
+        const _rr=(_rail&&document.body.classList.contains("railon"))?_rail.getBoundingClientRect():null;
+        const roomL=(_rr&&_rr.width)?_rr.right:0;
+        const _mk=document.getElementById("marksPanel");
+        const _mr=(_mk&&document.body.classList.contains("markson"))?_mk.getBoundingClientRect():null;
+        const roomR=(_mr&&_mr.width&&_mr.left>window.innerWidth/2)?_mr.left:window.innerWidth;
+        let wantX=window.scrollX+(r.left+before.fx*r.width)-ax;
+        if(r.width>roomR-roomL){
+          const docL=window.scrollX+r.left;
+          const lo=docL-roomL, hi=docL+r.width-roomR;   /* left edge at the list · right edge at the window */
+          /* a + / − with an edge of the sheet on screen keeps that edge where it is; a wheel holds the
+             point under the pointer and the clamp alone keeps the grey out */
+          if(!anchor&&before.edgeL&&!before.edgeR)wantX=lo;      /* a button or a key names no point */
+          else if(!anchor&&before.edgeR&&!before.edgeL)wantX=hi;
+          wantX=Math.max(lo,Math.min(hi,wantX));
+        }
+        wantX=Math.max(0,Math.min(maxX,wantX));
         const wantY=Math.max(0,window.scrollY+(r.top+before.fy*r.height)-ay);
         window.scrollTo(wantX,wantY);
         /* 6gq — and the ribbon goes with it in the same frame, not on the scroll event after */
@@ -11159,7 +11265,12 @@ async function exportPdf(){
       if(gs)r.ExtGState=ctx.obj(gs);        /* 6f6 — opacity / blend states the ops refer to by name */
       const res=ctx.obj(r);
       const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,w,h], Resources:res,
-                   Group:_apGroup() };      /* 6nc */
+                   Group:_apGroup(),        /* 6nc */
+                   /* v63 — our own name on our own artwork. A platform that flattens the file keeps
+                      the form's dictionary as it is (Ced's NOH5197/SOH1350 kept every key), so on
+                      the way back in this is how a painted-in copy of one of our marks is known
+                      for certain and taken off the page — see `_unbakeOurs`. */
+                   MIUap:true };
       if(matrix)dict.Matrix=matrix;
       const streamObj=ctx.stream(drawOps,dict);
       return ctx.register(streamObj);
@@ -11741,7 +11852,8 @@ async function exportPdf(){
              (dsh?`[${dsh.join(" ")}] 0 d ${dashRound(a.dash||"solid")?1:0} J `:"")+
              `${(fsw/2).toFixed(2)} ${(fsw/2).toFixed(2)} ${(bw-fsw).toFixed(2)} ${(bh-fsw).toFixed(2)} re S Q`;
       }
-      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,bw,bh], Resources:res };
+      const dict={ Type:"XObject", Subtype:"Form", FormType:1, BBox:[0,0,bw,bh], Resources:res,
+                   MIUap:true };            /* v63 — see `_unbakeOurs` */
       const phi=(spinOf(pg)-(a.rot||0))%360;
       const th=phi*Math.PI/180, cth=Math.cos(th), sth=Math.sin(th);
       if(phi)dict.Matrix=[cth,sth,-sth,cth,0,0];
@@ -12366,6 +12478,103 @@ const TF_LABEL_X=0.14;
 const TF_SPLIT_RE=/\((?:design|as-?built)\)/i;
 
 
+/* ==================================================================================================
+   v63 — A FILE ANOTHER PLATFORM FLATTENED COMES BACK EDITABLE, NOT TWICE.
+   Ced: "the tool still flattens the redlines when downloaded from a different site … i asked you to
+   make sure the redlines are not flattened." NOH5197 and SOH1350, both 17 pages, both still carrying
+   our payload (98 marks + 23 strokes; 117 + 24) and NO annotations: the site painted every one of our
+   appearance streams into the page (`q 1 0 0 1 x y cm /Fxo1 Do Q`), and SOH1350 went through it twice,
+   so each mark was painted two times.
+
+   v58 brought our marks back from the payload and said, in its notes, "we cannot un-paint theirs".
+   That was the fault: the restored marks sat on top of a painted copy, so a mark moved or deleted left
+   its double behind, and the next export carried both — a flattened file, from the user's chair.
+
+   We can un-paint them, because what was painted is OUR artwork and it is recognisable:
+     · from now on every appearance stream we write says `/MIUap true` (the flattener keeps the
+       form dictionary as it is);
+     · on files written before that, our forms are the ones whose resources name the face `/TR` inside
+       an isolated transparency group — the exact dictionary `appearance()` writes, and nothing else
+       in a drawing set looks like it.
+   Only a `Do` in the page's own top-level content is touched, the `Do` alone is removed (the q/cm/Q
+   round it stays, so the graphics state stays balanced), our own deliberate flattens (`/MAF…`, marks
+   flattened from the selection bar) are left exactly where they are, and anything that is not ours —
+   a stamp tool's `/BBA…` forms on NOH5197, for one — is not looked at twice.
+   ================================================================================================== */
+function _unbakeOurs(doc,picPages){
+  const {PDFName,PDFArray,PDFRawStream,PDFDict,PDFBool}=PDFLib;
+  const ctx=doc.context;
+  let removedDo=0, pagesTouched=0;
+  const isOurs=(xo)=>{
+    try{
+      const d=xo&&xo.dict; if(!d)return false;
+      const st=d.lookup(PDFName.of("Subtype")); if(!st||st.toString()!=="/Form")return false;
+      const mk=d.lookup(PDFName.of("MIUap")); if(mk&&String(mk)==="true")return true;
+      const g=d.lookup(PDFName.of("Group"));
+      const iso=g&&g.lookup&&g.lookup(PDFName.of("I")), gs=g&&g.lookup&&g.lookup(PDFName.of("S"));
+      if(!(iso&&String(iso)==="true"&&gs&&gs.toString()==="/Transparency"))return false;
+      const res=d.lookup(PDFName.of("Resources"));
+      const f=res&&res.lookup&&res.lookup(PDFName.of("Font"));
+      if(!f||!f.keys)return false;
+      const keys=f.keys().map(k=>k.toString());
+      return keys.length===1&&keys[0]==="/TR";
+    }catch(e){ return false; }
+  };
+  const decode=st=>{
+    try{ if(st instanceof PDFRawStream)return new TextDecoder("latin1").decode(PDFLib.decodePDFRawStream(st).decode()); }catch(e){}
+    try{ if(st&&st.getContentsString)return st.getContentsString(); }catch(e){}
+    return null;
+  };
+  /* a PICTURE's form, as `drawImg` writes it: one image called /Im0, at most our two opacity
+     states, and a body that is exactly "draw /Im0 in the box". Only looked for on a page where the
+     payload itself brought pictures back, because a bare image form is the one shape other tools
+     could also write. */
+  const isOurPic=(xo)=>{
+    try{
+      const d=xo&&xo.dict; if(!d)return false;
+      const st=d.lookup(PDFName.of("Subtype")); if(!st||st.toString()!=="/Form")return false;
+      const res=d.lookup(PDFName.of("Resources")); if(!res||!res.lookup)return false;
+      if(res.lookup(PDFName.of("Font")))return false;
+      const xs=res.lookup(PDFName.of("XObject"));
+      if(!xs||!xs.keys)return false;
+      const xk=xs.keys().map(k=>k.toString());
+      if(xk.length!==1||xk[0]!=="/Im0")return false;
+      const gs=res.lookup(PDFName.of("ExtGState"));
+      if(gs&&gs.keys&&gs.keys().some(k=>!/^\/GS[fc]$/.test(k.toString())))return false;
+      const body=decode(xo)||"";
+      return /^q (\/GSf gs )?-?[\d.]+ 0 0 -?[\d.]+ [\d.]+ [\d.]+ cm \/Im0 Do Q/.test(body);
+    }catch(e){ return false; }
+  };
+  doc.getPages().forEach((pg,pi)=>{
+    let res=null; try{ res=pg.node.Resources&&pg.node.Resources(); }catch(e){}
+    const xd=res&&res.lookup&&res.lookup(PDFName.of("XObject"));
+    if(!xd||!xd.keys)return;
+    const ours=new Set();
+    xd.keys().forEach(k=>{ const nm=k.toString().slice(1);
+      if(/^MAF\d*$/.test(nm))return;                     /* our deliberate flattens stay */
+      let xo=null; try{ xo=xd.lookup(k); }catch(e){}
+      if(isOurs(xo)||(picPages&&picPages.has(pi)&&isOurPic(xo)))ours.add(nm); });
+    if(!ours.size)return;
+    const cont=pg.node.get(PDFName.of("Contents"));
+    const refs=[];
+    if(cont&&cont.asArray){ for(let i=0;i<cont.size();i++)refs.push({arr:cont,i,ref:cont.get(i)}); }
+    else if(cont)refs.push({arr:null,i:0,ref:cont});
+    let touched=false;
+    refs.forEach(r=>{
+      let st=null; try{ st=ctx.lookup(r.ref); }catch(e){}
+      const txt=decode(st); if(txt==null)return;
+      let n=0;
+      const out=txt.replace(/\/([^\s\/\[\]<>(){}%]+)\s+Do\b/g,(m,nm)=>{ if(ours.has(nm)){ n++; return ""; } return m; });
+      if(!n)return;
+      const fresh=ctx.register(ctx.flateStream(out));
+      if(r.arr)r.arr.set(r.i,fresh); else pg.node.set(PDFName.of("Contents"),fresh);
+      removedDo+=n; touched=true;
+    });
+    if(touched)pagesTouched++;
+  });
+  return {removedDo, pagesTouched};
+}
+
 async function detachOurRedlines(u8){
   if(!window.PDFLib)return null;
   let doc=null;
@@ -12639,6 +12848,7 @@ async function detachOurRedlines(u8){
   const haveA=new Set(annos.map(a=>a.id).filter(v=>v));
   const haveL=new Set(lines.map(l=>l.id).filter(v=>v));
   let extraA=0, extraL=0;
+  const fromPay=new Set();     /* v63 — the marks only the payload knew about */
   /* photos are settled in the walk above — either detached and taken from the payload whole, or left on
      the page. Filling one in here would put it in S.annos while its annotation is still on the document,
      which is the doubling this build had to measure its way out of once already. */
@@ -12652,7 +12862,7 @@ async function detachOurRedlines(u8){
      actually has pixels for it. */
   payA.forEach(a=>{ if(!a||!a.id||haveA.has(a.id))return;
     if(a.kind==="img"&&(!a.src||leftPhotos.has(a.id)))return;
-    annos.push(a); haveA.add(a.id); extraA++; });
+    annos.push(a); haveA.add(a.id); fromPay.add(a.id); extraA++; });
   payL.forEach(l=>{ if(l&&l.id&&!haveL.has(l.id)){ lines.push(l); haveL.add(l.id); extraL++; } });
 
   if(!annos.length&&!lines.length&&!photos){
@@ -12666,8 +12876,18 @@ async function detachOurRedlines(u8){
   annos.forEach(a=>{ if(!a.id)a.id=n++; });
   lines.forEach(l=>{ if(!l.id)l.id=n++; });
 
+  /* v63 — the marks the payload had to supply had no annotation: if their artwork was painted into
+     the page by whoever flattened the file, take the paint off so each mark is here once, editable */
+  let unbaked={removedDo:0,pagesTouched:0};
+  if(extraA+extraL>0){
+    const picPages=new Set(annos.filter(z=>z&&z.kind==="img"&&fromPay.has(z.id)).map(z=>z.page));
+    try{ unbaked=_unbakeOurs(doc,picPages); }
+    catch(e){ LOG("the painted copies could not be taken off —",e&&e.message); }
+    if(unbaked.removedDo)LOG("Took",unbaked.removedDo,"painted-in copies of our marks off",
+                             unbaked.pagesTouched,"page(s) — the file had been flattened elsewhere");
+  }
   let bytes=u8;
-  if(removed){
+  if(removed||unbaked.removedDo){
     try{
       doc.setSubject("");        /* nothing stale to read next time; the export writes a fresh payload */
       /* ============================================================================================
@@ -12698,7 +12918,7 @@ async function detachOurRedlines(u8){
   const recovered=annos.filter(z=>z&&z.__fromRecovery).length;
   annos.forEach(z=>{ if(z)delete z.__fromRecovery; });
   return {bytes:bytes, annos:annos, lines:lines, photos:photos, removed:removed,
-          other:other, stamp:stamp, fromPayload:extraA+extraL,
+          other:other, stamp:stamp, fromPayload:extraA+extraL, unbaked:unbaked.removedDo,
           recovered:recovered, picsLost:payPicsDropped};
 }
 
@@ -12812,6 +13032,9 @@ async function restoreEmbedded(){
                 " now editable — move, retype or delete "+(n===1?"it":"them")+" and re-export."+
                 (d.photos?(" "+d.photos+" photo"+(d.photos===1?"":"s")+
                            " stayed on the page and cannot be edited here."):"")+
+                (d.unbaked?(" Another tool had flattened this file; the "+d.unbaked+" painted-in "+
+                             "cop"+(d.unbaked===1?"y":"ies")+" of these redlines were taken off the page, so "+
+                             "every redline is editable again and exports as a markup, not burned in."):"")+
                 (d.recovered?(" This file had been flattened by another tool, so "+d.recovered+
                               " picture"+(d.recovered===1?"":"s")+" came back from the copy kept in "+
                               "the document rather than from the original — re-add "+
@@ -13284,15 +13507,29 @@ function _hotkeyHeld(inMark){
     ? "The caret is in this mark's text, so the letter was typed rather than used as a shortcut — Escape steps out."
     : "The caret is in a field, so the shortcuts are paused — press Escape, or click the sheet, to get them back."); }catch(e){}
 }
+/* v63 — WHICH KEY, WHATEVER THE KEYBOARD. Ced: "please reinforce the shortcuts and make sure they work
+   100% all the time." A shortcut matched on `e.key` alone is dead on a keyboard whose layout does not
+   put a Latin letter on that key (and on some IMEs, which report "Process"). The physical key —
+   `e.code`, "KeyB" — is the same on all of them, so a letter that is not a-z falls back to it. */
+function _hkKey(e){
+  const k=String((e&&e.key)||"");
+  if(k.length===1){ const l=k.toLowerCase(); if(/[a-z0-9\/?]/.test(l))return l; }
+  else if(k.length>1&&k!=="Process"&&k!=="Unidentified")return k.toLowerCase();
+  const m=/^Key([A-Z])$/.exec(String((e&&e.code)||""));
+  if(m)return m[1].toLowerCase();
+  const d=/^Digit(\d)$/.exec(String((e&&e.code)||""));
+  if(d)return d[1];
+  return k.toLowerCase();
+}
 /* ---- keyboard shortcuts: tool hotkeys + arrow nudge + Ctrl+D duplicate + F (find) / M (marks) ---- */
 document.addEventListener("keydown",e=>{
   // Ctrl+D duplicate (works even mid-selection; never when typing)
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="d"){ if(_editTarget())return; if(duplicateSelected())e.preventDefault(); return; }
+  if((e.ctrlKey||e.metaKey)&&_hkKey(e)==="d"){ if(_editTarget())return; if(duplicateSelected())e.preventDefault(); return; }
   /* 6cc — Ctrl+S saves, Ctrl+E exports. Both take the key off the browser: Ctrl+S would otherwise open
      "save this page as HTML", which looks like it worked and saves entirely the wrong thing. Both are
      claimed even when the button is disabled, so the shortcut never silently falls through to the
      browser — it says why instead. */
-  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==="s"){
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&_hkKey(e)==="s"){
     if(_editTarget())return;
     e.preventDefault();
     if(!S.doc){ setStatus("Open an RFDS first — there is nothing to save.",true); return; }
@@ -13303,7 +13540,7 @@ document.addEventListener("keydown",e=>{
     try{ b.click(); }catch(err){ setStatus("Save failed: "+(err&&err.message||err),true); }
     return;
   }
-  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==="e"){
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&_hkKey(e)==="e"){
     if(_editTarget())return;
     e.preventDefault();
     if(!S.doc){ setStatus("Open an RFDS first — there is nothing to export.",true); return; }
@@ -13315,7 +13552,7 @@ document.addEventListener("keydown",e=>{
   /* Ctrl+Shift+A opens Assist. It is claimed above the plain Ctrl+A below, which matches on
      `key==="a"` without checking Shift and would otherwise read the chord as "select everything on
      this page". 6kx — it opens MARKUPS now: the Notes button it used to press is gone. */
-  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="a"){
+  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&_hkKey(e)==="a"){
     if(_editTarget())return;
     e.preventDefault();
     const b=$("#markupsBtn");
@@ -13323,7 +13560,7 @@ document.addEventListener("keydown",e=>{
     return;
   }
   /* Ctrl+Shift+L opens the loading table */
-  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="l"){
+  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&_hkKey(e)==="l"){
     if(_editTarget())return;
     e.preventDefault();
     const b=$("#analyzeMaBtn");
@@ -13331,13 +13568,13 @@ document.addEventListener("keydown",e=>{
     return;
   }
   // Ctrl+A selects every mark on the page you're looking at
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="a"){ if(_editTarget()||!S.doc)return; e.preventDefault(); selectAllOnPage(); return; }
+  if((e.ctrlKey||e.metaKey)&&_hkKey(e)==="a"){ if(_editTarget()||!S.doc)return; e.preventDefault(); selectAllOnPage(); return; }
   if(e.ctrlKey||e.metaKey||e.altKey)return;   // leave other combos alone
   /* 6js — and when a hotkey IS swallowed because something is being typed into, say so. A shortcut
      that does nothing and explains nothing is the thing that gets reported as "broken again"; one
      that tells you the caret is in a field is a thing you fix in one keystroke. */
   if(_typingTarget()){
-    const k0=(e.key||"").toLowerCase();
+    const k0=_hkKey(e);
     if(k0.length===1&&/[a-z\/]/.test(k0)&&S.doc){
       const ae=document.activeElement;
       const inMark=!!(ae&&ae.classList&&ae.classList.contains("ed"));
@@ -13352,9 +13589,9 @@ document.addEventListener("keydown",e=>{
      it is printed on the button and in the help — and this line claimed it first, so the one tool with
      a documented hotkey did not have one: pressing D flipped the theme instead. A TOOL beats a setting
      for a bare letter; day/night keeps the same letter with Shift. */
-  if(e.shiftKey&&e.key.toLowerCase()==="d"){ toggleTheme(); e.preventDefault(); return; }
+  if(e.shiftKey&&_hkKey(e)==="d"){ toggleTheme(); e.preventDefault(); return; }
   if(!S.doc)return;
-  const k=e.key.toLowerCase();
+  const k=_hkKey(e);
   // arrow-key nudge of the selection
   if(["arrowleft","arrowright","arrowup","arrowdown"].includes(k)){
     /* 6fg — `S.selLine` belongs here too; without it the guard threw away every arrow key pressed with a
@@ -14037,7 +14274,7 @@ const RIBBON_ICONS={
   /* 6el — themeBtn is NOT in this map any more. It is a two-state switch now (see `.thm-tog`), and
      iconifying it replaced the whole switch with one glyph — which is exactly the ambiguity Ced asked to
      be rid of: a sun could equally mean "you are in day mode" or "click for day mode". */
-  pageViewBtn:"\u2751", palBtn:"\u2756", orgBtn:"\u25a5", helpBtn:"?",
+  pageViewBtn:"\u2751", palBtn:"\u2756",   /* v61 — drawn as the roller, see RIBBON_SHAPES */ orgBtn:"\u25a5", helpBtn:"?",
   /* 6ge — the ribbon-side toggle was the one VIEW button left un-iconified, so it stood out as a bare
      character among circles. Transfer Redlines' two arrows, stood on end: same idea, one axis over.
      6gt \u2014 and it is no longer a character at all: `syncSideToggle` owns it, because the mark changes
@@ -14069,7 +14306,7 @@ const MA_ICONS={
   unlock:"M9.46 0.00L6.54 2.00L4.69 5.54L4.54 10.31L3.62 11.38L3.62 22.92L4.69 24.00L19.31 24.00L20.38 22.92L20.23 11.08L19.15 10.31L7.31 10.15L7.62 5.38L10.38 2.62L12.54 2.31L14.54 3.08L16.38 5.38L16.85 8.00L17.92 8.77L19.46 7.85L19.00 4.46L17.62 2.15L14.54 0.00Z M11.46 13.69L12.54 13.69L12.69 13.85L12.85 13.85L13.31 14.31L13.31 14.46L13.62 14.92L13.62 15.23L13.46 15.38L13.46 15.69L13.31 15.85L13.31 16.00L12.85 16.46L12.69 16.46L12.69 17.08L12.85 17.23L12.85 17.85L13.00 18.00L13.00 18.92L12.85 19.08L11.15 19.08L11.00 18.92L11.00 18.00L11.15 17.85L11.15 17.23L11.31 17.08L11.31 16.46L11.15 16.31L11.00 16.31L10.69 16.00L10.69 15.85L10.54 15.69L10.54 14.62L10.69 14.46L10.69 14.31L11.15 13.85L11.31 13.85Z",
   flatten:"M11.69 17.94L9.09 20.54L9.09 20.78L9.84 21.53L10.08 21.53L10.95 20.66L11.20 20.66L11.32 20.78L11.32 24.00L12.68 24.00L12.68 20.78L12.80 20.66L13.05 20.66L13.79 21.40L14.29 21.40L14.78 20.91L14.78 20.41L12.31 17.94Z M1.18 11.75L1.18 12.37L1.55 12.74L11.57 15.59L12.93 15.46L22.45 12.74L22.82 12.37L22.82 11.75L22.45 11.38L12.43 8.54L11.44 8.54L1.92 11.26Z M11.32 0.00L11.32 3.34L11.20 3.46L10.95 3.46L10.08 2.60L9.84 2.60L9.09 3.34L9.09 3.59L11.57 6.06L12.19 6.19L12.43 6.06L14.78 3.71L14.78 3.22L14.29 2.72L13.79 2.72L13.05 3.46L12.80 3.46L12.68 3.34L12.68 0.00Z",
   library:"M0.00 4.75L1.18 18.72L1.70 19.90L12.66 22.72L22.56 19.57L24.00 5.41L23.74 4.56L12.59 7.38L0.52 4.56Z M21.97 2.66L19.93 3.25L16.46 4.03L15.34 4.43L13.97 5.28L13.05 6.20L12.98 6.46L21.90 4.23Z M1.97 2.59L2.03 4.16L10.95 6.46L10.95 6.26L9.97 5.28L8.59 4.43L7.48 4.03L5.64 3.64Z M19.15 1.28L15.93 2.00L15.02 2.33L13.97 2.98L13.18 3.90L12.85 4.62L12.79 5.28L12.92 5.28L13.38 4.75L14.03 4.23L14.95 3.70L16.07 3.31L19.02 2.66Z M4.79 1.28L4.92 2.59L6.95 3.05L8.98 3.70L9.90 4.23L10.62 4.82L11.02 5.28L11.15 5.28L11.08 4.62L10.75 3.90L10.43 3.44L9.51 2.66L8.92 2.33L8.00 2.00Z",
-  props:"M2.39 5.27L2.09 5.70L2.09 21.70L2.64 22.91L3.36 23.58L4.76 24.00L16.45 23.82L16.76 22.91L16.03 22.30L4.52 22.30L3.91 21.88L3.73 6.00L3.36 5.27Z M6.58 0.36L5.30 2.24L5.30 18.48L5.79 19.64L6.58 20.36L8.03 20.79L19.18 20.79L20.82 20.24L21.91 18.42L21.91 2.30L21.36 1.03L19.67 0.00L7.55 0.00Z",
+  props:"M10.55 23.98L3.80 23.98L3.75 23.93L3.55 23.93L3.50 23.88L3.40 23.88L3.35 23.83L3.30 23.83L3.25 23.78L3.20 23.78L3.15 23.73L3.10 23.73L2.90 23.53L2.85 23.53L2.82 23.45L2.62 23.25L2.62 23.20L2.57 23.15L2.57 23.10L2.52 23.05L2.52 23.00L2.47 22.95L2.47 22.85L2.42 22.80L2.42 22.65L2.37 22.60L2.37 1.35L2.42 1.30L2.42 1.15L2.47 1.10L2.47 1.00L2.52 0.95L2.52 0.90L2.57 0.85L2.57 0.80L2.62 0.75L2.62 0.70L2.77 0.55L2.77 0.50L2.90 0.38L2.95 0.38L3.10 0.23L3.15 0.23L3.20 0.18L3.25 0.18L3.30 0.12L3.35 0.12L3.40 0.08L3.50 0.08L3.55 0.03L3.70 0.03L3.75 -0.03L15.40 -0.03L15.45 0.03L15.60 0.03L15.65 0.08L15.75 0.08L15.80 0.12L15.85 0.12L15.90 0.18L15.95 0.18L16.00 0.23L16.05 0.23L16.20 0.38L16.25 0.38L21.18 5.30L21.18 5.35L21.32 5.50L21.32 5.55L21.38 5.60L21.38 5.65L21.43 5.70L21.43 5.75L21.47 5.80L21.47 5.90L21.52 5.95L21.52 6.10L21.57 6.15L21.57 17.80L21.52 17.85L21.52 18.00L21.47 18.05L21.47 18.15L21.43 18.20L21.43 18.25L21.38 18.30L21.38 18.35L21.32 18.40L21.32 18.45L21.12 18.65L21.12 18.70L21.05 18.73L20.85 18.93L20.80 18.93L20.75 18.98L20.70 18.98L20.65 19.03L20.60 19.03L20.55 19.07L20.45 19.07L20.40 19.12L20.20 19.12L20.15 19.18L19.80 19.18L19.75 19.12L19.55 19.12L19.50 19.07L19.40 19.07L19.35 19.03L19.30 19.03L19.25 18.98L19.20 18.98L19.15 18.93L19.10 18.93L18.90 18.73L18.85 18.73L18.82 18.65L18.62 18.45L18.62 18.40L18.57 18.35L18.57 18.30L18.52 18.25L18.52 18.20L18.47 18.15L18.47 18.05L18.43 18.00L18.43 17.85L18.38 17.80L18.38 7.05L14.50 3.18L5.60 3.18L5.57 3.20L5.57 20.75L5.60 20.78L10.60 20.78L10.65 20.83L10.85 20.83L10.90 20.88L10.95 20.88L11.00 20.93L11.05 20.93L11.10 20.98L11.15 20.98L11.20 21.03L11.25 21.03L11.35 21.12L11.40 21.12L11.62 21.35L11.62 21.40L11.72 21.50L11.72 21.55L11.77 21.60L11.77 21.65L11.82 21.70L11.82 21.75L11.87 21.80L11.87 21.90L11.92 21.95L11.92 22.10L11.97 22.15L11.97 22.60L11.92 22.65L11.92 22.80L11.87 22.85L11.87 22.95L11.82 23.00L11.82 23.05L11.77 23.10L11.77 23.15L11.72 23.20L11.72 23.25L11.25 23.73L11.20 23.73L11.15 23.78L11.10 23.78L11.05 23.83L11.00 23.83L10.95 23.88L10.85 23.88L10.80 23.93L10.60 23.93L10.57 23.95ZM19.90 23.98L18.90 23.98L18.85 23.93L16.15 23.93L16.10 23.88L14.35 23.88L14.32 23.80L14.22 23.70L14.22 23.65L14.17 23.60L14.17 23.55L14.12 23.50L14.12 23.45L14.07 23.40L14.07 23.35L14.02 23.30L14.02 23.25L13.92 23.15L13.92 23.10L13.88 23.05L13.88 23.00L13.82 22.95L13.82 22.90L13.77 22.85L13.77 22.80L13.72 22.75L13.72 22.70L13.67 22.65L13.67 22.60L13.57 22.50L13.57 22.45L13.52 22.40L13.52 22.35L13.47 22.30L13.47 22.25L13.42 22.20L13.42 22.15L13.38 22.10L13.38 22.05L13.27 21.95L13.27 21.90L13.22 21.85L13.22 21.80L13.17 21.75L13.17 21.70L13.12 21.65L13.12 21.60L13.07 21.55L13.07 21.50L12.97 21.40L12.97 21.35L12.92 21.30L12.92 21.25L12.88 21.20L12.88 21.15L12.82 21.10L12.82 21.05L12.77 21.00L12.77 20.95L12.67 20.85L12.67 20.80L12.62 20.75L12.62 20.70L12.57 20.65L12.57 20.60L12.52 20.55L12.52 20.50L12.47 20.45L12.47 20.40L12.38 20.30L12.38 20.25L12.32 20.20L12.32 20.15L12.27 20.10L12.27 20.05L12.22 20.00L12.22 19.95L12.12 19.85L12.12 19.80L12.07 19.75L12.07 19.70L12.02 19.65L12.02 19.60L11.90 19.48L11.25 19.48L11.20 19.53L10.90 19.53L10.85 19.48L10.40 19.48L10.35 19.43L10.15 19.43L10.10 19.38L9.95 19.38L9.90 19.33L9.80 19.33L9.75 19.28L9.65 19.28L9.60 19.23L9.50 19.23L9.45 19.18L9.40 19.18L9.35 19.12L9.25 19.12L9.20 19.07L9.15 19.07L9.10 19.03L9.05 19.03L8.95 18.93L8.90 18.93L8.85 18.88L8.80 18.88L8.70 18.78L8.65 18.78L8.50 18.62L8.45 18.62L7.92 18.10L7.92 18.05L7.77 17.90L7.77 17.85L7.67 17.75L7.67 17.70L7.62 17.65L7.62 17.60L7.57 17.55L7.57 17.50L7.52 17.45L7.52 17.40L7.47 17.35L7.47 17.30L7.42 17.25L7.42 17.20L7.37 17.15L7.37 17.05L7.32 17.00L7.32 16.90L7.27 16.85L7.27 16.70L7.22 16.65L7.22 16.40L7.17 16.35L7.17 15.40L7.22 15.35L7.22 15.10L7.27 15.05L7.27 14.90L7.32 14.85L7.32 14.70L7.37 14.65L7.37 14.55L7.42 14.50L7.42 14.40L7.47 14.35L7.47 14.30L7.52 14.25L7.52 14.20L7.57 14.15L7.57 14.05L7.67 13.95L7.67 13.90L7.72 13.85L7.72 13.80L7.77 13.75L7.77 13.70L7.87 13.60L7.87 13.55L7.92 13.50L7.92 13.45L8.07 13.30L8.07 13.25L8.22 13.10L8.22 13.05L8.25 13.03L8.32 13.10L8.32 13.15L8.38 13.20L8.38 13.25L8.47 13.35L8.47 13.40L8.52 13.45L8.52 13.50L8.57 13.55L8.57 13.60L8.67 13.70L8.67 13.75L8.72 13.80L8.72 13.85L8.77 13.90L8.77 13.95L8.82 14.00L8.82 14.05L8.92 14.15L8.92 14.20L8.97 14.25L8.97 14.30L9.02 14.35L9.02 14.40L9.12 14.50L9.12 14.55L9.17 14.60L9.17 14.65L9.22 14.70L9.22 14.75L9.32 14.85L9.32 14.90L9.38 14.95L9.38 15.00L9.42 15.05L9.42 15.10L9.47 15.15L9.47 15.20L9.57 15.30L9.57 15.35L9.62 15.40L9.62 15.45L9.67 15.50L9.67 15.55L9.77 15.65L9.77 15.70L9.82 15.75L9.82 15.80L9.97 15.95L9.97 16.00L10.05 16.03L10.15 16.12L10.20 16.12L10.25 16.18L10.30 16.18L10.35 16.23L10.50 16.23L10.55 16.28L10.95 16.28L11.00 16.23L11.15 16.23L11.20 16.18L11.30 16.18L11.35 16.12L11.45 16.12L11.50 16.07L11.55 16.07L11.65 15.98L11.70 15.98L11.75 15.93L11.80 15.93L11.85 15.88L11.90 15.88L12.00 15.78L12.05 15.78L12.10 15.73L12.15 15.73L12.20 15.68L12.25 15.68L12.35 15.58L12.40 15.58L12.45 15.53L12.50 15.53L12.55 15.48L12.60 15.48L12.70 15.38L12.75 15.38L12.80 15.33L12.85 15.33L12.95 15.23L13.00 15.23L13.15 15.08L13.20 15.08L13.38 14.90L13.38 14.85L13.52 14.70L13.52 14.65L13.57 14.60L13.57 14.55L13.62 14.50L13.62 14.40L13.67 14.35L13.67 13.90L13.62 13.85L13.62 13.80L13.57 13.75L13.57 13.70L13.52 13.65L13.52 13.60L13.47 13.55L13.47 13.50L13.42 13.45L13.42 13.40L13.32 13.30L13.32 13.25L13.27 13.20L13.27 13.15L13.22 13.10L13.22 13.05L13.12 12.95L13.12 12.90L13.07 12.85L13.07 12.80L13.02 12.75L13.02 12.70L12.97 12.65L12.97 12.60L12.88 12.50L12.88 12.45L12.82 12.40L12.82 12.35L12.77 12.30L12.77 12.25L12.67 12.15L12.67 12.10L12.62 12.05L12.62 12.00L12.57 11.95L12.57 11.90L12.52 11.85L12.52 11.80L12.42 11.70L12.42 11.65L12.38 11.60L12.38 11.55L12.32 11.50L12.32 11.45L12.22 11.35L12.22 11.30L12.17 11.25L12.17 11.20L12.12 11.15L12.12 11.10L12.02 11.00L12.05 10.93L12.20 10.93L12.25 10.88L13.30 10.88L13.35 10.93L13.65 10.93L13.70 10.98L13.85 10.98L13.90 11.03L14.05 11.03L14.10 11.08L14.20 11.08L14.25 11.12L14.35 11.12L14.40 11.18L14.45 11.18L14.50 11.23L14.60 11.23L14.65 11.28L14.70 11.28L14.75 11.33L14.80 11.33L14.85 11.38L14.90 11.38L15.00 11.48L15.05 11.48L15.10 11.53L15.15 11.53L15.25 11.62L15.30 11.62L15.50 11.83L15.55 11.83L15.88 12.15L15.88 12.20L16.07 12.40L16.07 12.45L16.17 12.55L16.17 12.60L16.27 12.70L16.27 12.75L16.32 12.80L16.32 12.85L16.38 12.90L16.38 12.95L16.42 13.00L16.42 13.05L16.48 13.10L16.48 13.20L16.52 13.25L16.52 13.30L16.57 13.35L16.57 13.45L16.62 13.50L16.62 13.65L16.67 13.70L16.67 13.95L16.73 14.00L16.73 15.05L16.67 15.10L16.67 15.30L16.62 15.35L16.62 15.50L16.57 15.55L16.57 15.70L16.52 15.75L16.52 15.85L16.48 15.90L16.48 16.00L16.42 16.05L16.42 16.10L16.38 16.15L16.38 16.20L16.32 16.25L16.32 16.35L16.27 16.40L16.27 16.45L16.23 16.50L16.23 16.55L16.12 16.65L16.12 16.70L16.07 16.75L16.07 16.80L16.02 16.85L16.02 16.90L15.92 17.00L15.92 17.05L15.77 17.20L15.77 17.25L15.67 17.35L15.67 17.40L15.77 17.50L15.77 17.55L15.88 17.65L15.88 17.70L15.92 17.75L15.92 17.80L16.02 17.90L16.02 17.95L16.12 18.05L16.12 18.10L16.23 18.20L16.23 18.25L16.32 18.35L16.32 18.40L16.42 18.50L16.42 18.55L16.48 18.60L16.48 18.65L16.57 18.75L16.57 18.80L16.67 18.90L16.67 18.95L16.77 19.05L16.77 19.10L16.88 19.20L16.88 19.25L16.92 19.30L16.92 19.35L17.02 19.45L17.02 19.50L17.12 19.60L17.12 19.65L17.23 19.75L17.23 19.80L17.32 19.90L17.32 19.95L17.42 20.05L17.42 20.10L17.48 20.15L17.48 20.20L17.57 20.30L17.57 20.35L17.67 20.45L17.67 20.50L17.77 20.60L17.77 20.65L17.88 20.75L17.88 20.80L17.98 20.90L17.98 20.95L18.02 21.00L18.02 21.05L18.12 21.15L18.12 21.20L18.23 21.30L18.23 21.35L18.32 21.45L18.32 21.50L18.43 21.60L18.43 21.65L18.47 21.70L18.47 21.75L18.57 21.85L18.57 21.90L18.68 22.00L18.68 22.05L18.77 22.15L18.77 22.20L18.88 22.30L18.88 22.35L18.97 22.45L18.97 22.50L19.02 22.55L19.02 22.60L19.12 22.70L19.12 22.75L19.22 22.85L19.22 22.90L19.32 23.00L19.32 23.05L19.43 23.15L19.43 23.20L19.52 23.30L19.52 23.35L19.57 23.40L19.57 23.45L19.68 23.55L19.68 23.60L19.77 23.70L19.77 23.75L19.88 23.85L19.88 23.90L19.93 23.95Z",
   group:"M14.98 10.42L14.55 10.95L11.17 16.97L11.28 17.61L11.81 17.99L19.06 17.99L19.33 17.88L19.70 17.34L19.65 16.81L16.32 10.95L15.79 10.36Z M15.36 12.99L15.52 12.99L17.23 15.95L17.34 16.16L17.29 16.32L13.58 16.32L13.53 16.27L13.64 15.95Z M8.54 6.01L6.98 6.55L5.91 7.52L5.26 8.86L5.15 10.31L5.69 11.87L6.60 12.89L7.79 13.53L9.45 13.69L11.01 13.15L12.03 12.24L12.67 11.06L12.83 9.40L12.67 8.64L12.30 7.84L11.38 6.82L10.20 6.17Z M0.38 0.11L0.00 4.46L1.72 5.15L1.72 18.85L0.05 19.38L0.11 23.62L4.46 24.00L5.15 22.28L18.85 22.28L19.38 23.95L23.62 23.89L24.00 19.54L22.28 18.85L22.28 5.15L23.95 4.62L23.89 0.38L19.54 0.00L18.85 1.72L5.15 1.72L4.62 0.05Z M5.15 3.38L18.85 3.38L19.01 4.72L20.62 5.15L20.62 18.85L19.28 19.01L18.85 20.62L5.15 20.62L4.99 19.28L3.38 18.85L3.38 5.15L4.72 4.99Z",
   editpic:"M1.63 2.93L0.00 6.13L0.00 19.63L0.98 22.17L4.17 23.93L17.87 23.93L20.35 22.96L22.04 20.09L22.04 10.37L21.33 9.78L20.28 10.50L20.22 20.02L18.65 21.91L4.11 22.11L2.35 21.00L1.83 19.76L2.22 4.96L4.24 3.65L13.70 3.65L14.35 2.48L13.76 1.89L3.91 1.89Z M21.85 0.78L20.28 0.07L19.30 0.13L18.33 0.59L7.83 11.02L7.24 12.13L6.39 15.46L6.52 16.63L7.04 17.28L8.48 17.67L12.85 16.37L23.48 5.74L24.00 4.50L23.93 3.39L23.41 2.35Z M16.83 4.83L19.24 7.24L19.24 7.43L11.67 15.00L8.28 15.85L8.22 15.59L9.07 12.39L16.37 5.02Z M19.63 1.89L20.28 1.89L20.61 2.09L21.98 3.46L22.17 3.78L22.17 4.43L22.11 4.57L20.67 6.00L20.54 6.00L18.07 3.52L18.07 3.39L18.26 3.13L18.46 3.00L18.91 2.48Z",
   layers:"M24.00 17.82L23.66 17.30L20.48 15.77L13.50 19.29L11.57 19.57L3.29 15.83L0.17 17.42L0.00 18.10L0.28 18.50L10.61 23.66L12.43 24.00L23.72 18.50Z M24.00 11.91L23.66 11.40L20.48 9.87L13.50 13.39L11.63 13.67L10.61 13.45L3.29 9.93L0.17 11.52L0.00 12.20L0.28 12.60L11.01 17.93L12.43 18.10L23.60 12.65Z M0.00 5.90L0.28 6.70L11.52 12.20L12.99 12.03L23.60 6.75L24.00 6.24L23.66 5.50L12.26 0.00L10.67 0.34Z",
@@ -14121,10 +14358,14 @@ const RIBBON_SHAPES={
   orgBtn:"--i-org",       /* 6ep — a stack of pages, not another pair of arrows */
   /* 6jo — the two the ribbon shares with the selection bar, so one idea has one picture */
   groupBtn:"--i-group", markupsBtn:"--i-library", stampBtn:"--i-stamp",  /* 6k9 */
-  photoBtn:"--i-photofile"                                               /* 6mb */
+  photoBtn:"--i-photofile",                                              /* 6mb */
+  palBtn:"--i-roller",                    /* v61 — Ced: "make this themes icon" (a paint roller) */
+  selAllBtn:"--i-selall"                  /* v61 — Ced: "replace select all icon" (a ticked box, stacked) */
 };
 /* v60 — select and pan take the marks Ced sent (see ds.css §6) */
-const MODE_SHAPES={ select:"--i-select", pan:"--i-hand", redline:"--i-pen",
+/* v61 — Ced's drag mark (tools/traceicon.py), for the strokes' SVG grip */
+const MIU_DRAG_PATH="M12.19 7.17L11.76 7.17L11.70 7.11L11.60 7.11L11.54 7.06L11.44 7.06L11.38 7.01L11.33 7.01L10.98 6.66L10.98 6.60L10.87 6.50L10.87 6.39L10.82 6.34L10.82 6.17L10.77 6.12L10.77 4.13L10.74 4.11L10.36 4.48L10.31 4.48L10.20 4.59L10.15 4.59L10.04 4.70L9.88 4.70L9.83 4.75L9.29 4.75L9.23 4.70L9.13 4.70L9.07 4.64L9.02 4.64L8.91 4.54L8.86 4.54L8.56 4.24L8.56 4.19L8.51 4.13L8.51 4.08L8.46 4.03L8.46 3.92L8.40 3.87L8.40 3.28L8.46 3.22L8.46 3.11L8.51 3.06L8.51 3.01L8.62 2.90L8.62 2.85L11.28 0.19L11.33 0.19L11.38 0.13L11.44 0.13L11.49 0.08L11.54 0.08L11.60 0.03L11.76 0.03L11.81 -0.03L12.19 -0.03L12.24 0.03L12.35 0.03L12.40 0.08L12.51 0.08L12.62 0.19L12.67 0.19L15.33 2.85L15.33 2.90L15.44 3.01L15.44 3.06L15.49 3.11L15.49 3.22L15.54 3.28L15.54 3.87L15.49 3.92L15.49 4.03L15.44 4.08L15.44 4.13L15.38 4.19L15.38 4.24L15.09 4.54L15.03 4.54L14.93 4.64L14.87 4.64L14.82 4.70L14.71 4.70L14.66 4.75L14.12 4.75L14.07 4.70L13.96 4.70L13.91 4.64L13.85 4.64L13.80 4.59L13.74 4.59L13.64 4.48L13.58 4.48L13.21 4.11L13.18 4.13L13.18 6.12L13.13 6.17L13.13 6.34L13.07 6.39L13.07 6.44L13.02 6.50L13.02 6.55L12.97 6.60L12.97 6.66L12.67 6.95L12.62 6.95L12.51 7.06L12.40 7.06L12.35 7.11L12.24 7.11L12.21 7.14ZM3.87 15.54L3.28 15.54L3.22 15.49L3.11 15.49L3.06 15.44L3.01 15.44L2.95 15.38L2.90 15.38L0.19 12.67L0.19 12.62L0.08 12.51L0.08 12.40L0.03 12.35L0.03 12.19L-0.03 12.13L-0.03 11.81L0.03 11.76L0.03 11.60L0.08 11.54L0.08 11.44L0.19 11.33L0.19 11.28L2.90 8.56L2.95 8.56L3.01 8.51L3.06 8.51L3.11 8.46L3.22 8.46L3.28 8.40L3.87 8.40L3.92 8.46L4.03 8.46L4.08 8.51L4.13 8.51L4.19 8.56L4.24 8.56L4.54 8.86L4.54 8.91L4.64 9.02L4.64 9.07L4.70 9.13L4.70 9.23L4.75 9.29L4.75 9.88L4.70 9.93L4.70 10.04L4.64 10.09L4.64 10.15L4.54 10.26L4.54 10.31L4.11 10.74L4.13 10.77L6.12 10.77L6.17 10.82L6.34 10.82L6.39 10.87L6.44 10.87L6.50 10.93L6.55 10.93L6.60 10.98L6.66 10.98L6.95 11.28L6.95 11.33L7.06 11.44L7.06 11.54L7.11 11.60L7.11 11.70L7.17 11.76L7.17 12.19L7.11 12.24L7.11 12.35L7.06 12.40L7.06 12.51L6.95 12.62L6.95 12.67L6.66 12.97L6.60 12.97L6.55 13.02L6.50 13.02L6.44 13.07L6.39 13.07L6.34 13.13L6.17 13.13L6.12 13.18L4.13 13.18L4.11 13.21L4.48 13.58L4.48 13.64L4.59 13.74L4.59 13.80L4.70 13.91L4.70 14.01L4.75 14.07L4.75 14.66L4.70 14.71L4.70 14.82L4.64 14.87L4.64 14.93L4.54 15.03L4.54 15.09L4.24 15.38L4.19 15.38L4.13 15.44L4.08 15.44L4.03 15.49L3.92 15.49L3.89 15.52ZM20.67 15.54L20.08 15.54L20.03 15.49L19.92 15.49L19.87 15.44L19.81 15.44L19.76 15.38L19.70 15.38L19.41 15.09L19.41 15.03L19.30 14.93L19.30 14.87L19.25 14.82L19.25 14.71L19.19 14.66L19.19 14.07L19.25 14.01L19.25 13.91L19.36 13.80L19.36 13.74L19.46 13.64L19.46 13.58L19.84 13.21L19.81 13.18L17.77 13.18L17.72 13.13L17.61 13.13L17.56 13.07L17.45 13.07L17.34 12.97L17.29 12.97L16.99 12.67L16.99 12.62L16.89 12.51L16.89 12.40L16.83 12.35L16.83 12.24L16.78 12.19L16.78 11.76L16.83 11.70L16.83 11.60L16.89 11.54L16.89 11.44L16.99 11.33L16.99 11.28L17.29 10.98L17.34 10.98L17.40 10.93L17.45 10.93L17.50 10.87L17.56 10.87L17.61 10.82L17.77 10.82L17.83 10.77L19.81 10.77L19.84 10.74L19.46 10.36L19.46 10.31L19.36 10.20L19.36 10.15L19.25 10.04L19.25 9.93L19.19 9.88L19.19 9.29L19.25 9.23L19.25 9.13L19.30 9.07L19.30 9.02L19.41 8.91L19.41 8.86L19.70 8.56L19.76 8.56L19.81 8.51L19.87 8.51L19.92 8.46L20.03 8.46L20.08 8.40L20.67 8.40L20.72 8.46L20.83 8.46L20.89 8.51L20.94 8.51L21.05 8.62L21.10 8.62L23.76 11.28L23.76 11.33L23.81 11.38L23.81 11.44L23.87 11.49L23.87 11.54L23.92 11.60L23.92 11.76L23.97 11.81L23.97 12.13L23.92 12.19L23.92 12.35L23.87 12.40L23.87 12.51L23.76 12.62L23.76 12.67L21.05 15.38L20.99 15.38L20.94 15.44L20.89 15.44L20.83 15.49L20.72 15.49L20.70 15.52ZM12.30 15.28L11.65 15.28L11.60 15.22L11.33 15.22L11.28 15.17L11.11 15.17L11.06 15.11L10.90 15.11L10.85 15.06L10.79 15.06L10.74 15.01L10.63 15.01L10.58 14.95L10.52 14.95L10.47 14.90L10.42 14.90L10.36 14.85L10.31 14.85L10.20 14.74L10.15 14.74L9.99 14.58L9.93 14.58L9.37 14.01L9.37 13.96L9.21 13.80L9.21 13.74L9.15 13.69L9.15 13.64L9.05 13.53L9.05 13.48L8.99 13.42L8.99 13.37L8.94 13.32L8.94 13.21L8.89 13.15L8.89 13.05L8.83 12.99L8.83 12.89L8.78 12.83L8.78 12.67L8.72 12.62L8.72 12.35L8.67 12.30L8.67 11.60L8.72 11.54L8.72 11.28L8.78 11.22L8.78 11.11L8.83 11.06L8.83 10.90L8.89 10.85L8.89 10.79L8.94 10.74L8.94 10.63L8.99 10.58L8.99 10.52L9.05 10.47L9.05 10.42L9.10 10.36L9.10 10.31L9.21 10.20L9.21 10.15L9.37 9.99L9.37 9.93L9.93 9.37L9.99 9.37L10.15 9.21L10.20 9.21L10.26 9.15L10.31 9.15L10.42 9.05L10.47 9.05L10.52 8.99L10.58 8.99L10.63 8.94L10.74 8.94L10.79 8.89L10.90 8.89L10.95 8.83L11.06 8.83L11.11 8.78L11.28 8.78L11.33 8.72L11.60 8.72L11.65 8.67L12.30 8.67L12.35 8.72L12.62 8.72L12.67 8.78L12.83 8.78L12.89 8.83L12.99 8.83L13.05 8.89L13.15 8.89L13.21 8.94L13.32 8.94L13.37 8.99L13.42 8.99L13.48 9.05L13.53 9.05L13.64 9.15L13.69 9.15L13.80 9.26L13.85 9.26L13.96 9.37L14.01 9.37L14.58 9.93L14.58 9.99L14.68 10.09L14.68 10.15L14.79 10.26L14.79 10.31L14.85 10.36L14.85 10.42L14.95 10.52L14.95 10.58L15.01 10.63L15.01 10.74L15.06 10.79L15.06 10.90L15.11 10.95L15.11 11.06L15.17 11.11L15.17 11.28L15.22 11.33L15.22 11.60L15.28 11.65L15.28 12.30L15.22 12.35L15.22 12.62L15.17 12.67L15.17 12.83L15.11 12.89L15.11 12.99L15.06 13.05L15.06 13.15L15.01 13.21L15.01 13.32L14.95 13.37L14.95 13.42L14.85 13.53L14.85 13.58L14.79 13.64L14.79 13.69L14.68 13.80L14.68 13.85L14.58 13.96L14.58 14.01L14.01 14.58L13.96 14.58L13.85 14.68L13.80 14.68L13.69 14.79L13.64 14.79L13.53 14.90L13.48 14.90L13.42 14.95L13.37 14.95L13.32 15.01L13.21 15.01L13.15 15.06L13.05 15.06L12.99 15.11L12.89 15.11L12.83 15.17L12.72 15.17L12.67 15.22L12.35 15.22L12.32 15.25ZM12.13 23.97L11.81 23.97L11.76 23.92L11.60 23.92L11.54 23.87L11.49 23.87L11.44 23.81L11.38 23.81L11.33 23.76L11.28 23.76L8.56 21.05L8.56 20.99L8.51 20.94L8.51 20.89L8.46 20.83L8.46 20.72L8.40 20.67L8.40 20.08L8.46 20.03L8.46 19.92L8.51 19.87L8.51 19.81L8.56 19.76L8.56 19.70L8.91 19.36L8.97 19.36L9.02 19.30L9.07 19.30L9.13 19.25L9.23 19.25L9.29 19.19L9.88 19.19L9.93 19.25L10.04 19.25L10.15 19.36L10.20 19.36L10.31 19.46L10.36 19.46L10.74 19.84L10.77 19.81L10.77 17.83L10.82 17.77L10.82 17.61L10.87 17.56L10.87 17.50L10.93 17.45L10.93 17.40L10.98 17.34L10.98 17.29L11.33 16.94L11.38 16.94L11.44 16.89L11.54 16.89L11.60 16.83L11.70 16.83L11.76 16.78L12.19 16.78L12.24 16.83L12.35 16.83L12.40 16.89L12.51 16.89L12.62 16.99L12.67 16.99L12.97 17.29L12.97 17.34L13.02 17.40L13.02 17.45L13.07 17.50L13.07 17.56L13.13 17.61L13.13 17.77L13.18 17.83L13.18 19.81L13.21 19.84L13.64 19.41L13.69 19.41L13.80 19.30L13.85 19.30L13.91 19.25L14.07 19.25L14.12 19.19L14.66 19.19L14.71 19.25L14.82 19.25L14.87 19.30L14.93 19.30L15.03 19.41L15.09 19.41L15.38 19.70L15.38 19.76L15.44 19.81L15.44 19.87L15.49 19.92L15.49 20.03L15.54 20.08L15.54 20.67L15.49 20.72L15.49 20.83L15.44 20.89L15.44 20.94L15.33 21.05L15.33 21.10L12.67 23.76L12.62 23.76L12.56 23.81L12.51 23.81L12.46 23.87L12.40 23.87L12.35 23.92L12.19 23.92L12.16 23.95Z";
+const MODE_SHAPES={ select:"--i-select", pan:"--i-hand", redline:"--i-pen2",   /* v61 — Ced's pencil */
                     /* v60 — the heavier, filled set (ds.css §8) */
                     text:"--i-t-text", fix:"--i-t-fix", crossout:"--i-t-crossout",
                     strikerow:"--i-t-strikerow", cross:"--i-t-striketext", line:"--i-t-line",
@@ -14429,9 +14670,15 @@ function rotGuideOpen(pg,cx,cy,box){
     const X=cx-r.left, Y=cy-r.top;
     const mk=(n,at)=>{ const e=document.createElementNS(NS,n);
       for(const k in at)e.setAttribute(k,at[k]); return e; };
+    /* v61 — found by test/chaos.py (seed 44): a turn started from a group's grip handed over a box
+       with no `w`/`h`, and the lift was written as x="NaN" width="undefined" — four console errors
+       per turn. Any rect-like box is read (x/y/w/h or left/top/width/height); a box with no size
+       draws no lift. */
     if(box){
-      svg.appendChild(mk("rect",{x:box.x-r.left,y:box.y-r.top,width:box.w,height:box.h,
-        class:"rg-lift",rx:3}));
+      const bx=Number.isFinite(box.x)?box.x:box.left, by=Number.isFinite(box.y)?box.y:box.top;
+      const bw=Number.isFinite(box.w)?box.w:box.width, bh=Number.isFinite(box.h)?box.h:box.height;
+      if([bx,by,bw,bh].every(Number.isFinite))
+        svg.appendChild(mk("rect",{x:bx-r.left,y:by-r.top,width:bw,height:bh,class:"rg-lift",rx:3}));
     }
     /* ==============================================================================================
        6lx — THE CROSS BELONGS TO THE SHAPE, NOT TO THE PAGE.

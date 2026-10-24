@@ -50,7 +50,10 @@ const COP_POCS=["JOSHUA BEAVER","AARON COOKE","JACKSON SHAFF","EDEN TA","DAVID W
 
 /* rgb(0.80,0.11,0.11) in the old tool, which is this. Kept exactly: a re-dated stamp sitting beside
    an older one on the same submission must be the same red. */
-const COP_RED="#cc1c1c";
+/* v61 — Ced: "make the stamp the same color as the default redline color." The stamp is a redline
+   like the others on the sheet, so it now takes the Redline tool's default red (MA_RED, #fa3237)
+   rather than the old tool's darker #cc1c1c. "Update stamp" brings stamps already placed into line. */
+const COP_RED=(typeof MA_RED!=="undefined")?MA_RED:"#fa3237";
 /* 6k4 — Arial, and bold. Ced asked for "Arial, and the Redlined or As-Built should be arial bold",
    then sent the stamp he wants it to look like — and measured off that artwork every line is bold:
    stem-to-cap 0.211 on the title and 0.204 on the rows, where Arial Regular would be about 0.13.
