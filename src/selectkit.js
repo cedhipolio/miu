@@ -315,7 +315,10 @@ async function skSnapshot(pg,i,r,poly){
   if(!P||!P.page||!pgW){ setStatus("That page is not rendered yet — scroll it into view and try again.",true); return; }
   const cropW=Math.max(1,(r[2]-r[0])*pgW), cropH=Math.max(1,(r[3]-r[1])*pgH);
   /* three screen pixels per pixel, unless the region is so large that the canvas would be unreasonable */
-  let mult=3, MAXPX=26e6;
+  /* v67 — AND NEVER LESS THAN 4 PIXELS A POINT (288 dpi), whatever the zoom. Three screen pixels per
+     pixel is plenty at working zoom and thin when the capture is made zoomed out: a region taken at 40%
+     came out at 1.2 px/pt, soft on screen and in print. Ced: "make sure the photo attached is hd." */
+  let mult=Math.max(3, 4/Math.max(0.05,S.scale||1)), MAXPX=26e6;
   if(cropW*cropH*mult*mult>MAXPX)mult=Math.max(1,Math.sqrt(MAXPX/(cropW*cropH)));
   const vp=P.page.getViewport({scale:S.scale*mult});
   const sx=Math.round(r[0]*vp.width), sy=Math.round(r[1]*vp.height);
@@ -970,7 +973,7 @@ function skEditor(a,opts){
   const cv=document.createElement("canvas"); cv.className="sk-edcanvas";
   const ov=document.createElement("canvas"); ov.className="sk-edov";
   /* v62 — the layer the drawn lines and shapes live on until Save (see "LIVE SHAPES" below) */
-  const ol=document.createElement("canvas"); ol.className="sk-edobj";
+  const ol=document.createElement("canvas"); ol.className="sk-edobj"; ol.style.display="none"; ol.width=ol.height=1;
   /* 6gq — Ced: "make sure the brush is visible in the UI of the edit photos in snapshot so erasing is
      not confusing." A ring the size of the brush, following the pointer, so you can see what a sweep
      will take before you take it. */
@@ -1250,6 +1253,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     c.getContext("2d").drawImage(src,0,0); return c; };
   const shot=()=>({cv:snapCv(cv),
                    w:cv.width,h:cv.height,rot:picRot,
+                   tsx:trimShiftX, tsy:trimShiftY,              /* v66 — a crop's shift undoes with it */
                    mask:mask?Uint8Array.from(mask):null,
                    objs:objs.map(o=>Object.assign({},o))});     /* v62 — the live shapes too */
   /* 6gz — A CROP THROWS PIXELS AWAY, so a step that changes the picture's SHAPE carries the untouched
@@ -1285,6 +1289,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     if(cv.width!==w||cv.height!==h){ cv.width=ov.width=w; cv.height=ov.height=h; applyZoom(); dropBox(); }
     drawBack(g,st,w,h); mask=st.mask?Uint8Array.from(st.mask):null;
     objs=Array.isArray(st.objs)?st.objs.map(o=>Object.assign({},o)):[]; objSel=-1; drawObjs();
+    if(typeof st.tsx==="number"){ trimShiftX=st.tsx; trimShiftY=st.tsy||0; }
     skMaskShow(ov,mask); say(); };
   /* 6m0 — ANY change to the pixels ends a run of free turns, because the base a run resamples from is
      the picture as it was before the run and would silently throw away whatever has been done since.
@@ -1348,6 +1353,11 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
       }
 
   function drawObjs(){
+    /* v66 — an empty layer is not composited at all. A full-size transparent canvas over the picture
+       cost every brush frame a blend of the whole stage (measured: the editor's median frame went
+       from 27 ms in v61 to 32 ms once the layer existed). It is only shown while it holds a shape. */
+    if(!objs.length){ if(ol.style.display!=="none"){ ol.style.display="none"; if(ol.width>1){ ol.width=1; ol.height=1; } } return; }
+    ol.style.display="";
     if(ol.width!==cv.width||ol.height!==cv.height){ ol.width=cv.width; ol.height=cv.height; }
     ol.style.width=cv.style.width; ol.style.height=cv.style.height;
     const c=ol.getContext("2d"); c.clearRect(0,0,ol.width,ol.height);
@@ -1909,6 +1919,18 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     const H=Math.min(cv.height-Y,Math.round(Math.abs(y1-y0)));
     if(W<4||H<4){ skMaskShow(ov,mask); setStatus("Drag a box round what you want to keep.",true); return; }
     pushGeo();
+    /* v66 — WHAT IS KEPT STAYS WHERE IT WAS ON THE SHEET. The saved mark keeps its centre, so a crop
+       that took more off one side than the other slid the picture across the sheet by half the
+       difference — the part you kept was no longer over the thing it was cut from. The same record
+       the free turn's trim keeps (6m0), in page units, turned by the mark's own rotation. */
+    try{
+      const P=(S.pages&&S.pages[a.page])||{};
+      const PW=P.w1||612, PH=P.h1||792;
+      const dx=((X+W/2)-cv.width/2)*pxW, dy=((Y+H/2)-cv.height/2)*pxH;     /* points, picture frame */
+      const t=((a.rot||0)*Math.PI)/180, c=Math.cos(t), sn=Math.sin(t);
+      trimShiftX+=(dx*c-dy*sn)/PW;
+      trimShiftY+=(dx*sn+dy*c)/PH;
+    }catch(e){}
     const cut=(src,sw,sh)=>{ const t=document.createElement("canvas"); t.width=W; t.height=H;
       t.getContext("2d").drawImage(src,X,Y,W,H,0,0,W,H); return t; };
     const kept=cut(cv);
@@ -2367,6 +2389,7 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   },false,"Crop the picture — the box starts on its edges; push the sides in, then Apply","crop");
   bCropApply=mkb(gTurn,"Apply","✓",()=>cropApply(),false,"Cut the picture down to the box","cropapply");
   bCropApply.style.display="none";
+  bCropApply.classList.add("sk-edok");   /* v65 — the one "yes, do it" in the rail, in green */
   /* 6gl — the wheel belongs to the editor while the editor is open: ctrl-wheel zooms the PICTURE, and
      a plain wheel outside the scrolling stage is swallowed rather than scrolling the sheet behind. */
   /* 6ip — SHIFT-WHEEL IS THE BRUSH. Ced: "shift scroll up or down makes the brushes bigger or
@@ -2905,6 +2928,14 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
   };
   mkf("Cancel",()=>{ close(); });
   mkf("Save",()=>{
+    /* v65 — A CROP BOX STILL UP WHEN SAVE IS PRESSED IS A CROP. Ced: "make the crop auto apply when
+       saved no need to approve." The box only differs from the picture's edges if it was moved, so a
+       box that was never touched cuts nothing. */
+    if(cropBox){
+      const b=cropBox;
+      if(b.x>0.5||b.y>0.5||b.x+b.w<cv.width-0.5||b.y+b.h<cv.height-0.5){ try{ cropApply(); }catch(e){} }
+      else { try{ cropClose(); }catch(e){ cropBox=null; } }
+    }
     flattenObjs();                     /* v62 — the live shapes go into the picture now, and only now */
     /* 6ha — a picture that does not live on a page goes back to whoever asked for it */
     if(opts.onSave){
@@ -3527,9 +3558,77 @@ function skAutoSolid(g,cv,minLen,rounds){
     if(!ink0[p]){ if(solid[p])nFill++; continue; }
     if(solid[p])nKeep++; else { strayAll[p]=1; nStray++; }
   }
-  /* 6mg — a pass that would take most of the picture has not found a subject */
+  /* ================================================================================================
+     v65 — A SHAPE IS NEVER MADE SMALLER. Ced: "make the auto in edit photo better, it should never make
+     shapes smaller if it has a fine shape."
+     Everything outside the largest closed contour was being taken as "outside line", and on a picture
+     that is already clean that is the shape itself: a bolt hanging off a corner, a tab, a row of fins,
+     a second body beside the first. Measured on Ced's own edited cut-out from SOH1350, Auto took 40%
+     of the ink — the picture he had already finished, made smaller. On a test body with bolts, tabs,
+     fins and a handle and not one stray line, 7.7%.
+     What Auto is FOR is the long thin lines another part of the drawing runs across the capture —
+     leaders, dimension lines, grid. So a piece outside the contour is only taken when it LOOKS like
+     one: thin (no wider than the picture's own stroke, and never more than a few pixels) and long for
+     its width. A piece with any body to it — anything you could call part of a shape — stays, whole.
+     ================================================================================================ */
+  /* 6mg — a pass that would take most of the picture has not found a subject. Decided on what the
+     contour alone holds, BEFORE the pieces below are given back: a block of text or a loose sketch
+     has no shape to keep, and saying so (with nothing changed) is the answer. */
   if(nKeep<total*AUTO_MIN_KEEP)
     return {noSubject:true, nInk:total, keptPct:Math.round(100*nKeep/total)};
+  if(nStray){
+    /* v66 — WHAT IS OUTSIDE THE CONTOUR IS SPLIT INTO ITS BODY AND ITS LINES, and only lines go.
+       v65 judged each outside piece whole, and on Ced's own raw captures every outside piece was ONE
+       piece — the stray leaders run into chunks of the equipment — so the chunks saved the leaders
+       and Auto took nothing at all (v64 took everything: 39% and 49%, much of it the equipment).
+       Here the outside ink is opened: anything thicker than a line seeds a body, the body is grown
+       back to its own edges, and what is left over is the thin part. The thin part is cut into its
+       own pieces, and a piece goes only if it is a line in every sense (thin, long for its width,
+       long in Auto's own units, line-sized ink). The body, and the short thin bits on it — fins,
+       bolts' shanks, hatching — stay. */
+    const dist=skDistIn(ink0,w,h);
+    /* the picture's LINE weight, read off its ridges (pixels at least as deep in the ink as their four
+       neighbours): the lower third of those widths is the lines, whatever the filled masses do to the
+       average. A leader is drawn at about that weight; a mass is several times it. */
+    const ridge=[];
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+      const p=y*w+x, d=dist[p]; if(d<0.9)continue;
+      if(d>=dist[p-1]&&d>=dist[p+1]&&d>=dist[p-w]&&d>=dist[p+w])ridge.push(d);
+    }
+    ridge.sort((a,b)=>a-b);
+    const lineW=ridge.length?Math.max(1.5,2*ridge[Math.floor(ridge.length*0.33)]):2;
+    const wMax=Math.max(3,Math.min(28,lineW*1.6));     /* no leader is heavier than this */
+    const rT=wMax/2+0.5;
+    const seed=new Uint8Array(w*h);
+    for(let p=0;p<strayAll.length;p++)if(strayAll[p]&&dist[p]>=rT)seed[p]=1;
+    const bodyOut=skMaskGrow(seed,w,h,Math.ceil(rT));
+    const thin=new Uint8Array(w*h);
+    for(let p=0;p<strayAll.length;p++)if(strayAll[p]&&!bodyOut[p])thin[p]=1;
+    const minLen=Math.max(2*L*f, 24);
+    const take=new Uint8Array(w*h);
+    const seen=new Uint8Array(w*h), q=new Int32Array(w*h);
+    for(let p0=0;p0<thin.length;p0++){
+      if(!thin[p0]||seen[p0])continue;
+      let qh=0, qt=0; q[qt++]=p0; seen[p0]=1;
+      let x0=w,y0=h,x1=0,y1=0,md=0,n=0;
+      while(qh<qt){
+        const p=q[qh++]; const x=p%w, y=(p/w)|0; n++;
+        if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+        if(dist[p]>md)md=dist[p];
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy)continue; const X=x+dx, Y=y+dy;
+          if(X<0||Y<0||X>=w||Y>=h)continue; const k=Y*w+X;
+          if(thin[k]&&!seen[k]){ seen[k]=1; q[qt++]=k; }
+        }
+      }
+      const width=Math.max(1,md*2), len=Math.hypot(x1-x0+1,y1-y0+1);
+      const lineLike=(width<=wMax)&&(len>=6*width)&&(len>=minLen)&&(n<=len*width*1.6);
+      if(lineLike)for(let k=0;k<qt;k++)take[q[k]]=1;
+    }
+    for(let p=0;p<strayAll.length;p++){
+      if(strayAll[p]&&!take[p]){ strayAll[p]=0; nStray--; nKeep++; }
+    }
+  }
   return {stray:strayAll, solid, nStray, nFill, nInk:total, minLen:L*f, stroke:R, nClosed, nEnds};
 }
 

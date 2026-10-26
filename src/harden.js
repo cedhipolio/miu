@@ -158,5 +158,15 @@
       v.textContent="Mark It Up "+MIU_VERSION;
       h.appendChild(v);
     }
+    /* v66 — and which way the PDF engine is running, because that decides how the tool feels: in its
+       own worker the hand never waits on a page render; on the page's thread it can. Read when Help
+       is opened, since the worker is started after this runs. */
+    var say=function(){
+      try{ var vv=document.querySelector("#helpModal .miu-ver");
+           if(vv)vv.textContent="Mark It Up "+MIU_VERSION+" · PDF engine: "+
+             (window.__miuRealWorker?"its own worker":"the page's thread (this host does not allow a worker)"); }catch(e){}
+    };
+    document.addEventListener("click",function(e){ if(e.target&&e.target.closest&&e.target.closest("#helpBtn"))say(); },true);
+    document.addEventListener("keydown",function(e){ if(e.key==="?")say(); },true);
   }catch(e){}
 })();

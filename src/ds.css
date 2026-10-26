@@ -147,19 +147,22 @@
   html #annobar, html #linebar, html #multibar{border-color:var(--line); box-shadow:var(--e-2)}
 
   /* ---- 4. the notice guard.js raises -------------------------------------------------------------- */
-  #miuNotice{background:var(--pop); position:fixed; left:50%; bottom:24px; z-index:2147483000; transform:translate(-50%, 16px);
+  #miuNotice,   #miuPrevNote, #miuEditNote{background:var(--pop); position:fixed; left:50%; bottom:24px; z-index:2147483000; transform:translate(-50%, 16px);
     display:flex; align-items:flex-start; gap:12px; max-width:min(560px, calc(100vw - 32px));
     padding:12px 12px 12px 14px; border-radius:var(--r-xl); border:1px solid var(--line);
     box-shadow:var(--e-3); color:var(--ink); font:500 var(--fs-4)/1.4 var(--sans, system-ui, sans-serif);
     opacity:0; pointer-events:none; transition:opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease)}
-  #miuNotice.show{opacity:1; transform:translate(-50%, 0); pointer-events:auto}
-  #miuNotice .ds-notice-ic{flex:0 0 22px; height:22px; border-radius:50%; display:grid; place-items:center;
+  #miuNotice.show,   #miuPrevNote.show, #miuEditNote.show{opacity:1; transform:translate(-50%, 0); pointer-events:auto}
+  #miuNotice .ds-notice-ic,   #miuPrevNote .ds-notice-ic, #miuEditNote .ds-notice-ic{flex:0 0 22px; height:22px; border-radius:50%; display:grid; place-items:center;
     font:800 13px/1 var(--sans, system-ui, sans-serif); color:#fff; background:#d4383d; margin-top:1px}
-  #miuNotice[data-tone=warn] .ds-notice-ic{background:#c27a12}
-  #miuNotice .ds-notice-body{display:flex; flex-direction:column; gap:2px; min-width:0}
-  #miuNotice .ds-notice-body b{font-weight:700; color:var(--ink-strong)}
-  #miuNotice .ds-notice-body span{color:var(--muted)}
-  #miuNotice .ds-notice-acts{display:flex; gap:6px; flex:0 0 auto; align-self:center}
+  #miuNotice[data-tone=warn] .ds-notice-ic,   #miuPrevNote[data-tone=warn] .ds-notice-ic, #miuEditNote[data-tone=warn] .ds-notice-ic{background:#c27a12}
+  #miuNotice .ds-notice-body,   #miuPrevNote .ds-notice-body, #miuEditNote .ds-notice-body{display:flex; flex-direction:column; gap:2px; min-width:0}
+  #miuNotice .ds-notice-body b,   #miuPrevNote .ds-notice-body b, #miuEditNote .ds-notice-body b{font-weight:700; color:var(--ink-strong)}
+  #miuNotice .ds-notice-body span,   #miuPrevNote .ds-notice-body span, #miuEditNote .ds-notice-body span{color:var(--muted)}
+  #miuNotice .ds-notice-acts,   #miuPrevNote .ds-notice-acts, #miuEditNote .ds-notice-acts{display:flex; gap:6px; flex:0 0 auto; align-self:center}
+  #miuPrevNote{bottom:92px}   /* v68 — above where an error notice would sit */
+  #miuEditNote{bottom:160px}   /* v70 — the "flattened by the site" offer stacks above the browser-copy one */
+  #miuEditNote .miu-ok{background:#1f8a4c; border-color:#1f8a4c; color:#fff}
   .ds-btn{appearance:none; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
     border-radius:var(--r-md); min-height:var(--h-sm); padding:0 10px; cursor:pointer;
     font:600 var(--fs-3)/1 var(--sans, system-ui, sans-serif); white-space:nowrap;
@@ -420,8 +423,12 @@
   #toolbar .ct-grp .grow{gap:6px; align-items:center}
   #toolbar .ct-tool{position:relative}
   /* v62 — three to a row, whatever the ribbon's shape (Ced: "every row on my tools should be maxed three") */
-  #toolbar #ctools{--grp-cols:3}
-  #toolbar #ctools > .grow{display:flex; flex-wrap:wrap; justify-content:flex-start;
+  /* v65 — and ONLY in the full-width ribbon, the one place the rest of the groups are folded too (6gp).
+     Below full width every group flows as one run; capping My tools at three there stood it three
+     storeys tall and pushed Find, View and Assist onto a second line of their own (Ced: "fix ribbon
+     if not in max mode. my tools should also be spread out"). */
+  body.colmax:not(.ribbonright) #toolbar #ctools{--grp-cols:3}
+  body.colmax:not(.ribbonright) #toolbar #ctools > .grow{display:flex; flex-wrap:wrap; justify-content:flex-start;
     max-width:calc(3 * var(--grp-col,30px) + 2 * var(--grp-gap,6px))!important}
   #toolbar .ct-add{width:30px; min-width:30px; height:28px; padding:0; border-radius:var(--r-md);
     font:700 17px/1 var(--sans, system-ui, sans-serif); display:inline-flex; align-items:center; justify-content:center}
@@ -474,3 +481,9 @@
   #linebar button[data-lstyle]::before{content:""; width:16px; height:16px; background:currentColor;
     -webkit-mask:var(--i-props) center/contain no-repeat; mask:var(--i-props) center/contain no-repeat}
 
+
+/* v65 — the crop's Apply is the editor's one confirming action: green, in every theme */
+html .sk-edit .sk-edb.sk-edok{background:#22a55a!important; color:#fff!important;
+  box-shadow:0 1px 2px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.18)!important}
+html .sk-edit .sk-edb.sk-edok:hover{background:#1c8f4d!important}
+html .sk-edit .sk-edb.sk-edok svg, html .sk-edit .sk-edb.sk-edok .sk-edg{color:#fff!important; fill:currentColor}

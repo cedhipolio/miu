@@ -1385,6 +1385,39 @@ async function tryRestoreAutosave(){
       if(d.isPreliminary!=null){ S.isPreliminary=d.isPreliminary; updateFnamePreview&&updateFnamePreview(); }
     }
     if(!d||((!d.annos||!d.annos.length)&&(!d.lines||!d.lines.length)))return;
+    /* ================================================================================================
+       v67 — THE BROWSER'S COPY CAN BE WRONG ABOUT A PICTURE, AND IT CAN BE OLDER THAN THE FILE.
+       Ced, three times: a SOH1350 reopened "shows an unfinished edited photo". The file itself was fine
+       by then (v64 reads the edited picture back off the page, pixel for pixel). What was not fine was
+       this browser's saved copy of the document: a reopen under v63 had restored the pictures from the
+       payload's recovery copy — which was the picture BEFORE editing — and autosave wrote that into the
+       browser within the second. The document key is the same for every round of the same drawings, so
+       every reopen since found that copy, saw it differed from the file, asked "Two sets of redlines",
+       and the highlighted answer was the browser's. One click brought the unfinished photo back.
+       Two things now:
+         · a picture in the browser's copy that is byte-for-byte one of this file's recovery copies,
+           where the file has the real picture for the same mark, takes the file's picture — always,
+           whichever set is used, and the browser's copy is corrected so it cannot come back;
+         · the file's own date (the time written into an export from v67, or the file's modification
+           date) is compared with the browser copy's: a file at least as new is used without asking,
+           and when they really differ the NEWER one is the highlighted choice. */
+    try{
+      const rec=S._recoverySrcs;
+      if(rec&&rec.size&&Array.isArray(d.annos)){
+        const byId=new Map((S.annos||[]).map(a=>[a.id,a]));
+        let fixed=0;
+        d.annos.forEach(b=>{
+          if(!b||b.kind!=="img"||!b.src||!rec.has(b.src))return;
+          const a=byId.get(b.id);
+          if(a&&a.kind==="img"&&a.src&&!rec.has(a.src)){ b.src=a.src; fixed++; }
+        });
+        if(fixed){
+          LOG&&LOG("Autosave: "+fixed+" picture(s) in this browser's copy were the file's recovery copies "+
+                   "(the picture before editing) — replaced with the file's own");
+          try{ await saveObj(saveKey(), d); }catch(e){}
+        }
+      }
+    }catch(e){ LOG&&LOG("autosave picture check skipped —",e&&e.message); }
     const when=d.ts?new Date(d.ts).toLocaleString():"a previous session";
     const nCache=(d.annos||[]).length+(d.lines||[]).length;
     const nPage=(S.annos||[]).length+(S.lines||[]).length;
@@ -1397,10 +1430,25 @@ async function tryRestoreAutosave(){
         return;
       }
       LOG&&LOG("Autosave: the PDF carries "+nPage+" redline(s), this browser has "+nCache+" from "+when);
-      go=await uiConfirm({title:"Two sets of redlines",
-        message:`This PDF carries ${nPage} redline(s).\nThis browser has ${nCache} saved for it from ${when}.\n\nWhich do you want to work from?`,
-        buttons:[{id:"yes",label:`Use this browser's (${nCache})`,primary:true},
-                 {id:"no",label:`Keep the PDF's (${nPage})`}]});
+      /* ==============================================================================================
+         v68 — THE PDF IS THE WORK, AS IT IS. Ced: "the edited version of those snapshot, when exported,
+         should be the final version. so the item floating on the pdf is that in itself and reopening
+         the pdf should make that as-is."
+         So a PDF that carries our redlines is opened exactly as it carries them — every mark, every
+         picture — and nothing in this browser is put in its place, by default or by a highlighted
+         button. The "Two sets of redlines" question is gone for that case; it was the door the
+         unfinished pictures kept coming back through.
+         The browser's set is not thrown away: it is put aside under its own key before autosave can
+         write over it, and only when it is NEWER than the file — work done after this export that was
+         never exported — is it offered, as a quiet note with a button, never instead of the file.
+         ============================================================================================== */
+      const pTs=+S._pdfTs||0, bTs=+d.ts||0;
+      try{ await store.set("ma_autosave_prev:"+docKey(), v); }catch(e){}
+      const browserNewer=!!(bTs&&(!pTs||bTs>pTs+2000));
+      setStatus(`Opened this PDF's ${nPage} redline(s) exactly as exported.`);
+      if(browserNewer)_offerBrowserCopy(d,when,nCache);
+      else LOG&&LOG("Autosave: the browser's copy ("+when+") is not newer than this PDF — set aside, not offered");
+      return;
     } else {
       go=await uiConfirm({title:"Recover redlines?",message:`Redlines from ${when} were found for this PDF.\n(${(d.annos||[]).length} text + ${(d.lines||[]).length} strike marks)`,buttons:[{id:"yes",label:"Recover",primary:true},{id:"no",label:"Start fresh"}]});
     }
@@ -1420,6 +1468,66 @@ async function tryRestoreAutosave(){
       setStatus(`Kept the ${nPage} redline(s) on this PDF. The ${nCache} saved in this browser are still there if you want them.`);
     }
   }catch(e){ LOG&&LOG("restore autosave error",e&&e.message); }
+}
+/* v70 — a portal that flattens on download. Ced's SOH1350 Mount Analysis came back from the site with
+   every annotation painted into the page (pdf-lib "Fxo" forms, Annots gone, our payload intact), so
+   other viewers saw burned-in marks. Nothing inside a PDF can stop a server from flattening it; what
+   MIU can do is undo it in one step. Opening such a file already lifts the painted copies and
+   rebuilds every mark as editable; this puts "Save editable copy" right there, so the file that goes
+   back out carries real annotations that every viewer can move, edit and delete. */
+function _offerEditableCopy(n){
+  try{
+    document.querySelectorAll(".miu-editnote").forEach(x=>x.remove());
+    const box=document.createElement("div"); box.className="ds-notice miu-editnote show"; box.id="miuEditNote";
+    box.dataset.tone="warn"; box.setAttribute("role","status");
+    const ic=document.createElement("span"); ic.className="ds-notice-ic"; ic.textContent="!";
+    const body=document.createElement("div"); body.className="ds-notice-body";
+    const b=document.createElement("b"); b.textContent="The site this came from flattened the redlines";
+    const sp=document.createElement("span");
+    sp.textContent="Other viewers see them burned into the page. All "+n+" are editable again here — save a copy "+
+                   "and they are real markups again in Acrobat, Bluebeam, Edge and the rest. If a site flattens "+
+                   "it again on download, open that copy here and save once more.";
+    body.appendChild(b); body.appendChild(sp);
+    const acts=document.createElement("div"); acts.className="ds-notice-acts";
+    const go=document.createElement("button"); go.type="button"; go.className="ds-btn ds-btn-sm miu-ok"; go.textContent="Save editable copy";
+    const no=document.createElement("button"); no.type="button"; no.className="ds-btn ds-btn-sm ds-btn-ghost"; no.textContent="Later";
+    go.onclick=async()=>{ box.remove(); try{ await exportPdf(); }catch(e){ LOG&&LOG("editable copy failed",e&&e.message); } };
+    no.onclick=()=>box.remove();
+    acts.appendChild(go); acts.appendChild(no);
+    box.appendChild(ic); box.appendChild(body); box.appendChild(acts);
+    document.body.appendChild(box);
+  }catch(e){ LOG&&LOG("could not offer the editable copy —",e&&e.message); }
+}
+/* v68 — the browser's newer, never-exported set, offered beside the file rather than instead of it */
+function _offerBrowserCopy(d,when,nCache){
+  try{
+    document.querySelectorAll(".miu-prevnote").forEach(n=>n.remove());
+    const box=document.createElement("div"); box.className="ds-notice miu-prevnote show"; box.id="miuPrevNote"; box.dataset.tone="warn";
+    box.setAttribute("role","status");
+    const ic=document.createElement("span"); ic.className="ds-notice-ic"; ic.textContent="!";
+    const body=document.createElement("div"); body.className="ds-notice-body";
+    const b=document.createElement("b"); b.textContent="This browser has later work on this document";
+    const sp=document.createElement("span");
+    sp.textContent=nCache+" redline(s) saved here "+when+", after this PDF was exported. The PDF is open as it is; "+
+                   "switch to the browser's set only if that later work is what you want.";
+    body.appendChild(b); body.appendChild(sp);
+    const acts=document.createElement("div"); acts.className="ds-notice-acts";
+    const use=document.createElement("button"); use.type="button"; use.className="ds-btn ds-btn-sm"; use.textContent="Use the browser's set";
+    const keep=document.createElement("button"); keep.type="button"; keep.className="ds-btn ds-btn-sm ds-btn-ghost"; keep.textContent="Keep the PDF";
+    use.onclick=()=>{
+      try{ pushHistory(); }catch(e){}
+      S.annos=d.annos||[]; S.lines=d.lines||[]; if(d.seq)seq=Math.max(seq,d.seq);
+      if(d.layers&&d.layers.length){ S.layers=d.layers; S.layCur=d.layCur; }
+      layoutAnnos(); drawAllLines(); updateRail(); updateCount();
+      markSaved(d.ts||Date.now());
+      setStatus(`Switched to the ${S.annos.length+S.lines.length} redline(s) saved in this browser — Undo goes back to the PDF's.`);
+      box.remove();
+    };
+    keep.onclick=()=>box.remove();
+    acts.appendChild(use); acts.appendChild(keep);
+    box.appendChild(ic); box.appendChild(body); box.appendChild(acts);
+    document.body.appendChild(box);
+  }catch(e){ LOG&&LOG("could not offer the browser's set —",e&&e.message); }
 }
 /* Clear-all with confirm + version backup safety net */
 /* in-page dialog (window.confirm/prompt are blocked in the sandboxed iframe) */
@@ -2418,8 +2526,15 @@ const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>r()));
    The sandbox note above is why this is a TRY: the worker is started from the source the boot already
    holds (a blob URL — no fetch), it must say "ready" within a few seconds, and if the host refuses
    workers, or it stays silent, the main-thread path below is used exactly as before. */
-let _workerTried=false;
+let _workerTried=false, _workerP=null;
+/* v64 — started while the opening screen is up, so the first PDF does not wait for it */
+setTimeout(()=>{ try{ if(typeof pdfjsLib!=="undefined")ensureWorker(); }catch(e){} },400);
 async function ensureWorker(){
+  if(_workerP)return _workerP;
+  _workerP=_ensureWorker0();
+  return _workerP;
+}
+async function _ensureWorker0(){
   if(!_workerTried){
     _workerTried=true;
     try{
@@ -2431,7 +2546,7 @@ async function ensureWorker(){
         try{ w=new Worker(url); }catch(e){ w=null; LOG("worker refused by the host —",e&&e.message); }
         if(w){
           const ok=await new Promise(res=>{
-            const t=setTimeout(()=>res(false),4000);
+            const t=setTimeout(()=>res(false),2500);
             w.addEventListener("message",function m(ev){
               const d=ev&&ev.data;
               if(d&&d.action==="ready"){ clearTimeout(t); w.removeEventListener("message",m); res(true); } });
@@ -2529,6 +2644,7 @@ async function loadPdf(file){
     if(stale()){ try{ _doc.destroy(); }catch(e){} return; }
     if(!_doc.numPages)throw new Error("Invalid PDF structure (no pages)");
     S.doc=_doc;
+    S._pdfTs=0; S._recoverySrcs=null;     /* v67 — set again by restoreEmbedded when the file has ours */
     S.pages=[]; S.annos=[]; S.lines=[]; S.suggestions=new Set(); S.sel=null; S.selLine=null; S.selMulti=new Set(); S.selMultiL=new Set(); S.clip=null; S.discrepancies=[]; S._zMerged=0;   /* 6ln */
     /* 6ga — a new document has its own save history. Carrying the previous one's time across would put
        a confident "Last saved 6:53 PM" beside work that has never been saved at all. */
@@ -2536,14 +2652,25 @@ async function loadPdf(file){
     $("#bar").style.display="block";
     showProg("Loading pages…");
     LOG("Opening",file.name,"·",S.doc.numPages,"pages");
+    /* v64 — every page and its text is ASKED FOR at once and read back in order. One at a time, each
+       page waited for the round trip of the one before; asked together, the engine works through
+       them back to back (and with the engine in its own worker, while this thread stays free). */
+    const _pp=[];
+    for(let p=1;p<=S.doc.numPages;p++){
+      const gp=S.doc.getPage(p);
+      _pp.push({gp, tp:gp.then(pg=>pg.getTextContent()).catch(e=>({__err:e}))});
+    }
+    _pp.forEach(z=>{ z.gp.catch(()=>{}); });
     for(let p=1;p<=S.doc.numPages;p++){
       if(stale())return;
-      const page=await S.doc.getPage(p);
+      const page=await _pp[p-1].gp;
       const vp1=page.getViewport({scale:1});
       /* v60 — one page whose text layer will not parse no longer refuses the whole document: that page
          is still drawn and markable, it just has nothing for Find or Analyze to read. */
       let tc={items:[]};
-      try{ tc=await page.getTextContent(); }catch(e){ LOG("page "+p+": text layer unreadable — "+(e&&e.message||e)); }
+      { const r=await _pp[p-1].tp;
+        if(r&&r.__err)LOG("page "+p+": text layer unreadable — "+(r.__err&&r.__err.message||r.__err));
+        else if(r)tc=r; }
       const items=[];
       for(const it of tc.items){
         if(!it.str||!it.str.trim())continue;
@@ -3619,18 +3746,28 @@ function _pageWanted(i){
    Ced reported. A render does not have to happen in the middle of a drag; it can happen the moment
    the drag ends. Panning is the exception (the pages coming into view ARE the point of it), and with
    a real worker none of this is needed. */
-let _handDown=false;
-document.addEventListener("pointerdown",e=>{ if(e.button===0)_handDown=true; },true);
-["pointerup","pointercancel"].forEach(t=>document.addEventListener(t,()=>{ _handDown=false; },true));
+/* v64 — and "a drag" means the hand is MOVING with a button held, right now. v63 trusted a flag set
+   on pointerdown and cleared on pointerup; a release the page never hears (outside the claude.ai
+   frame, on a scrollbar, over another window) left it set, and every page render after that waited
+   its full eight seconds — the "so much slower" Ced reported. A move with no button clears it, and a
+   hand that has not moved for a quarter of a second is not dragging anything. */
+let _handDown=false, _handMoved=0;
+document.addEventListener("pointerdown",e=>{ if(e.button===0){ _handDown=true; _handMoved=0; } },true);
+document.addEventListener("pointermove",e=>{
+  if(!e.buttons){ _handDown=false; return; }
+  if(_handDown)_handMoved=performance.now(); },true);
+["pointerup","pointercancel","lostpointercapture"].forEach(t=>document.addEventListener(t,()=>{ _handDown=false; },true));
 window.addEventListener("blur",()=>{ _handDown=false; });
+document.addEventListener("visibilitychange",()=>{ _handDown=false; });
 function _handBusy(){
   if(!_handDown||window.__miuRealWorker)return false;
+  if(!_handMoved||performance.now()-_handMoved>250)return false;
   if(S.mode==="pan"||document.body.classList.contains("spacepan"))return false;
   return true;
 }
 async function _waitForHand(){
   const t0=Date.now();
-  while(_handBusy()&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,60));
+  while(_handBusy()&&Date.now()-t0<3000)await new Promise(r=>setTimeout(r,60));
 }
 function ensurePageRendered(i){
   i=+i;
@@ -9689,7 +9826,10 @@ $("#c_pt").addEventListener("input",()=>{});
    A photo is an annotation with kind:"img", so selection, dragging, grouping, undo, autosave
    and the re-editable export payload all apply to it unchanged. Pasted bitmaps are downscaled
    so the embedded payload stays a sane size. */
-const PHOTO_MAX=1200, PHOTO_Q=0.82;
+/* v67 — HD. Ced: "make sure the photo attached is hd." 1200 px on the long side was a site photo
+   shrunk to a thumbnail: on a full-page attachment that is ~100 dpi, soft the moment it is zoomed. 2400
+   px at JPEG 0.9 is print quality at a full page and still a fraction of a phone's original. */
+const PHOTO_MAX=2400, PHOTO_Q=0.9;
 function fileToDataUrl(file){
   return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error("could not read the image")); r.readAsDataURL(file); });
 }
@@ -9701,14 +9841,14 @@ function fileToDataUrl(file){
    white card that covers whatever it is dropped on. A source that can carry transparency is kept as a
    PNG, un-painted, unless the result would be big enough to matter, in which case the white card is
    still the better trade and the picture says so by being a photograph. */
-const PNG_KEEP_MAX=1500000;
+const PNG_KEEP_MAX=4000000;     /* v67 — a cut-out at HD size is a bigger PNG; it stays a PNG */
 function shrinkDataUrl(url,opts){
   const alphaWanted=!!(opts&&opts.keepAlpha) || /^data:image\/(png|gif|webp|svg\+xml)/i.test(String(url||""));
   return new Promise(res=>{
     const im=new Image();
     im.onload=()=>{
       const sc=Math.min(1,PHOTO_MAX/Math.max(im.width,im.height));
-      if(sc>=1 && url.length<600000){ res({url,w:im.width,h:im.height}); return; }
+      if(sc>=1 && url.length<3000000){ res({url,w:im.width,h:im.height}); return; }   /* v67 — kept as sent */
       const cv=document.createElement("canvas");
       cv.width=Math.max(1,Math.round(im.width*sc)); cv.height=Math.max(1,Math.round(im.height*sc));
       const cx=cv.getContext("2d");
@@ -10979,8 +11119,12 @@ const PAY_SAFE_MAX=900000;
    its smallest is given up. Measured on three 1180x820 noise photos — the worst case there is,
    since noise is exactly what will not compress — 1400px/q0.72 came to about 215,000 chars each
    and 700px/q0.55 to about 46,000. */
-const PIC_RECOVER_STEPS=[[1400,0.72],[1000,0.62],[700,0.55],[480,0.5]];
-const PIC_RECOVER_BUDGET=120000;   /* chars, per picture */
+/* v64 — and further down for a cut-out. Now that the copy is the EDITED picture (see `_payA`), it is
+   usually a cut-out with transparency, which has to be PNG; a PNG that is still over budget at 480px
+   steps on down rather than being given up — a small picture back beats no picture back. */
+const PIC_RECOVER_STEPS=[[2000,0.8],[1400,0.72],[1000,0.62],[700,0.55],[480,0.5],[360,0.5],[240,0.5],[160,0.5]];
+const PIC_RECOVER_BUDGET=220000;   /* chars, per picture — v67: room for a sharper copy; the
+                                      whole payload is still held under PAY_SAFE_MAX by shedding */
 /* does this picture have anything transparent in it? a cut-out does, a photograph does not */
 function _picHasAlpha(im){
   try{
@@ -11940,7 +12084,12 @@ async function exportPdf(){
        made from them after the strip. `__picSrc` never reaches the file: `_payPics` reads it and
        the payload is built from `picRef` instead. */
     const _payA=z=>{ const o=_stripPicBytes(_cleanA(z));
-      if(z&&z.kind==="img"){ const raw=z.srcOrig||z.src; if(raw)o.__picSrc=raw; }
+      /* v64 — THE PICTURE AS IT IS, NOT AS IT WAS. This read `srcOrig||src`, and `srcOrig` is what the
+         picture editor's Restore goes back to: the picture BEFORE it was edited. So the copy that
+         rides in the payload — the one a flattened file comes back from — was the unedited capture,
+         and Ced's SOH1350 reopened with every erase and fill undone ("does not retain the edit
+         photo"). The recovery copy is the picture on the sheet. */
+      if(z&&z.kind==="img"){ const raw=z.src||z.srcOrig; if(raw)o.__picSrc=raw; }
       return o; };
     let outAnnos=(S.annos||[]).map(_payA), outLines=(S.lines||[]).map(_cleanL);
     if(drop.length){
@@ -11962,6 +12111,7 @@ async function exportPdf(){
     const nPics=Object.keys(pics).length;
     const build=()=>({v:1, name:S.name, pages:(S.pages.length-drop.length),
                    stamp:{tcol:$("#c_text").value,bcol:$("#c_bg").value},
+                   ts:Date.now(),           /* v67 — when this export was made: see tryRestoreAutosave */
                    pics:pics, picsDropped:picsDropped,
                    annos:outAnnos.map(z=>{ const o=Object.assign({},z); delete o.__picSrc; return o; }),
                    lines:outLines});
@@ -12505,6 +12655,9 @@ function _unbakeOurs(doc,picPages){
   const {PDFName,PDFArray,PDFRawStream,PDFDict,PDFBool}=PDFLib;
   const ctx=doc.context;
   let removedDo=0, pagesTouched=0;
+  const picForms=[];          /* v64 — {pi, xo, cm, rank}: the painted pictures, read back before they go */
+  let picRank=0;              /* v69 — 0 is the newest paint in the file */
+  const dropLater=[];         /* v69 — [resources' XObject dict, name] to drop once every page is done */
   const isOurs=(xo)=>{
     try{
       const d=xo&&xo.dict; if(!d)return false;
@@ -12550,29 +12703,135 @@ function _unbakeOurs(doc,picPages){
     const xd=res&&res.lookup&&res.lookup(PDFName.of("XObject"));
     if(!xd||!xd.keys)return;
     const ours=new Set();
+    const picXo=new Map();      /* v69 — name -> form, for the pictures among ours on this page */
     xd.keys().forEach(k=>{ const nm=k.toString().slice(1);
       if(/^MAF\d*$/.test(nm))return;                     /* our deliberate flattens stay */
       let xo=null; try{ xo=xd.lookup(k); }catch(e){}
-      if(isOurs(xo)||(picPages&&picPages.has(pi)&&isOurPic(xo)))ours.add(nm); });
+      const pic=picPages&&picPages.has(pi)&&isOurPic(xo);
+      if(isOurs(xo)||pic){ ours.add(nm); if(pic)picXo.set(nm,xo); } });
     if(!ours.size)return;
     const cont=pg.node.get(PDFName.of("Contents"));
     const refs=[];
     if(cont&&cont.asArray){ for(let i=0;i<cont.size();i++)refs.push({arr:cont,i,ref:cont.get(i)}); }
     else if(cont)refs.push({arr:null,i:0,ref:cont});
     let touched=false;
+    /* v64 — read from the END: a flattener appends its painting after the page's own content, so the
+       last streams are where the `Do`s are, and once every one of our forms has been found there is
+       nothing left to look for. On SOH1350 this is the difference between decoding a few small
+       streams and decoding every megabyte of the drawing. */
+    const left=new Set(ours);
+    refs.reverse();
     refs.forEach(r=>{
+      if(!left.size)return;
       let st=null; try{ st=ctx.lookup(r.ref); }catch(e){}
+      /* v64 — the drawing's own content is megabytes per sheet on a scanned set; a flattener's stream
+         is a few lines per mark. Decoding every stream to look for `Do` cost ~1 s on SOH1350, so a
+         stream too big to be a list of painted marks is not opened. (256 KB is ~6,000 marks.) */
+      try{ const enc=st&&st.contents?st.contents.length:0; if(enc>262144)return; }catch(e){}
       const txt=decode(st); if(txt==null)return;
       let n=0;
-      const out=txt.replace(/\/([^\s\/\[\]<>(){}%]+)\s+Do\b/g,(m,nm)=>{ if(ours.has(nm)){ n++; return ""; } return m; });
+      /* v69 — WHERE each painted picture was put, and HOW NEW it is. A file that has been round the
+         loop more than once (export → another site flattens it → reopen → edit → export → flattened
+         again) carries every generation of a picture painted into the page, one on top of the next.
+         Streams are read from the end, so the first one met is the newest; within a stream the last. */
+      if(picXo.size){
+        const re=/((?:-?[\d.]+\s+){6})cm\s*\/([^\s\/\[\]<>(){}%]+)\s+Do\b/g;
+        const found=[]; let mm;
+        while((mm=re.exec(txt))){ if(picXo.has(mm[2]))found.push(mm); }
+        for(let k=found.length-1;k>=0;k--){
+          const cm=found[k][1].trim().split(/\s+/).map(Number);
+          picForms.push({pi, xo:picXo.get(found[k][2]), cm, rank:picRank++});
+        }
+      }
+      const out=txt.replace(/\/([^\s\/\[\]<>(){}%]+)\s+Do\b/g,(m,nm)=>{ if(ours.has(nm)){ n++; left.delete(nm); return ""; } return m; });
       if(!n)return;
       const fresh=ctx.register(ctx.flateStream(out));
       if(r.arr)r.arr.set(r.i,fresh); else pg.node.set(PDFName.of("Contents"),fresh);
       removedDo+=n; touched=true;
     });
     if(touched)pagesTouched++;
+    /* v69 — and the forms themselves leave the page's resources. A form left behind is the old
+       generation the next round (and v68's reading) mistook for the picture, and it keeps every old
+       picture's pixels in the file for ever. Every `Do` of ours has been taken off every page, so
+       once all pages are done, nothing draws them; they are dropped then, not here, in case a
+       resource dictionary is shared between pages. */
+    if(touched||ours.size)ours.forEach(nm=>dropLater.push([xd,nm]));
   });
-  return {removedDo, pagesTouched};
+  dropLater.forEach(([xd,nm])=>{ try{ xd.delete(PDFName.of(nm)); }catch(e){} });
+  return {removedDo, pagesTouched, picForms};
+}
+/* v64 — A PAINTED PICTURE IS THE BEST COPY OF THE PICTURE THERE IS. When a flattener paints our
+   photo into the page it paints the appearance as it was exported — the edited picture at full
+   resolution. The payload's recovery copy is smaller, and on files written before v64 it was the
+   picture BEFORE editing (see `_payA`). So each painted picture is matched to the payload mark it
+   draws — same page, and a form exactly the mark's size in points, which is how `drawImg` writes it —
+   and its pixels replace the recovery copy. */
+async function _picsFromPaint(doc,forms,annos){
+  /* ================================================================================================
+     v69 — THE NEWEST PAINT OF EACH PICTURE, IN ITS OWN PLACE. Ced's SOH1350 Mount Analysis (3) had been
+     round the loop several times, and page 9 carries three or four generations of the same pictures
+     painted one over another — the first captures, then the edited ones, turned to new angles. v64 took
+     the first form of the right size it met, which was as likely the oldest as the newest: a viewer
+     shows the TOP of the stack (the newest), MIU showed whichever came first, so a picture "reverted
+     to the original" while its neighbour, which happened to be met in the right order, did not.
+     Now a painted picture is matched to its mark by size, by angle (the form's own Matrix against the
+     mark's rotation) and by where it was put (its centre on the page against the mark's centre), and
+     of everything that matches, the NEWEST paint is taken — the one a viewer draws on top.
+     ================================================================================================ */
+  let n=0;
+  if(!forms||!forms.length)return 0;
+  const {PDFName}=PDFLib;
+  const pages=doc.getPages();
+  const info=forms.map(f=>{
+    try{
+      const d=f.xo.dict;
+      const bb=d.lookup(PDFName.of("BBox"));
+      const v=bb&&bb.asArray?bb.asArray().map(x=>x.asNumber()):null;
+      if(!v||v.length<4)return null;
+      const bw=Math.abs(v[2]-v[0]), bh=Math.abs(v[3]-v[1]);
+      const mx=d.lookup(PDFName.of("Matrix"));
+      const M=(mx&&mx.asArray)?mx.asArray().map(x=>x.asNumber()):[1,0,0,1,0,0];
+      const ang=Math.atan2(M[1],M[0])*180/Math.PI;
+      /* the form's centre, through its Matrix and then the page's cm */
+      const cx0=bw/2, cy0=bh/2;
+      const fx=M[0]*cx0+M[2]*cy0+M[4], fy=M[1]*cx0+M[3]*cy0+M[5];
+      const C=f.cm||[1,0,0,1,0,0];
+      const px=C[0]*fx+C[2]*fy+C[4], py=C[1]*fx+C[3]*fy+C[5];
+      return {f, bw, bh, ang, px, py, hasCm:!!f.cm};
+    }catch(e){ return null; }
+  }).filter(Boolean).sort((p,q)=>p.f.rank-q.f.rank);      /* newest first */
+  const angDiff=(a,b)=>{ let d=Math.abs(((a-b)%360+540)%360-180); return d; };
+  for(const a of annos){
+    if(!a||a.kind!=="img")continue;
+    try{
+      const pg=pages[a.page]; if(!pg)continue;
+      const {width:W0,height:H0}=pg.getSize();
+      let rot=0; try{ rot=((pg.getRotation().angle%360)+360)%360; }catch(e){}
+      const Wd=(rot===90||rot===270)?H0:W0, Hd=(rot===90||rot===270)?W0:H0;
+      const bw=(a.nw||0)*Wd, bh=(a.nh||0)*Hd;
+      const phi=((rot-(a.rot||0))%360+360)%360;
+      /* the mark's centre in the page's own frame — the same mapping the export's toPdf uses */
+      const nx=a.nx+(a.nw||0)/2, ny=a.ny+(a.nh||0)/2;
+      let ex,ey;
+      if(rot===90){ ex=ny*W0; ey=nx*H0; }
+      else if(rot===180){ ex=W0*(1-nx); ey=ny*H0; }
+      else if(rot===270){ ex=W0*(1-ny); ey=H0*(1-nx); }
+      else { ex=nx*W0; ey=H0-ny*H0; }
+      const fit=info.filter(z=>z.f.pi===a.page&&Math.abs(z.bw-bw)<0.75&&Math.abs(z.bh-bh)<0.75
+                                &&angDiff(z.ang,phi)<1.0);
+      if(!fit.length)continue;
+      const placed=fit.filter(z=>z.hasCm&&Math.hypot(z.px-ex,z.py-ey)<3);
+      const pick=(placed.length?placed:fit)[0];               /* newest of the best-matching */
+      const res=pick.f.xo.dict.lookup(PDFName.of("Resources"));
+      const xs=res&&res.lookup&&res.lookup(PDFName.of("XObject"));
+      const im=xs&&xs.lookup&&xs.lookup(PDFName.of("Im0"));
+      if(!im)continue;
+      const src=await _srcFromImage(im);
+      if(!src)continue;
+      a.src=src; delete a.__fromRecovery; n++;
+    }catch(e){ try{ LOG("a painted picture could not be read back —",e&&e.message); }catch(_){} }
+  }
+  return n;
 }
 
 async function detachOurRedlines(u8){
@@ -12608,7 +12867,8 @@ async function detachOurRedlines(u8){
     }catch(e){ return null; } };
 
   /* the payload, if the file still has one — used only to fill gaps */
-  let payA=[], payL=[], stamp=null, payPicsDropped=0;
+  let payA=[], payL=[], stamp=null, payPicsDropped=0, payTs=0;
+  const recoverySrcs=new Set();   /* v67 — the payload's own recovery copies, to recognise them later */
   try{
     const subj=_subjectOf(doc);              /* 6fg — never getSubject(); see _pdfText */
     const _mk=(subj&&subj.indexOf("MAREDLINE:")===0)?"MAREDLINE:"
@@ -12621,6 +12881,8 @@ async function detachOurRedlines(u8){
          which is exactly the flattened case. */
       const _pics=(d&&d.pics)||null;
       payPicsDropped=(d&&d.picsDropped)||0;
+      payTs=(d&&+d.ts)||0;
+      if(_pics)Object.keys(_pics).forEach(k=>{ if(_pics[k])recoverySrcs.add(_pics[k]); });
       if(_pics)payA.forEach(z=>{ if(z&&z.picRef&&!z.src&&_pics[z.picRef]){
         z.src=_pics[z.picRef]; z.__fromRecovery=true; } });
     }
@@ -12883,6 +13145,9 @@ async function detachOurRedlines(u8){
     const picPages=new Set(annos.filter(z=>z&&z.kind==="img"&&fromPay.has(z.id)).map(z=>z.page));
     try{ unbaked=_unbakeOurs(doc,picPages); }
     catch(e){ LOG("the painted copies could not be taken off —",e&&e.message); }
+    try{ const k=await _picsFromPaint(doc,unbaked.picForms,annos.filter(z=>z&&fromPay.has(z.id)));
+         if(k)LOG("Took",k,"picture(s) back at full resolution from the painted page"); }
+    catch(e){ LOG("painted pictures not read back —",e&&e.message); }
     if(unbaked.removedDo)LOG("Took",unbaked.removedDo,"painted-in copies of our marks off",
                              unbaked.pagesTouched,"page(s) — the file had been flattened elsewhere");
   }
@@ -12917,7 +13182,11 @@ async function detachOurRedlines(u8){
      first means the file has been through a flattener, the second means a picture is gone. */
   const recovered=annos.filter(z=>z&&z.__fromRecovery).length;
   annos.forEach(z=>{ if(z)delete z.__fromRecovery; });
-  return {bytes:bytes, annos:annos, lines:lines, photos:photos, removed:removed,
+  /* v67 — how new this file's redlines are: the time the export wrote into its payload, or failing
+     that the file's own modification date (an export from before v67 has no payload time) */
+  let pdfTs=payTs;
+  if(!pdfTs){ try{ const md=doc.getModificationDate&&doc.getModificationDate(); if(md&&isFinite(+md))pdfTs=+md; }catch(e){} }
+  return {bytes:bytes, annos:annos, lines:lines, photos:photos, removed:removed, pdfTs, recoverySrcs,
           other:other, stamp:stamp, fromPayload:extraA+extraL, unbaked:unbaked.removedDo,
           recovered:recovered, picsLost:payPicsDropped};
 }
@@ -13015,6 +13284,7 @@ async function restoreEmbedded(){
     if(_detached){
       const d=_detached;
       S.annos=d.annos||[]; S.lines=d.lines||[];
+      S._pdfTs=d.pdfTs||0; S._recoverySrcs=d.recoverySrcs||null;   /* v67 */
       let mx=0; S.annos.concat(S.lines).forEach(o=>{ if(o.id>mx)mx=o.id; }); seq=mx+1;
       if(d.stamp){ if(d.stamp.tcol)$("#c_text").value=d.stamp.tcol;
                    if(d.stamp.bcol)$("#c_bg").value=d.stamp.bcol; }
@@ -13044,6 +13314,7 @@ async function restoreEmbedded(){
       try{ toast(n+" redline"+(n===1?"":"s")+" on this PDF "+(n===1?"is":"are")+" editable"); }catch(e){}
       setStatus(msg);
       setTimeout(()=>{ try{ setStatus(msg); }catch(e){} },350);
+      if(d.unbaked||d.recovered)_offerEditableCopy(n);
       return;
     }
     if(!window.PDFLib||!S.docBytes)return;
