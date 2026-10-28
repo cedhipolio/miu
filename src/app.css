@@ -1348,7 +1348,7 @@
      over a mark's ground and under its ink without touching either, so the text stays its own red on
      the wash rather than going through it. Nothing here survives the pointer coming up.
      ================================================================================================ */
-  :root{--adjwash:rgba(141,190,222,.38)}
+  :root{--adjwash:rgba(141,190,222,.12)}   /* v71 — fainter, so the drawing under the mark reads while it is adjusted */
   body.adjusting .anno .rz,
   body.adjusting .anno .x,
   body.adjusting .anno .rot,
@@ -3663,3 +3663,36 @@
   /* a field inside that chrome is still a field */
   .toolbar input, #miniBar input, #maPanel input, #toolpop input, .sk-edit input,
   #maPanel textarea{user-select:text;-webkit-user-select:text}
+/* v71 — Ced: "when dragging the shape using the corner dragger … make its opacity less so the user knows
+   where exactly it goes." The grip in hand fades to an outline, so the corner it is setting shows
+   through it; the others step back further. */
+body[data-rz-live] .anno.sel .rz{opacity:.25}
+body[data-rz-live="nw"] .anno.sel .rz.nw, body[data-rz-live="n"] .anno.sel .rz.n,
+body[data-rz-live="ne"] .anno.sel .rz.ne, body[data-rz-live="e"] .anno.sel .rz.e,
+body[data-rz-live="se"] .anno.sel .rz.se, body[data-rz-live="s"] .anno.sel .rz.s,
+body[data-rz-live="sw"] .anno.sel .rz.sw, body[data-rz-live="w"] .anno.sel .rz.w{
+  display:block !important; opacity:.45; background:transparent !important; box-shadow:none !important}
+/* v71 — PLACING IS NOT SELECTING. Ced: "when the user is putting a redline or a shape or a line or a
+   length tool, disable the select tool for a moment and make sure the user can put … on an area where an
+   existing redline lies … so the user will not accidentally select a different redline in that area."
+   With a drawing tool in the hand, the redlines already on the sheet let every press through to the
+   page: a click or a drag there starts the new mark, never grabs the old one. The grips of the mark
+   just drawn, and a box being typed in, still answer. Escape or S puts the tool down to select again. */
+#pages:is([data-mode="line"],[data-mode="arrow"],[data-mode="poly"],[data-mode="box"],[data-mode="circle"],
+          [data-mode="text"],[data-mode="dim"],[data-mode="callout"],[data-mode="crossout"],
+          [data-mode="cross"],[data-mode="strikerow"]) :not(.annoui) > .anno:not(.editing),
+#pages:is([data-mode="line"],[data-mode="arrow"],[data-mode="poly"],[data-mode="box"],[data-mode="circle"],
+          [data-mode="text"],[data-mode="dim"],[data-mode="callout"],[data-mode="crossout"],
+          [data-mode="cross"],[data-mode="strikerow"]) :not(.annoui) > .anno:not(.editing) *,
+#pages:is([data-mode="line"],[data-mode="arrow"],[data-mode="poly"],[data-mode="box"],[data-mode="circle"],
+          [data-mode="text"],[data-mode="dim"],[data-mode="callout"],[data-mode="crossout"],
+          [data-mode="cross"],[data-mode="strikerow"]) svg [data-lid]{pointer-events:none !important}
+#pages:is([data-mode="line"],[data-mode="arrow"],[data-mode="poly"],[data-mode="box"],[data-mode="circle"],
+          [data-mode="text"],[data-mode="dim"],[data-mode="callout"],[data-mode="crossout"],
+          [data-mode="cross"],[data-mode="strikerow"]) :not(.annoui) > .anno.sel:not(.editing) > :is(.rz,.rot,.mov,.x,.edp,.lup,.ldn){
+  pointer-events:auto !important}
+/* v71 — Ced: "make the stamp logo red in mini bar as well" — the same red the ribbon's COP stamp wears */
+html #miniBar #miniStamp.mb-ico.mb-img::before, html.pal-ontel #miniBar #miniStamp.mb-ico.mb-img::before{background:var(--danger)}
+html #miniBar #miniStamp.mb-ico:not(.mb-img)::before, html.pal-ontel #miniBar #miniStamp.mb-ico:not(.mb-img)::before{color:var(--danger);-webkit-text-fill-color:var(--danger)}
+html #miniBar #miniStamp:hover:not(:disabled){border-color:var(--danger)}
+html #miniBar #miniStamp.mb-ico.mb-img:disabled::before{background:var(--muted)}

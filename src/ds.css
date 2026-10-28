@@ -487,3 +487,29 @@ html .sk-edit .sk-edb.sk-edok{background:#22a55a!important; color:#fff!important
   box-shadow:0 1px 2px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.18)!important}
 html .sk-edit .sk-edb.sk-edok:hover{background:#1c8f4d!important}
 html .sk-edit .sk-edb.sk-edok svg, html .sk-edit .sk-edb.sk-edok .sk-edg{color:#fff!important; fill:currentColor}
+
+  /* ---- v71 — the text box's bar: its font by name, where its text sits, how it wraps ---- */
+  #annobar .ab-font{display:inline-flex; align-items:center}
+  #annobar .ab-font[hidden], #annobar [data-valign][hidden], #annobar [data-wrapm][hidden]{display:none!important}
+  #annobar .ab-fontpick{display:inline-flex; align-items:center; gap:6px; height:26px; box-sizing:border-box;
+    max-width:132px; min-width:84px; width:auto; padding:0 9px 0 11px; border-radius:var(--r-pill);
+    border:1px solid var(--line); background:var(--panel2); color:var(--ink); cursor:pointer;
+    -webkit-text-stroke:0; font-weight:500}
+  #annobar .ab-fontpick:hover{border-color:var(--accent)}
+  #annobar .ab-fontpick .tp-fontname{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0}
+  #annobar .ab-fontpick .tp-fontcaret{font-size:10px; opacity:.7; flex:none}
+  #annobar button[data-valign], #annobar button[data-wrapm]{font-size:0!important; -webkit-text-stroke:0;
+    display:inline-flex; align-items:center; justify-content:center}
+  #annobar button[data-valign]::before, #annobar button[data-wrapm]::before{content:""; width:16px; height:16px;
+    flex:none; background:currentColor; -webkit-mask:var(--mb-i) center/contain no-repeat; mask:var(--mb-i) center/contain no-repeat}
+  :root{
+    --i-mb-vtop:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='1.5' fill='none' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M7 8H17M7 11.5H14' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+    --i-mb-vmid:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='1.5' fill='none' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M7 10.3H17M7 13.8H14' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+    --i-mb-vbot:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='1.5' fill='none' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M7 12.5H17M7 16H14' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+    --i-mb-wrapc:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5H21M3 11H18a3 3 0 0 1 0 6H12M14.5 14.5L12 17L14.5 19.5M3 17H8' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --i-mb-wrapw:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5H9M12 5H21M3 11H13M3 17H10M14 17H19' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")}
+  #annobar [data-valign]{--mb-i:var(--i-mb-vmid)}
+  #annobar [data-valign][data-v="top"]{--mb-i:var(--i-mb-vtop)}
+  #annobar [data-valign][data-v="bottom"]{--mb-i:var(--i-mb-vbot)}
+  #annobar [data-wrapm]{--mb-i:var(--i-mb-wrapc)}
+  #annobar [data-wrapm][data-v="words"]{--mb-i:var(--i-mb-wrapw)}

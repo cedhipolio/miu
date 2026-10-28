@@ -77,6 +77,67 @@ def flatten(src, dst):
     return left, len(subj)
 
 
+def paint_flatten(src, dst, passes=2):
+    """v63 — what Ced's NOH5197 / SOH1350 had been through, which is the other half of a flatten:
+    every annotation's appearance stream is PAINTED into the page (`q 1 0 0 1 x y cm /FxoN Do Q`)
+    and the annotations are then taken off. SOH1350 went through it twice, so `passes=2` paints
+    every mark twice, exactly as that file came back."""
+    import pypdf
+    from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject, ArrayObject
+    r = pypdf.PdfReader(str(src))
+    w = pypdf.PdfWriter(clone_from=r)
+    n = 0
+    for pg in w.pages:
+        annots = pg.get("/Annots")
+        if not annots:
+            continue
+        res = pg["/Resources"]
+        if "/XObject" not in res:
+            res[NameObject("/XObject")] = DictionaryObject()
+        xd = res["/XObject"]
+        # like the real site: numbering carries on past forms an earlier round left in the page
+        n = max([n] + [int(k[4:]) for k in xd.keys() if k.startswith("/Fxo") and k[4:].isdigit()])
+        ops = []
+        for _ in range(passes):
+            for a in annots:
+                a = a.get_object()
+                ap = a.get("/AP")
+                if not ap or "/N" not in ap.get_object():
+                    continue
+                n += 1
+                nm = f"/Fxo{n}"
+                xd[NameObject(nm)] = ap.get_object()["/N"]
+                x, y = float(a["/Rect"][0]), float(a["/Rect"][1])
+                ops.append(f"q 1 0 0 1 {x:.5f} {y:.5f} cm {nm} Do Q")
+        st = DecodedStreamObject()
+        st.set_data(("\n" + "\n".join(ops) + "\n").encode("latin1"))
+        ref = w._add_object(st)
+        cont = pg.get("/Contents")
+        arr = ArrayObject()
+        if isinstance(cont.get_object(), ArrayObject):
+            arr.extend(cont.get_object())
+        else:
+            arr.append(cont)
+        arr.append(ref)
+        pg[NameObject("/Contents")] = arr
+        del pg["/Annots"]
+    with open(dst, "wb") as f:
+        w.write(f)
+    return n
+
+
+def painted_left(path):
+    """how many `/FxoN Do` are still in the pages' own content"""
+    import pypdf
+    r = pypdf.PdfReader(str(path))
+    k = 0
+    for pg in r.pages:
+        c = pg.get_contents()
+        if c is not None:
+            k += len(re.findall(rb"/Fxo\d+\s+Do", c.get_data()))
+    return k
+
+
 async def main():
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="miu-flatten-"))
     photos = []
@@ -121,8 +182,17 @@ async def main():
         for f in photos:
             await pg.set_input_files("#photoFile", str(f))
             await pg.wait_for_timeout(3200)
-        await pg.evaluate("""()=>{S.annos.filter(a=>a.kind==='img').forEach((a,i)=>{
-              a.srcOrig=a.src; a.ny=0.05+i*0.17; a.nx=0.05+i*0.02; }); layoutAnnos();}""")
+        # v64 — each picture is EDITED: the original kept as srcOrig (what Restore goes back to) and
+        # a hole cut in the middle of the one on the sheet. Ced's SOH1350 came back with every edit
+        # undone because the recovery copy was made from srcOrig. A hole is transparency, which the
+        # recovery keeps (PNG), so "did the edit survive" is one alpha read in the middle.
+        await pg.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map((a,i)=>new Promise(res=>{
+              a.ny=0.05+i*0.17; a.nx=0.05+i*0.02;
+              const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                g.drawImage(im,0,0); g.clearRect(c.width*0.4,c.height*0.4,c.width*0.2,c.height*0.2);
+                a.srcOrig=a.src; a.src=c.toDataURL('image/png'); res(); };
+              im.src=a.src; }))).then(()=>layoutAnnos())""")
         await pg.wait_for_timeout(600)
 
         before = await pg.evaluate(
@@ -194,8 +264,145 @@ async def main():
                          f"carrying a recovery copy")
         if after["drawn"] != N_PHOTOS:
             fails.append(f"{after['drawn']} of {N_PHOTOS} pictures actually drew on the page")
+        holes = await pg2.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map(a=>new Promise(res=>{
+              const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                g.drawImage(im,0,0); res(g.getImageData(c.width>>1,c.height>>1,1,1).data[3]); };
+              im.onerror=()=>res(-1); im.src=a.src; })))""")
+        print(f"  the edit (a hole in the middle) survived on {sum(1 for h in holes if h==0)} of {len(holes)}")
+        if any(h != 0 for h in holes):
+            fails.append(f"pictures came back UNEDITED (alpha in the hole: {holes}) — the recovery "
+                         f"copy is the picture before editing")
         if "flattened" not in after["said"].lower():
             fails.append("the tool did not say the file had been flattened")
+
+        # ---- v63: the platform that PAINTS the marks in before taking the annotations off ----
+        painted = tmp / "painted.pdf"
+        npaint = paint_flatten(out, painted, passes=2)
+        print(f"painted-in flatten: {npaint} appearance(s) painted, {painted_left(painted)} Do in the pages")
+        pg3 = await ctx.new_page()
+        logs3 = []
+        pg3.on("console", lambda m: logs3.append(m.text[:500]))
+        pg3.on("pageerror", lambda e: fails.append("page error on painted reopen: " + str(e)[:200]))
+        saved.clear()
+        pg3.on("download", lambda dl: asyncio.create_task(grab(dl)))
+        await pg3.goto(WRAP.as_uri()); await pg3.wait_for_timeout(2500)
+        await pg3.set_input_files("#file", str(painted)); await pg3.wait_for_timeout(22000)
+        a3 = await pg3.evaluate("""()=>({marks:S.annos.length, lines:S.lines.length,
+                     said:((document.getElementById('status')||{}).textContent||'')})""")
+        holes3 = await pg3.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map(a=>new Promise(res=>{
+              const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                g.drawImage(im,0,0); res([c.width, g.getImageData(c.width>>1,c.height>>1,1,1).data[3]]); };
+              im.onerror=()=>res([-1,-1]); im.src=a.src; })))""")
+        print(f"  painted file pictures (width, alpha in the hole): {holes3}")
+        if any(h[1] != 0 for h in holes3):
+            fails.append(f"painted file: pictures came back unedited {holes3}")
+        if any(h[0] < 1000 for h in holes3):
+            fails.append(f"painted file: pictures came back at recovery size, not the painted full size {holes3}")
+        print(f"after reopening the painted file: {a3['marks']} marks, {a3['lines']} strokes")
+        print(f"  it said: {a3['said'][:200]}")
+        if a3["marks"] != before["marks"] or a3["lines"] != before["lines"]:
+            fails.append(f"painted file: {a3['marks']}/{a3['lines']} came back, wanted "
+                         f"{before['marks']}/{before['lines']}")
+        # v70 — the site flattened it, so the tool offers the editable copy right there, and that one
+        # button is the export: real annotations back, nothing left painted.
+        offer = await pg3.evaluate("()=>{const n=document.getElementById('miuEditNote');"
+                                   "return n?{txt:n.textContent, btn:!!n.querySelector('.miu-ok')}:null}")
+        print(f"  editable-copy offer: {offer and offer['txt'][:90]}")
+        if not offer or not offer["btn"]:
+            fails.append("a site-flattened file opened without the 'Save editable copy' offer")
+            await pg3.evaluate("()=>{const b=document.querySelector('#dlPdf'); if(b)b.click();}")
+        else:
+            await pg3.click("#miuEditNote .miu-ok")
+        for _ in range(40):
+            await pg3.wait_for_timeout(1000)
+            if saved: break
+        if saved:
+            import pypdf as _pp
+            _r = _pp.PdfReader(saved[0])
+            _n = sum(len(pg_.get('/Annots') or []) for pg_ in _r.pages)
+            print(f"  editable copy: {_n} annotation(s) other viewers can edit")
+            if _n < before["marks"]:
+                fails.append(f"the editable copy carries {_n} annotations, wanted at least {before['marks']}")
+        if not saved:
+            fails.append("the painted file would not re-export")
+        else:
+            left_do = painted_left(saved[0])
+            print(f"re-exported: {left_do} painted copies left in the pages")
+            if left_do:
+                fails.append(f"{left_do} painted-in copies of our marks are still burned into the "
+                             f"re-export — the redlines would show twice and could not all be edited")
+        if "painted-in" not in a3["said"]:
+            fails.append("the tool did not say it took the painted copies off")
+
+        # ---- v69: round the loop twice — the newest paint of each picture is the one that counts ----
+        # Ced's Mount Analysis (3): exported, flattened, reopened, edited, exported, flattened again. The
+        # file carries BOTH generations of each picture's form (the old ones left in the page's
+        # resources, the new ones drawn); v68 took the first of the right size it met and brought the
+        # OLD picture back. Second round here: a second hole is cut in each picture, so the newest
+        # generation is the one with two holes.
+        await pg3.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map(a=>new Promise(res=>{
+              const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                g.drawImage(im,0,0); g.clearRect(c.width*0.1,c.height*0.1,c.width*0.12,c.height*0.12);
+                a.src=c.toDataURL('image/png'); res(); }; im.src=a.src; }))).then(()=>layoutAnnos())""")
+        saved.clear()
+        await pg3.evaluate("()=>{const b=document.querySelector('#dlPdf'); if(b)b.click();}")
+        for _ in range(40):
+            await pg3.wait_for_timeout(1000)
+            if saved: break
+        if not saved:
+            fails.append("the second-round export produced no file")
+        else:
+            round2 = tmp / "round2.pdf"
+            paint_flatten(saved[0], round2, passes=1)
+            pg5 = await ctx.new_page()
+            await pg5.goto(WRAP.as_uri()); await pg5.wait_for_timeout(2500)
+            await pg5.set_input_files("#file", str(round2)); await pg5.wait_for_timeout(22000)
+            h5 = await pg5.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map(a=>new Promise(res=>{
+                  const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                    c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                    g.drawImage(im,0,0);
+                    res([g.getImageData(c.width>>1,c.height>>1,1,1).data[3],
+                         g.getImageData(Math.round(c.width*0.16),Math.round(c.height*0.16),1,1).data[3]]); };
+                  im.onerror=()=>res([-1,-1]); im.src=a.src; })))""")
+            print(f"  second round (both holes must be clear): {h5}")
+            if not h5 or any(h != [0, 0] for h in h5):
+                fails.append(f"after a second round the OLD pictures came back {h5}")
+            await pg5.close()
+        saved.clear()
+
+        # ---- v67: the BROWSER'S copy of the document holds the unedited pictures ----
+        # Ced's SOH1350 kept coming back "unfinished" after the file itself was fixed: a reopen under
+        # v63 had put the payload's recovery copies (the pictures before editing) into this browser's
+        # autosave, and every later reopen offered that copy as the highlighted choice. Seed exactly
+        # that — the recovery copies as the pictures, one mark moved so the two sets differ, a newer
+        # time — reopen, take the highlighted answer, and the pictures must be the edited ones.
+        await pg3.evaluate("""async()=>{ const rec=[...(S._recoverySrcs||[])];
+              const d=savePayload(); let i=0;
+              d.annos.forEach(a=>{ if(a.kind==='img'&&rec.length)a.src=rec[(i++)%rec.length]; });
+              const t=d.annos.find(a=>a.kind!=='img'); if(t)t.nx+=0.02;
+              d.ts=Date.now()+60000;
+              await saveObj(saveKey(), d); }""")
+        pg4 = await ctx.new_page()
+        pg4.on("pageerror", lambda e: fails.append("page error on cached reopen: " + str(e)[:200]))
+        await pg4.goto(WRAP.as_uri()); await pg4.wait_for_timeout(2500)
+        await pg4.set_input_files("#file", str(painted)); await pg4.wait_for_timeout(22000)
+        asked = await pg4.evaluate("()=>{const d=document.getElementById('dlg'); const on=d&&d.classList.contains('show'); if(on){ const b=d.querySelector('button.primary'); if(b)b.click(); } return on;}")
+        await pg4.wait_for_timeout(1500)
+        holes4 = await pg4.evaluate("""()=>Promise.all(S.annos.filter(a=>a.kind==='img').map(a=>new Promise(res=>{
+              const rec=S._recoverySrcs; if(rec&&rec.has(a.src))return res([-2,-2]);
+              const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas');
+                c.width=im.naturalWidth; c.height=im.naturalHeight; const g=c.getContext('2d');
+                g.drawImage(im,0,0); res([c.width, g.getImageData(c.width>>1,c.height>>1,1,1).data[3]]); };
+              im.onerror=()=>res([-1,-1]); im.src=a.src; })))""")
+        print(f"  reopened with this browser's stale copy (asked: {asked}): {holes4}")
+        # v68 — and it is not even asked: a PDF that carries our redlines opens as it is
+        if asked:
+            fails.append("a PDF carrying our redlines still asked which set to use — it should open as it is")
+        if not holes4 or any(h[1] != 0 or h[0] < 1000 for h in holes4):
+            fails.append(f"the browser's stale copy brought the unedited pictures back {holes4}")
 
         await b.close()
 

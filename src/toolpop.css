@@ -257,3 +257,11 @@
 .tp-set:hover .tp-setx{opacity:.9}
 .tp-setx:hover{color:#ff5e62;background:rgba(255,94,98,.12)}
 .tp-wide{width:100%;justify-content:center;margin-top:8px}
+
+/* ---- v71 — the kinds in a mixed selection: All, then one tab per kind ---- */
+.tp-kinds{display:flex;flex-wrap:wrap;gap:5px;padding:8px var(--tp-gut);flex:0 0 auto;
+  border-bottom:1px solid var(--fp-sep);background:var(--fp-card)}
+.tp-kind{background:var(--fp-btn);border:1px solid var(--fp-line);color:var(--fp-btn-ink);border-radius:var(--r-xl);
+  padding:4px 11px;font-size:var(--fs-3);font-weight:600;cursor:pointer}
+.tp-kind.on{background:var(--fp-on);color:var(--fp-on-ink);border-color:var(--fp-on)}
+.tp-scroll > .tp-note:first-child{margin:10px var(--tp-gut) 10px}

@@ -46,7 +46,9 @@ const TP_SPEC={
      at both ends and are not offered the choice. */
   cross:    {title:"Strike text",    form:"stroke", preview:"line", noEnds:true},
   strikerow:{title:"Strike row",     form:"stroke", preview:"line", noEnds:true},
-  crossout: {title:"Cross out",      form:"stroke", preview:"line", noEnds:true}
+  crossout: {title:"Cross out",      form:"stroke", preview:"line", noEnds:true},
+  /* v71 — several KINDS of mark selected at once: one panel over all of them */
+  mixed:    {title:"Selection",      form:"mixed",  preview:"text"}
 };
 
 /* The tick marks under each slider, straight off the screenshots. */
@@ -167,7 +169,81 @@ const TP_LINE_KEYS=["col","colOp","sw","dash","lpat","le0","le1","leSz","join","
                     /* 6gg — a measurement's own scale, units and rounding */
                     "dimScale","dimUnit","dimPrec"];
 
-function tpSelMarks(){ try{ return maSelectedMarks(); }catch(e){ return {annos:[],lines:[]}; } }
+function tpSelAll(){ try{ return maSelectedMarks(); }catch(e){ return {annos:[],lines:[]}; } }
+/* =================================================================================================
+   v71 — EVERY KIND IN THE SELECTION, IN ONE GO.
+   Ced: "the tool must be able to select multiple redlines, and edit the properties of all the redlines
+   and items in properties setting in one go." A marquee over a text box, a rectangle, a line and an
+   arrow opened the TEXT panel (the first mark's kind): the colour reached all four, but a rule's weight,
+   its dash, its endings and its corners could not be set from there at all.
+   Now a selection of more than one kind opens on ALL — colour, opacity, weight, line style, endings,
+   corners, font, size, style and alignment, each written to the marks that can carry it — with a tab
+   per kind beside it, which opens that kind's own full panel and writes to those marks only.
+   ================================================================================================= */
+let TP_KIND=null;                       /* null = every selected mark; else one kind's panel */
+function tpKindOfMark(o,isLine){
+  try{
+    if(isLine){
+      if(o.maKind==="dim")return "dim";
+      if(typeof maCalloutBoxOf==="function"&&maCalloutBoxOf(o))return "callout";
+      return sbToolFor({annos:[],lines:[o]});
+    }
+    if(o.maKind==="dimlabel")return "dim";
+    return sbToolFor({annos:[o],lines:[]});
+  }catch(e){ return isLine?"line":"redline"; }
+}
+function tpSelKinds(){
+  const s=tpSelAll(), m=new Map();
+  s.annos.forEach(a=>{ const k=tpKindOfMark(a,false); m.set(k,(m.get(k)||0)+1); });
+  /* a callout's leader and a length's run are half of a mark already counted by its box or reading */
+  s.lines.forEach(l=>{ const k=tpKindOfMark(l,true);
+    if((k==="callout"||k==="dim")&&s.annos.some(a=>tpKindOfMark(a,false)===k))return;
+    m.set(k,(m.get(k)||0)+1); });
+  return m;
+}
+function tpSelMarks(){
+  const s=tpSelAll();
+  if(!TP_SEL||!TP_KIND)return s;
+  return {annos:s.annos.filter(a=>tpKindOfMark(a,false)===TP_KIND),
+          lines:s.lines.filter(l=>tpKindOfMark(l,true)===TP_KIND)};
+}
+function tpIsMixed(){ return TP_SEL&&TP_TOOL==="mixed"; }
+/* which marks a property can land on, when ALL kinds are being written at once */
+const TP_TEXT_KEYS=["font","size","lsp","lnsp","uline","strikeout","align","valign","wrapMode","bg","bgNone"];
+const TP_RULE_KEYS=["sw","dash","lpat","join","le0","le1","leSz"];
+function tpMixedTakes(o,isLine,key){
+  if(isLine){
+    if(key==="le0"||key==="le1"||key==="leSz"){
+      const k=tpKindOfMark(o,true);
+      return !(TP_SPEC[k]&&TP_SPEC[k].noEnds)&&!o.closed;
+    }
+    return TP_LINE_KEYS.indexOf(key)>=0;
+  }
+  if(TP_ANNO_KEYS.indexOf(key)<0)return false;
+  if(o.kind==="img")return key==="col"||key==="colOp"||key==="hl";
+  const k=tpKindOfMark(o,false);
+  const form=(TP_SPEC[k]||{}).form;
+  if(TP_RULE_KEYS.indexOf(key)>=0)return form==="shape"||form==="callout";
+  if(key==="fill"||key==="fillOp"||key==="pat")return form==="shape"||form==="callout";
+  return true;
+}
+function tpKindTabs(){
+  const kinds=tpSelKinds();
+  if(!TP_SEL||kinds.size<2)return null;
+  const row=tpEl("div","tp-kinds");
+  let total=0; kinds.forEach(n=>total+=n);
+  const mk=(k,label)=>{
+    const b=tpEl("button","tp-kind"+(((k||null)===TP_KIND)?" on":""),label); b.type="button";
+    b.title=k?("Only the selected "+((TP_SPEC[k]||{}).title||k).toLowerCase()+" marks"):"Every selected mark at once";
+    b.onclick=()=>{ TP_KIND=k||null; TP_TOOL=k||"mixed";
+      const f=(TP_SPEC[TP_TOOL]||{}).form; if(f==="stroke"||f==="image")TP_TARGET="stroke";
+      _tpScroll=0; _tpHistAt=0; tpRender(); };
+    row.appendChild(b);
+  };
+  mk(null,"All "+total);
+  kinds.forEach((n,k)=>mk(k,((TP_SPEC[k]||{}).title||k)+(n>1?(" "+n):"")));
+  return row;
+}
 function tpHasSel(){ const s=tpSelMarks(); return s.annos.length+s.lines.length; }
 
 /* What the panel is showing. In selection mode that is the first selected mark's own look, with the
@@ -241,8 +317,19 @@ function tpApply(key,value){
 function tpApplySel(key,value){
   const s=tpSelMarks(); if(!s.annos.length&&!s.lines.length)return;
   tpHist();
+  if(tpIsMixed()){
+    /* v71 — all kinds at once: each property lands on the marks that can carry it, and a fill means
+       a text box's ground and a shape's fill alike */
+    s.annos.forEach(a=>{
+      if(key==="fill"&&a.kind!=="img"&&(TP_SPEC[tpKindOfMark(a,false)]||{}).form==="text"){ a.bg=value; return; }
+      if(key==="fillOp"&&a.kind!=="img"&&(TP_SPEC[tpKindOfMark(a,false)]||{}).form==="text"){ a.bgNone=value<=0; return; }
+      if(tpMixedTakes(a,false,key))a[key]=value; });
+    s.lines.forEach(l=>{
+      if(tpMixedTakes(l,true,key)||((key==="fill"||key==="fillOp")&&l.closed)){ l[key]=value; try{syncArrowFlag(l);}catch(e){} } });
+  }else{
   if(TP_ANNO_KEYS.indexOf(key)>=0)s.annos.forEach(a=>{ a[key]=value; });
   if(TP_LINE_KEYS.indexOf(key)>=0)s.lines.forEach(l=>{ l[key]=value; try{syncArrowFlag(l);}catch(e){} });
+  }
   /* 6gg — a measurement's READING is part of the measurement: a text property set on the run (its
      colour, its size, its face) lands on the label the run owns, so restyling a length restyles the
      whole of it rather than half. */
@@ -275,6 +362,7 @@ function tpHead(title){
   const acts=tpEl("div","tp-acts");
   const mk=(glyph,title,fn,on)=>{ const b=tpEl("button","tp-act"+(on?" on":""),glyph);
     b.type="button"; b.title=title; b.onclick=fn; acts.appendChild(b); return b; };
+  if(TP_TOOL!=="mixed"){
   mk("↺","Put this tool back to its defaults",()=>{
     MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_DEFAULTS[TP_TOOL]||MA_TOOL_DEFAULTS.redline);
     maSaveToolStyles(); maShowToolStyle(TP_TOOL); tpRender(); toast("Tool reset");
@@ -284,6 +372,7 @@ function tpHead(title){
     Object.keys(MA_TOOL_STYLES).forEach(k=>{ MA_TOOL_STYLES[k]=Object.assign({},MA_TOOL_STYLES[k],st); });
     maSaveToolStyles(); maShowToolStyle(S.mode); toast("Applied to every tool");
   });
+  }
   mk("✕","Close",()=>tpClose());
   h.appendChild(acts);
   return h;
@@ -859,11 +948,22 @@ function tpPresets(st){
   return sec;
 }
 function tpBuild(){
+  /* v71 — the selection may have changed under an open panel: keep the kind view honest */
+  if(TP_SEL){
+    const kinds=tpSelKinds();
+    if(TP_KIND&&!kinds.has(TP_KIND)){ TP_KIND=null; }
+    if(!TP_KIND){
+      if(kinds.size>1)TP_TOOL="mixed";
+      else if(TP_TOOL==="mixed"&&kinds.size===1)TP_TOOL=[...kinds.keys()][0];
+    }
+  }else if(TP_TOOL==="mixed")TP_TOOL="redline";
   const spec=TP_SPEC[TP_TOOL]||TP_SPEC.redline;
   const st=tpStyle();
   const pop=document.getElementById("toolpop");
   pop.innerHTML="";
-  pop.appendChild(tpHead(spec.title));
+  pop.appendChild(tpHead(TP_KIND?(spec.title+" · in the selection"):spec.title));
+  const _kt=tpKindTabs(); if(_kt)pop.appendChild(_kt);
+  if(spec.form==="mixed"){ tpBuildMixed(pop,st); tpFinish(pop); return; }
   pop.appendChild(tpPreview(spec.preview));
 
   const ink=st.col||"#fa3237";
@@ -1291,16 +1391,136 @@ function tpBuild(){
     "selected — what the selection becomes."));
   pop.appendChild(adv);
 
-  /* 6g8 — the header stays put and everything under it scrolls, so the tool's name and the ✕ are
-     always reachable however long the panel is. Everything above was appended flat; it is gathered
-     into the scroller here, in one pass, rather than threaded through forty appends. */
-  const head=pop.firstChild;
+  tpFinish(pop);
+}
+/* 6g8 — the header stays put and everything under it scrolls, so the tool's name and the ✕ are
+   always reachable however long the panel is. Everything above was appended flat; it is gathered
+   into the scroller here, in one pass, rather than threaded through forty appends. */
+function tpFinish(pop){
+  const head0=pop.firstChild;
+  /* v71 — the kind tabs stay pinned under the header with it */
+  const head=(head0&&head0.nextSibling&&head0.nextSibling.classList&&head0.nextSibling.classList.contains("tp-kinds"))
+             ?head0.nextSibling:head0;
   const scroll=tpEl("div","tp-scroll");
   while(head&&head.nextSibling)scroll.appendChild(head.nextSibling);
   pop.appendChild(scroll);
   scroll.scrollTop=_tpScroll||0;
   scroll.addEventListener("scroll",()=>{ _tpScroll=scroll.scrollTop; },{passive:true});
-  tpDragHead(head);
+  tpDragHead(head0);
+}
+/* v71 — ALL KINDS AT ONCE. Only the rows that some selected mark can carry are offered, and each write
+   lands on exactly the marks that can carry it (tpMixedTakes). */
+function tpBuildMixed(pop,st){
+  const s=tpSelAll();
+  const formOf=a=>(TP_SPEC[tpKindOfMark(a,false)]||{}).form;
+  const texty=s.annos.filter(a=>a.kind!=="img"&&a.maKind!=="dimlabel"&&formOf(a)!=="image");
+  const shapes=s.annos.filter(a=>a.kind!=="img"&&(formOf(a)==="shape"||formOf(a)==="callout"));
+  const rules=s.lines;
+  const ended=s.lines.filter(l=>tpMixedTakes(l,true,"le1"));
+  const hasFill=shapes.length||texty.length||s.lines.some(l=>l.closed);
+  const ink=st.col||"#fa3237";
+  const kinds=tpSelKinds(); let total=0; kinds.forEach(n=>total+=n);
+  pop.appendChild(tpEl("p","tp-note","Every change lands on all "+total+" selected marks that can carry it. "+
+    "Pick a kind above for everything that kind has."));
+  if(hasFill){ pop.appendChild(tpTargets(texty.length&&!shapes.length?"Text":"Line / text","Fill")); }
+  else TP_TARGET="stroke";
+  pop.appendChild(tpSwatches(!!hasFill));
+  const opNow=(TP_TARGET==="fill")?Math.round((st.fillOp!=null?st.fillOp:1)*100)
+                                  :Math.round((st.colOp!=null?st.colOp:1)*100);
+  pop.appendChild(tpRow("Opacity",tpSlider({min:0,max:100,step:1,value:opNow,ticks:[25,50,75],ramp:true,
+    choices:[0,10,25,50,75,90,100], suffix:"%",
+    onInput:v=>{ if(TP_TARGET==="fill")tpApply("fillOp",v/100); else tpApply("colOp",v/100); }})));
+  if(rules.length||shapes.length){
+    const swNow=((rules[0]||shapes[0]||{}).sw)||st.sw||1.5;
+    pop.appendChild(tpRow("Line weight",tpSlider({min:0.1,max:50,step:0.05,value:swNow,ticks:TP_WIDTH_TICKS,
+      choices:[0.25,0.5,0.75,1,1.5,2,3,4,6,8,12,24,50], suffix:"pt", log:true, onInput:v=>tpApply("sw",v)})));
+  }
+  if(texty.length){
+    const t0=texty[0];
+    const sec=tpSection("Text",true);
+    sec._body.appendChild(tpRow("Size",tpSlider({min:2,max:64,step:0.5,value:t0.size||st.size||8,
+      ticks:TP_SIZE_TICKS, choices:[2,2.5,3,4,5,6,7,8,9,10,12,14,16,20,28,42,64],
+      suffix:"pt", log:true, onInput:v=>tpApply("size",v)})));
+    const fk=t0.font||st.font||"arial";
+    sec._body.appendChild(tpRow("Font",tpFontPicker(fk,k=>tpApply("font",k))));
+    const styleRow=tpEl("div","tp-choice tp-deco");
+    const mkT=(label,on,fn,cls)=>{ const b=tpEl("button","tp-cb"+(on?" on":"")+(cls?" "+cls:""),label);
+      b.type="button"; b.onclick=fn; styleRow.appendChild(b); };
+    /* bold and italic are faces, so each mark keeps its own family and only gains or loses the cut */
+    const face=(which,on)=>()=>{ const sel=tpSelAll(); tpHist();
+      sel.annos.forEach(a=>{ if(a.kind==="img")return; const f=a.font||"arial";
+        const has=(which==="bold")?/bold/.test(f):/ital/.test(f);
+        if(has===on)a.font=tpFaceToggle(f,which); });
+      try{ layoutAnnos(); drawAllLines(); }catch(e){} tpRender(); };
+    const isB=/bold/.test(fk), isI=/ital/.test(fk);
+    mkT("B",isB,face("bold",isB),"tp-b");
+    mkT("I",isI,face("ital",isI),"tp-i");
+    mkT("U",!!t0.uline,()=>tpSet("uline",!t0.uline),"tp-u");
+    mkT("S",!!t0.strikeout,()=>tpSet("strikeout",!t0.strikeout),"tp-s");
+    sec._body.appendChild(tpRow("Style",styleRow));
+    sec._body.appendChild(tpRow("Alignment",tpChoice(
+      [{k:"left",t:"Left",label:"← Left"},{k:"center",t:"Centre",label:"Centre"},{k:"right",t:"Right",label:"Right →"}],
+      t0.align||"left", k=>tpSet("align",k))));
+    sec._body.appendChild(tpRow("Vertical",tpChoice(
+      [{k:"top",t:"Top",label:"⤒"},{k:"middle",t:"Middle",label:"⇳"},{k:"bottom",t:"Bottom",label:"⤓"}],
+      t0.valign||"middle", k=>tpSet("valign",k))));
+    sec._body.appendChild(tpRow("Wrap",tpChoice(
+      [{k:"chars",t:"Fill each line, breaking inside a word where it runs out",label:"AB|C"},
+       {k:"words",t:"Break between words",label:"AB C"}],
+      t0.wrapMode||"chars", k=>tpSet("wrapMode",k))));
+    pop.appendChild(sec);
+  }
+  if(rules.length||shapes.length){
+    const sec=tpSection("Line style",true);
+    sec._body.appendChild(tpChoice(TP_DASHES.map(d=>({k:d.k,t:d.t,draw:b=>tpMiniLine(b,(svg,NS)=>{
+      const l=document.createElementNS(NS,"line");
+      l.setAttribute("x1","4"); l.setAttribute("y1","10"); l.setAttribute("x2","36"); l.setAttribute("y2","10");
+      l.setAttribute("stroke","currentColor"); l.setAttribute("stroke-width","2");
+      const dd=dashCss({dash:d.k},2,1); if(dd)l.setAttribute("stroke-dasharray",dd);
+      if(d.k==="dot"||d.k==="dashdot"||d.k==="dashdotdot")l.setAttribute("stroke-linecap","round");
+      svg.appendChild(l);
+    })})), ((rules[0]||shapes[0]||{}).dash)||"solid", k=>tpSet("dash",k), "tp-lines"));
+    if(rules.length){
+      const j0=(typeof joinOf==="function")?joinOf(rules[0]):"sharp";
+      sec._body.appendChild(tpRow("Corners",tpChoice(JOIN_KINDS.map(j=>({k:j.v,t:j.t,label:j.t})),
+        j0, k=>tpSet("join",k), "tp-joins")));
+    }
+    pop.appendChild(sec);
+  }
+  if(ended.length){
+    const sec=tpSection("Line endings",true);
+    const [e0,e1]=endsOf(ended[0]);
+    const tabs=tpEl("div","tp-tabs");
+    const side=(pop._side==="start")?"start":"end";
+    const mkTab=(k,label)=>{ const b=tpEl("button","tp-tab"+(side===k?" on":""),label); b.type="button";
+      b.onclick=()=>{ pop._side=k; tpRender(); }; tabs.appendChild(b); };
+    mkTab("start","Start"); mkTab("end","End");
+    sec._body.appendChild(tabs);
+    sec._body.appendChild(tpChoice(TP_ENDS.map(e=>({k:e.k,t:e.t,draw:b=>tpMiniLine(b,(svg,NS)=>{
+      const l=document.createElementNS(NS,"line");
+      l.setAttribute("x1","4"); l.setAttribute("y1","10"); l.setAttribute("x2","28"); l.setAttribute("y2","10");
+      l.setAttribute("stroke","currentColor"); l.setAttribute("stroke-width","2");
+      svg.appendChild(l);
+      const sp=endShapePath(e.k,4,10,30,10,9); if(!sp)return;
+      const q=document.createElementNS(NS,"path"); q.setAttribute("d",sp.d);
+      if(sp.fill){ q.setAttribute("fill","currentColor"); q.setAttribute("stroke","none"); }
+      else { q.setAttribute("fill","none"); q.setAttribute("stroke","currentColor"); q.setAttribute("stroke-width","2"); }
+      svg.appendChild(q);
+    })})), (side==="start"?e0:e1), k=>tpSet(side==="start"?"le0":"le1",k), "tp-ends"));
+    const tipNow=(typeof ended[0].leSz==="number"&&ended[0].leSz>0)?ended[0].leSz:1;
+    sec._body.appendChild(tpRow("Tip size",tpChoice(TIP_SIZES.map(t=>({k:String(t.v),t:t.t,label:t.t})),
+      String(tipNow), k=>tpSet("leSz",parseFloat(k)), "tp-tips")));
+    pop.appendChild(sec);
+  }
+  const adv=tpSection("Advanced settings",false);
+  const hl=tpEl("div","tp-switchrow");
+  hl.appendChild(tpEl("div","tp-swl","Highlight mode"));
+  const sw=tpEl("button","tp-switch"+(st.hl?" on":"")); sw.type="button";
+  sw.title="Draw like a highlighter — the page reads through the mark";
+  sw.onclick=()=>tpSet("hl",!st.hl);
+  hl.appendChild(sw);
+  adv._body.appendChild(hl);
+  pop.appendChild(adv);
 }
 
 /* ---- the panel can be moved out of the way -------------------------------------------------------
@@ -1396,6 +1616,8 @@ function tpOpen(tool,anchor,forSelection){
   if(maToolOf(tool)!==TP_TOOL)_tpScroll=0;   /* a different tool opens at the top of its own panel */
   TP_TOOL=maToolOf(tool);
   TP_SEL=!!forSelection&&!!tpHasSel();     /* 6fe — bound to what is selected, or to the tool */
+  TP_KIND=null;
+  if(TP_SEL&&tpSelKinds().size>1)TP_TOOL="mixed";   /* v71 — several kinds: the panel over all of them */
   TP_TARGET=(TP_SPEC[TP_TOOL]&&TP_SPEC[TP_TOOL].form==="stroke")?"stroke":TP_TARGET;
   _tpAnchor=anchor||_tpAnchor;
   _tpHistAt=0;                             /* a fresh gesture gets its own undo step */
@@ -1410,7 +1632,8 @@ function tpClose(){
   tpPickerClose();
   document.querySelectorAll(".tp-vmenu").forEach(n=>n.remove());
   const pop=document.getElementById("toolpop"); if(!pop)return;
-  TP_SEL=false;
+  TP_SEL=false; TP_KIND=null;
+  if(TP_TOOL==="mixed")TP_TOOL="redline";
   pop.setAttribute("hidden",""); pop.setAttribute("aria-hidden","true");
   document.querySelectorAll("#tools .tool.popped").forEach(b=>b.classList.remove("popped"));
 }

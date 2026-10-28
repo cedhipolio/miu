@@ -4744,6 +4744,11 @@ function attachPagePointer(pg,i){
       const q=rel(e);
       const ep2=(S.mode==="cross")?[q.x,_clickRun.y]
                                   :snapDrawPoint(_clickRun.x,_clickRun.y,q.x,q.y,e,pg);
+      /* v71 — Ced: "when adding a line by points, make sure the line is shown in preview in
+         realtime." The ghost armed by the first click was being cleared by the release that armed it,
+         so between the two clicks only the start dot and the length readout showed. If it is gone it
+         is rebuilt here, from the start point to the pointer, on every move. */
+      if(!_ghost||_ghost.page!==i){ try{ _ghost=ghostStroke(i,S.mode,_clickRun.x,_clickRun.y,ep2[0],ep2[1]); }catch(_){} }
       ghostMove(ep2[0],ep2[1]);
       lenHUDShow(lenHUD(),i,_clickRun.x,_clickRun.y,ep2[0],ep2[1],
                  (ep2[0]!==q.x||ep2[1]!==q.y),e.clientX,e.clientY);
@@ -4871,7 +4876,9 @@ function attachPagePointer(pg,i){
          own reading. Before the general stroke branch, because it makes two marks, not one. */
       if(S.mode==="dim"){
         if(moved)maPlaceDim(i,sx,sy,ex,ey);
-        else if(!tookClickOnMark())toolDone();
+        /* v71 — a length is laid by two clicks as well as by a drag, like a line: the first click
+           sets the start and the preview follows the pointer to the second */
+        else if(!tookClickOnMark()){ if(!fromRun){ clickRunArm(i,S.mode,sx,sy); return; } toolDone(); }
         return;
       }
       if(moved){
@@ -5556,7 +5563,10 @@ function drawPageLines(i){
       const sp=endShapePath(kind,fx,fy,tx,ty,headSize); if(!sp)return;
       const hd=mk("path",sp.fill?{d:sp.d,fill:col,stroke:"none"}
                                 :{d:sp.d,fill:"none",stroke:col,"stroke-width":sw,
-                                  "stroke-linecap":"round","stroke-linejoin":"round"});
+                                  /* v71 — Ced: "the length tool is not sharp cornered". The ticks and
+                                     open heads were drawn with round caps whatever the line said; they
+                                     take the line's own corner setting now (sharp by default). */
+                                  "stroke-linecap":capCss(l),"stroke-linejoin":joinCss(l),"stroke-miterlimit":8});
       hd.style.pointerEvents="none";
       if(lop<1)hd.setAttribute("opacity",lop);
       if(l.hl)hd.style.mixBlendMode="multiply";
@@ -5573,6 +5583,19 @@ function drawPageLines(i){
         if(boxEnd&&k===0)return;
         const c=mk("circle",{cx:p[0],cy:p[1],r:6,fill:selInk(),stroke:"#fff","stroke-width":2});
         c.style.pointerEvents="all"; c.style.cursor="move";
+        /* v71 — Ced: "when dragging … the circular dragger, make its opacity less so the user knows
+           where exactly it goes." The grip being dragged goes see-through, with a fine cross at its
+           centre, so the point it is putting down shows through it. */
+        if(_ldrag&&_ldrag.moved&&_ldrag.id===l.id&&_ldrag.mode==="pt"+k){
+          c.setAttribute("fill-opacity","0.28"); c.setAttribute("stroke-opacity","0.6"); c.setAttribute("r","8");
+          c.classList.add("grip-live");
+          const NSx="http://www.w3.org/2000/svg";
+          [[-5,0,5,0],[0,-5,0,5]].forEach(q=>{ const x=document.createElementNS(NSx,"line");
+            x.setAttribute("x1",p[0]+q[0]); x.setAttribute("y1",p[1]+q[1]);
+            x.setAttribute("x2",p[0]+q[2]); x.setAttribute("y2",p[1]+q[3]);
+            x.setAttribute("stroke",selInk()); x.setAttribute("stroke-width","1");
+            x.style.pointerEvents="none"; uiLayer().appendChild(x); });
+        }
         c.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); selectLine(l.id); startLineDrag(ev,l,"pt"+k,pg); });
         uiLayer().appendChild(c);        /* 6lp — above every band, not in the stroke's own layer */
       });
@@ -5756,10 +5779,21 @@ function positionLineBar(l,pg){
   const bar=$("#linebar"); const r=pg.getBoundingClientRect();
   const p=linePts(l), w=pg.offsetWidth, h=pg.offsetHeight;
   const xs=p.map(q=>r.left+q[0]*w), ys=p.map(q=>r.top+q[1]*h);
-  const top0=Math.min(...ys), bot=Math.max(...ys);
+  let top0=Math.min(...ys), bot=Math.max(...ys);
+  /* v71 — Ced: "the mini toolbar in length tool is covering the text part". A length's reading sits
+     just above its rule, so a bar placed off the rule alone landed on the reading. The reading's own
+     box (and anything else hung on the stroke) counts as part of what the bar has to clear. */
+  const lead=[];
+  try{ const lab=(l.maKind==="dim"&&typeof maDimLabelOf==="function")?maDimLabelOf(l):null; if(lab)lead.push(lab.id); }catch(e){}
+  lead.forEach(id=>{
+    const el=document.querySelector(`.anno[data-id="${id}"]`); if(!el)return;
+    const q=el.getBoundingClientRect(); if(!q.width&&!q.height)return;
+    top0=Math.min(top0,q.top); bot=Math.max(bot,q.bottom); xs.push(q.left);
+  });
   const bh=bar.offsetHeight||34;
   let top=top0-bh-16;                                   /* clear of the end handles, which are r=6 */
-  if(top<8)top=bot+18;
+  const ins=_chromeInset();
+  if(top<Math.max(8,ins.top))top=bot+18;
   fitFloatingBar(bar,Math.max(8,Math.min(...xs)-14),top);
 }
 
@@ -8217,6 +8251,7 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
       _rsMoved=true;
       S.history.push(_pre); if(S.history.length>80)S.history.shift();
       S.future=[]; updateUndoUI();
+      document.body.dataset.rzLive=pos;   /* v71 — the grip in hand goes see-through (app.css) */
     }
     const dx= dxs*_cs+dys*_sn;          /* along the mark's own width  */
     const dy=-dxs*_sn+dys*_cs;          /* along the mark's own height */
@@ -8380,6 +8415,7 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
      set, which is how a resized shape ended up in two pieces. Skipped while a mark is being typed in,
      since a re-layout rebuilds the element and would take the caret with it. */
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+    try{ delete document.body.dataset.rzLive; }catch(_){}
     try{
       /* 6hh — a text box you have just made narrower re-wraps, and the height you let go of is the
          new floor it will not shrink below */
@@ -9046,6 +9082,7 @@ function selectAnno(id){
   if(id==null){annobar.classList.remove("show");return;}
   const a=S.annos.find(x=>x.id===id); if(!a){annobar.classList.remove("show");return;}
   annobar.querySelectorAll("[data-al]").forEach(b=>b.classList.toggle("on",b.dataset.al===a.align));
+  try{ abSyncText(); }catch(e){}                   /* v71 — font name, vertical alignment, wrap */
   annobar.classList.add("show"); positionBar();
 }
 /* 6gb — A CALLOUT'S LEADER IS PART OF THE SELECTION, SO IT HAS TO BE REDRAWN WITH IT.
@@ -9753,6 +9790,55 @@ document.addEventListener("keydown",e=>{ if((e.key==="Delete"||e.key==="Backspac
     layoutAnnos();
     setStatus("Mark restyled from the tool's properties.");
   };
+})();
+/* v71 — the text box's own bar: its font by name, where the block sits, and how it wraps. Each writes
+   the same property the properties panel writes, so the two always show the same thing. */
+function abSyncText(){
+  const bar=$("#annobar"); if(!bar)return;
+  const a=(S.sel!=null)?S.annos.find(z=>z.id===S.sel):null;
+  const slot=bar.querySelector("[data-abfont]"), va=bar.querySelector("[data-valign]"), wr=bar.querySelector("[data-wrapm]");
+  const texty=!!a&&a.kind!=="img";
+  [slot,va,wr].forEach(n=>{ if(n)n.hidden=!texty; });
+  if(!texty)return;
+  if(slot&&typeof tpFontPicker==="function"){
+    const fk=a.font||markFontKey(a);
+    if(slot.dataset.fk!==fk){
+      slot.innerHTML="";
+      const pick=tpFontPicker(fk,k=>{ const m=S.annos.find(z=>z.id===S.sel); if(!m)return;
+        pushHistory(); m.font=k; try{ fitCellBox(m); }catch(_){}
+        layoutAnnos(); selectAnno(m.id); setStatus("Font: "+((MARK_FONTS[k]||{}).label||k)+"."); });
+      pick.classList.add("ab-fontpick");
+      slot.appendChild(pick); slot.dataset.fk=fk;
+    }
+  }
+  const v=valignOf(a);
+  if(va){ va.dataset.v=v; va.title="Vertical alignment — "+v+" (click to choose)"; }
+  const words=wrapsWords(a);
+  if(wr){ wr.dataset.v=words?"words":"chars";
+          wr.title=words?"Wrap — breaking between words (click to choose)":"Wrap — filling each line, breaking inside a word (click to choose)"; }
+}
+function valignOf(a){
+  if(a&&(a.valign==="top"||a.valign==="middle"||a.valign==="bottom"))return a.valign;
+  try{ const d=freeVAlignDflt(a); if(d==="top"||d==="middle"||d==="bottom")return d; }catch(e){}
+  return isTextBox(a)?"top":"middle";
+}
+(function(){
+  const bar=$("#annobar"); if(!bar)return;
+  const setOn=(key,val,msg)=>{ const a=S.annos.find(z=>z.id===S.sel); if(!a)return;
+    pushHistory(); a[key]=val; layoutAnnos(); selectAnno(a.id); setStatus(msg); };
+  const va=bar.querySelector("[data-valign]");
+  if(va)va.onclick=()=>{ const a=S.annos.find(z=>z.id===S.sel); if(!a)return; const cur=valignOf(a);
+    sbMenu(va,[{head:"Vertical alignment"},
+      {label:"\u2912  Top",    on:cur==="top",    run:()=>setOn("valign","top","Text sits at the top of its box.")},
+      {label:"\u21f3  Middle", on:cur==="middle", run:()=>setOn("valign","middle","Text sits in the middle of its box.")},
+      {label:"\u2913  Bottom", on:cur==="bottom", run:()=>setOn("valign","bottom","Text sits at the bottom of its box.")}]); };
+  const wr=bar.querySelector("[data-wrapm]");
+  if(wr)wr.onclick=()=>{ const a=S.annos.find(z=>z.id===S.sel); if(!a)return; const words=wrapsWords(a);
+    sbMenu(wr,[{head:"Wrap"},
+      {label:"AB|C  Fill each line", title:"Break inside a word where the line runs out", on:!words,
+       run:()=>setOn("wrapMode","chars","Lines fill to the edge, breaking inside a word.")},
+      {label:"AB C  Between words", title:"Break only between words", on:words,
+       run:()=>setOn("wrapMode","words","Lines break between words.")}]); };
 })();
 $("#linebar").querySelector("[data-ldel]").onclick=()=>{ if(S.selLine==null)return; deleteSelection(); };
 /* 6ib — up, down and the band flip, for a stroke. The same three commands the mark bar has, working on
@@ -11743,7 +11829,7 @@ async function exportPdf(){
         }
         return sp.fill
           ? `q ${col[0]} ${col[1]} ${col[2]} rg ${out}f Q\n`
-          : `q ${col[0]} ${col[1]} ${col[2]} RG ${sw} w 1 J 1 j ${out}S Q\n`;
+          : `q ${col[0]} ${col[1]} ${col[2]} RG ${sw} w ${capPdf(l)} J ${joinPdf(l)} j 8 M ${out}S Q\n`;   /* v71 — the ends keep the line's corners */
       };
       ops+=putEnd(pe1,L[L.length-2],L[L.length-1]);
       ops+=putEnd(pe0,L[1],L[0]);

@@ -108,6 +108,9 @@
       <span class="mb-tool" id="miniTool" title="The redline tool in use" role="img" aria-label="Tool">✋</span>
       <button type="button" class="btn sm mb-btn" id="miniAnalyze" data-click="#markupsBtn"
               title="Assist — markups and the COP stamp" aria-label="Assist">✦</button>
+      <!-- v71 — Ced: "add stamp in minibar". The COP stamp, one click from the bar, driving the ribbon's own button. -->
+      <button type="button" class="btn sm mb-btn" id="miniStamp" data-click="#stampBtn"
+              title="COP stamp — the REDLINED / AS-BUILT block" aria-label="COP stamp">▣</button>
       <button type="button" class="btn sm mb-btn" id="miniPageView" data-click="#pageViewBtn"
               title="Page view — one page at a time" aria-label="Page view">▤</button>
       <button type="button" class="btn sm mb-btn" id="miniRail" data-click="#railToggle"
@@ -369,6 +372,12 @@
   <span class="sep"></span>
   <button data-fs="-1" title="Smaller">A−</button>
   <button data-fs="1" title="Larger">A+</button>
+  <span class="sep"></span>
+  <!-- v71 — Ced: "in textbox mini toolbar, add a setting to change font with the font name on the
+       display, add vertical alignment and wrap as well" -->
+  <span class="ab-font" data-abfont></span>
+  <button data-valign title="Vertical alignment — top, middle or bottom of the box" aria-label="Vertical alignment">⇳</button>
+  <button data-wrapm title="Wrap — fill each line, or break between words" aria-label="Wrap">↵</button>
   <span class="sep"></span>
   <button data-lay="front" title="Bring to front (above other redlines)">⤒</button>
   <button data-lay="back" title="Send to back (below other redlines)">⤓</button>

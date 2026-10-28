@@ -188,6 +188,57 @@ async def main():
         print(f"  Escape ladder (drew a box)         {st0} / {st1} / {st2}  {'ok' if lad else 'FAIL'}")
         if not lad: fails.append("Escape ladder")
 
+        # ---------- v63 — the ways the keyboard was still being lost ----------
+        # Ced: "please reinforce the shortcuts and make sure they work 100% all the time."
+        print("=== v63: shortcuts after the hand has been somewhere else ===")
+        await clean()
+        async def mode_after(setup, key):
+            await pg.evaluate("()=>{setMode('select');}")
+            await setup()
+            await pg.keyboard.press(key); await pg.wait_for_timeout(250)
+            return await pg.evaluate("()=>S.mode")
+        # a. a SLIDER in a tool's panel was counted as "being typed in"
+        async def slider():
+            await pg.evaluate("()=>tpOpen('box',document.querySelector('#tools .tool[data-mode=\"box\"]'))")
+            await pg.wait_for_timeout(300)
+            r=await pg.evaluate("""()=>{const s=document.querySelector('#toolpop input[type=range]');
+                const q=s.getBoundingClientRect(); return [q.x+q.width*0.3,q.y+q.height/2];}""")
+            await pg.mouse.click(*r); await pg.wait_for_timeout(150)
+            # where the slider is left holding the focus (a panel that did not rebuild under it)
+            await pg.evaluate("()=>{const s=document.querySelector('#toolpop input[type=range]'); if(s)s.focus();}")
+        got=await mode_after(slider,"l")
+        await pg.evaluate("()=>tpClose()")
+        print(f"  L after dragging a panel slider    got {got:<11} {'ok' if got=='line' else 'FAIL'}")
+        if got!="line": fails.append(f"L after a slider (got {got})")
+        # b. a field focused and then hidden kept the keys with nothing visible to click out of
+        async def hidden_field():
+            await pg.evaluate("""()=>{const i=document.createElement('input'); i.id='__ghost';
+                document.body.appendChild(i); i.focus(); i.style.display='none';}""")
+        got=await mode_after(hidden_field,"o")
+        await pg.evaluate("()=>{const g=document.getElementById('__ghost'); if(g)g.remove();}")
+        print(f"  O with a hidden field focused      got {got:<11} {'ok' if got=='circle' else 'FAIL'}")
+        if got!="circle": fails.append(f"O with a hidden field focused (got {got})")
+        # c. a ribbon button kept the focus, so Space (pan) pressed it again
+        await pg.evaluate("()=>setMode('select')")
+        bb=await pg.evaluate("""()=>{const b=document.querySelector('#tools .tool[data-mode="box"]');
+            const r=b.getBoundingClientRect(); return [r.x+r.width*0.35,r.y+r.height*0.35];}""")
+        await pg.mouse.click(*bb); await pg.wait_for_timeout(200)
+        await pg.evaluate("()=>{window.__clicks=0; document.querySelector('#tools .tool[data-mode=\"box\"]').addEventListener('click',()=>window.__clicks++);}")
+        await pg.keyboard.down("Space"); await pg.wait_for_timeout(120); await pg.keyboard.up("Space")
+        await pg.wait_for_timeout(200)
+        sp=await pg.evaluate("()=>({clicks:window.__clicks, focus:document.activeElement&&document.activeElement.tagName, mode:S.mode})")
+        okc=sp["clicks"]==0
+        print(f"  Space after clicking a tool        {sp}  {'ok' if okc else 'FAIL'}")
+        if not okc: fails.append(f"Space re-pressed the last button ({sp})")
+        # d. a keyboard whose layout has no Latin letter on the key still reaches the tool (e.code)
+        await pg.evaluate("()=>setMode('select')")
+        await pg.evaluate("""()=>document.dispatchEvent(new KeyboardEvent('keydown',
+            {key:'\u0438', code:'KeyB', bubbles:true, cancelable:true}))""")
+        await pg.wait_for_timeout(150)
+        got=await pg.evaluate("()=>S.mode")
+        print(f"  B on a Cyrillic layout (KeyB)      got {got:<11} {'ok' if got=='box' else 'FAIL'}")
+        if got!="box": fails.append(f"B on another layout (got {got})")
+
         print("\n" + ("ALL SHORTCUTS OK" if not fails else f"{len(fails)} FAILING: "+ "; ".join(fails)))
         await b.close()
     sys.exit(1 if fails else 0)

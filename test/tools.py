@@ -1544,11 +1544,14 @@ async def main():
                      const six=[...(m?m.querySelectorAll('.tp-vmi'):[])].find(b=>/^6/.test(b.textContent));
                      if(six)six.dispatchEvent(new MouseEvent('click',{bubbles:true}));
                      out.sw=MA_TOOL_STYLES.box.sw;
-                     out.closed=!document.querySelector('.tp-vmenu');
+                     /* v62 — Ced: "changing properties on dropdown should not exit the dropdown or
+                        properties tab immediately": the list and the panel are both still up */
+                     out.stays=!!document.querySelector('.tp-vmenu')&&!pop.hasAttribute('hidden');
                      tpClose();
+                     out.closesWithPanel=!document.querySelector('.tp-vmenu');
                      return out; }""")
         ok = (sl["rows"] >= 2 and sl["drops"] == sl["rows"] and sl["values"]
-              and len(sl["values"]) >= 5 and sl["sw"] == 6 and sl["closed"])
+              and len(sl["values"]) >= 5 and sl["sw"] == 6 and sl["stays"] and sl["closesWithPanel"])
         results.append({"tool": "Sliders keep a value list", "ok": ok, "why": json.dumps(sl)})
         await page.evaluate("""()=>{ tpOpen('box',document.body); tpApply('sw',1.5); tpClose(); }""")
 
@@ -1669,7 +1672,7 @@ async def main():
                                 pills:pop.querySelectorAll('select.tp-pill').length,
                                 ends:!!pop.querySelector('.tp-ends'),
                                 tips:!!pop.querySelector('.tp-tips'),
-                                fonts:!!pop.querySelector('.tp-fonts'),
+                                fonts:!!pop.querySelector('.tp-fonts, .tp-fontpick'),   /* v60 — the chip row became a picker */
                                 deco:!!pop.querySelector('.tp-deco'),
                                 secs:[...pop.querySelectorAll('.tp-sech')].map(n=>n.textContent.trim()),
                                 cal:[...pop.querySelectorAll('button')].some(b=>/Calibrate/.test(b.textContent)),
@@ -2394,9 +2397,10 @@ async def main():
         # ---------- 6gq — A TRANSPARENT MARKUP STAYS TRANSPARENT ----------
         png = await page.evaluate(
             """()=>new Promise(async res=>{
-                 const c=document.createElement("canvas"); c.width=2200; c.height=1500;
+                 /* v67 — photos keep up to 2400 px now (HD), so the over-size test picture is 3200 */
+                 const c=document.createElement("canvas"); c.width=3200; c.height=2100;
                  const g=c.getContext("2d"); g.fillStyle="#1144ff";
-                 g.beginPath(); g.arc(1100,750,600,0,Math.PI*2); g.fill();
+                 g.beginPath(); g.arc(1600,1050,900,0,Math.PI*2); g.fill();
                  const blob=await new Promise(r=>c.toBlob(r,"image/png"));
                  const file=new File([blob],"north arrow.png",{type:"image/png"});
                  MA_MARKUPS.length=0;
@@ -2410,7 +2414,7 @@ async def main():
                      let clear=0; for(let k=0;k<d.length;k+=4)if(d[k+3]<8)clear++;
                      r({w:im.width,clear}); };
                    im.onerror=()=>r(null); im.src=rec.src; });
-                 res({png:/^data:image\/png/.test(rec.src), shrunk:probe&&probe.w<2200,
+                 res({png:/^data:image\/png/.test(rec.src), shrunk:probe&&probe.w<3200&&probe.w>=2400,
                       clear:probe&&probe.clear, w:probe&&probe.w}); })""")
         ok = (png["png"] and png["shrunk"] and png["clear"] > 1000)
         results.append({"tool": "A markup keeps its alpha", "ok": ok, "why": json.dumps(png)})
@@ -4100,17 +4104,23 @@ async def main():
                  out.differs=Math.abs(wj-wa)>1;
                  /* and the writer builds a real font dictionary for it */
                  out.bold=tpFaceToggle("jost","bold");
+                 /* v60 — the generated library (fonts-extra.js): every cut it lists is a face with bytes */
+                 out.extra=(window.MA_FONT_FAMILIES||[]).map(f=>({k:f.k,cuts:f.cuts,
+                   ok:f.cuts.every(c=>MARK_FONTS[f.k+c]&&MA_TTF_B64[f.k+c]&&MARK_FONTS[f.k+c].ttf===f.k+c)}));
                  res(out); })""")
         # 6n1 — this counted four, which was the whole bundled list when Jost was the only family
         # that travelled. There are three now, so what the number was standing for is said directly:
         # every bundled family carries ALL FOUR CUTS, which is the property `tpFaceToggle` depends on
         # — without a bold italic, asking for italic on a bold mark silently drops the bold (6gf).
-        fams = {}
-        for k in face["bundled"]:
-            fams[k.replace("bolditalic", "").replace("bold", "").replace("ital", "")] = 1
-        full = all(sum(1 for k in face["bundled"] if k.startswith(f)) == 4 for f in fams)
-        face["families"] = sorted(fams)
-        ok = (face["installed"] and full and len(fams) == 3 and face["chip"]
+        # v60 — and the generated library of open faces sits beside them. The three hand-built families
+        # are still held to all four cuts; a generated family is held to having bytes for every cut it
+        # lists (some open faces have no italic at all), and there have to be at least thirty of them.
+        core = ["jost", "carlito", "narrow"]
+        full = all(all(f + c in face["bundled"] for c in ["", "bold", "ital", "bolditalic"]) for f in core)
+        extra = face.get("extra") or []
+        face["families"] = core + [f["k"] for f in extra]
+        face["extraBad"] = [f["k"] for f in extra if not f["ok"]]
+        ok = (face["installed"] and full and len(extra) >= 30 and not face["extraBad"] and face["chip"]
               and "MA Jost" in face["css"] and face["differs"] and face["bold"] == "jostbold")
         results.append({"tool": "A face travels with the file", "ok": ok, "why": json.dumps(face)})
 
@@ -5603,7 +5613,13 @@ async def main():
                      out.barZ=+getComputedStyle(document.getElementById("selbar")).zIndex;
                      return out; }""")
         red = lambda b: b and b["round"] and b["txt"] == "✕" and "224, 49, 49" in b["bg"]
-        ok = (red(del_["anno"]) and red(del_["line"]) and red(del_["multi"]) and red(del_["sel"])
+        # v61 — Ced: "remove the x in the mini toolbar as it is redundant". The floating bars no
+        # longer show a delete; the bottom bar keeps the badge.
+        hidden = await page.evaluate(
+            """()=>["#annobar","#linebar","#multibar"].every(q=>{ const b=document.querySelector(q+" .delbtn");
+                     return !b||getComputedStyle(b).display==="none"; })""")
+        del_["miniHidden"] = hidden
+        ok = (hidden and red(del_["sel"])
               and "\U0001f5d1" in (del_["cache"] or "")
               and parseFloat_(del_["toast"]) > 60 and del_["toastZ"] > del_["barZ"])
         results.append({"tool": "Delete badge, update above the bar", "ok": ok,
@@ -6508,9 +6524,37 @@ async def main():
                  window.dispatchEvent(new PointerEvent("pointerup",
                    {bubbles:true,clientX:r.left+r.width*0.85,clientY:yy,pointerId:1}));
                  await nap(160);
-                 const g2=cv.getContext("2d",{willReadFrequently:true});
+                 /* v62 — a line is a LIVE shape now, on its own layer until Save: measure the
+                    picture as it is seen (the pixels and the layer together), with the shape
+                    let go of so its selection frame is not counted */
+                 document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+                 await nap(60);
+                 const comp=()=>{ const t=document.createElement("canvas"); t.width=cv.width; t.height=cv.height;
+                   const x=t.getContext("2d",{willReadFrequently:true}); x.drawImage(cv,0,0);
+                   const L=document.querySelector(".sk-edobj"); if(L)x.drawImage(L,0,0); return x; };
+                 const inkRows=(ctx,col)=>{ const d=ctx.getImageData(col,0,1,cv.height).data; const ys=[];
+                   for(let y=0;y<cv.height;y++){ const k=y*4;
+                     if(d[k+3]>4 && !(d[k]>240&&d[k+1]>240&&d[k+2]>240))ys.push(y); } return ys; };
+                 const g2=comp();
                  const col=Math.round(cv.width*0.5);
                  const d=g2.getImageData(col,0,1,cv.height).data;
+                 const livePx=inkRows(cv.getContext("2d",{willReadFrequently:true}),col).length;
+                 /* it moves: a drag on its body takes it down a fifth of the picture */
+                 const y0=inkRows(comp(),col)[0];
+                 ev("pointerdown",r.left+r.width*0.5,yy);
+                 window.dispatchEvent(new PointerEvent("pointermove",
+                   {bubbles:true,clientX:r.left+r.width*0.5,clientY:yy+r.height*0.2,pointerId:1}));
+                 window.dispatchEvent(new PointerEvent("pointerup",
+                   {bubbles:true,clientX:r.left+r.width*0.5,clientY:yy+r.height*0.2,pointerId:1}));
+                 await nap(120);
+                 document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+                 await nap(60);
+                 const y1=inkRows(comp(),col)[0];
+                 const movedBy=+((y1-y0)/cv.height).toFixed(2);
+                 const uBtn0=[...document.querySelectorAll(".sk-edit button")]
+                              .find(b=>b.textContent.trim().endsWith("Undo"));
+                 if(uBtn0)uBtn0.click(); await nap(120);          /* the move is one step */
+                 const backAt=inkRows(comp(),col)[0];
                  let first=-1,last=-1;
                  for(let y=0;y<cv.height;y++){ const k=y*4;
                    if(d[k+3]>4 && !(d[k]>240&&d[k+1]>240&&d[k+2]>240)){ if(first<0)first=y; last=y; } }
@@ -6526,7 +6570,7 @@ async def main():
                               .find(b=>b.textContent.trim().endsWith("Undo"));
                  const before=!!(uBtn&&!uBtn.disabled);
                  if(uBtn)uBtn.click(); await nap(160);
-                 const d2=g2.getImageData(col,0,1,cv.height).data;
+                 const d2=comp().getImageData(col,0,1,cv.height).data;
                  let gone=true;
                  for(let y=0;y<cv.height;y++){ const k=y*4;
                    if(d2[k+3]>4 && !(d2[k]>240&&d2[k+1]>240&&d2[k+2]>240)){ gone=false; break; } }
@@ -6534,8 +6578,12 @@ async def main():
                                 .find(b=>/cancel/i.test(b.textContent));
                  if(cancel)cancel.click();
                  res({tools:["Pen","Line","Arrow","Box","Ellipse"].filter(has),
-                      blur, thick, wantPx:+(PT*pxPerPt).toFixed(1), undone:gone, hadUndo:before}); })""")
+                      blur, thick, wantPx:+(PT*pxPerPt).toFixed(1), undone:gone, hadUndo:before,
+                      livePx, movedBy, backAt:(backAt===y0)}); })""")
         ok = (pic["tools"] == ["Pen", "Line", "Arrow", "Box", "Ellipse"]
+              and pic["livePx"] == 0                       # v62 — not in the pixels until Save
+              and abs(pic["movedBy"] - 0.2) <= 0.02        # v62 — and it moves
+              and pic["backAt"]
               and pic["blur"] in ("none", "")          # 6kp — no live blur behind the editor
               and abs(pic["thick"] - pic["wantPx"]) <= 1.5   # 6kq — the weight it says, in points
               and pic["hadUndo"] and pic["undone"])    # one gesture, one step

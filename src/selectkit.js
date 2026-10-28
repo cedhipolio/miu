@@ -3507,6 +3507,76 @@ function skMaskBlow(m,ws,hs,f,w,h){
    means no subject was found, and saying so is more use than an empty canvas and an undo to discover.
    Half is well clear of the worst honest case measured (the mount drawing keeps 80%). */
 const AUTO_MIN_KEEP=0.50;
+/* v71 — every pixel of `m` that lies on a straight run at least `minLen` long, at any angle. Sampled on
+   a copy fattened by one pixel, so a line a degree off the sampling angle still reads as one run, and
+   a gap of `gap` pixels is stepped over, so a dashed or broken line counts as the line it is. */
+function skStraightRuns(m,w,h,minLen,gap,along,dOff){
+  dOff=dOff||6;
+  /* measured on a copy no bigger than a quarter-million pixels — a cell is ink if any pixel under it
+     is, so a hairline survives the shrink — and brought back to full size against `m` itself */
+  const F=Math.max(1,Math.ceil(Math.sqrt((w*h)/250000)));
+  if(F>1){
+    const sm=skMaskShrink(m,w,h,F), sa=along?skMaskShrink(along,w,h,F):null;
+    const r=skStraightRuns(sm.m,sm.w,sm.h,minLen/F,Math.max(2,Math.round(gap/F)),sa&&sa.m,Math.max(3,Math.round(dOff/F)));
+    const up=skMaskBlow(r,sm.w,sm.h,F,w,h);
+    for(let p=0;p<up.length;p++)up[p]=(up[p]&&m[p])?1:0;
+    return up;
+  }
+  const out=new Uint8Array(w*h);
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++){ const row=y*w; for(let x=0;x<w;x++)if(m[row+x]){
+    if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1<0)return out;
+  /* the run is measured along `along` when given — all of the ink — so a line is judged by its whole
+     length, including the part of it that runs on into the shape, and only `m`'s pixels are taken */
+  const pts=[]; for(let p=0;p<m.length;p++)if(m[p])pts.push(p);
+  const core=along||m;
+  const g=skMaskGrow(core,w,h,1);
+  const mg=along?skMaskGrow(m,w,h,1):g;
+  if(along){ x0=0; y0=0; x1=w-1; y1=h-1; }
+  else if(Math.hypot(x1-x0+1,y1-y0+1)<minLen)return out;
+  const cap=Math.ceil(Math.hypot(w,h))*2+8;
+  const buf=new Int32Array(cap);
+  const STEPS=180;
+  for(let a=0;a<STEPS;a++){
+    const th=a*Math.PI/STEPS, c=Math.cos(th), sn=Math.sin(th);
+    let oMin=Infinity,oMax=-Infinity,tMin=Infinity,tMax=-Infinity;
+    [[x0,y0],[x1,y0],[x0,y1],[x1,y1]].forEach(P=>{
+      const o=-sn*P[0]+c*P[1], t=c*P[0]+sn*P[1];
+      if(o<oMin)oMin=o; if(o>oMax)oMax=o; if(t<tMin)tMin=t; if(t>tMax)tMax=t; });
+    const T0=Math.floor(tMin)-1, T1=Math.ceil(tMax)+1;
+    /* only the sample lines that pass through a candidate pixel can take anything */
+    const OB=Math.floor(oMin), want=new Uint8Array(Math.ceil(oMax)-OB+2);
+    for(let k=0;k<pts.length;k++){ const P=pts[k], x=P%w, y=(P/w)|0;
+      const oo=Math.round(-sn*x+c*y)-OB; if(oo>=0&&oo<want.length)want[oo]=1; }
+    for(let o=Math.floor(oMin);o<=Math.ceil(oMax);o++){
+      if(!want[o-OB])continue;
+      let n=0, miss=0, tf=0, tl=0, solidHits=0, side=0, own=0, oS=0, oL=-Infinity, ownN=0;
+      /* and a line has paper on both sides of it; the edge of a word has the rest of the word */
+      const px=Math.round(-sn*dOff), py=Math.round(c*dOff);
+      /* a line is ink nearly all the way along; the tops of a row of capitals are not, however close
+         the letters sit, so a run must be solid ink over most of its length as well as long */
+      const flush=()=>{ if(n&&tl-tf+1>=minLen&&solidHits>=0.65*(tl-tf+1)&&side<=0.45*Math.max(1,ownN)&&(!along||own>=0.6*minLen)){
+                          for(let k=0;k<n;k++){ const p=buf[k]; if(m[p])out[p]=1; } }
+                        n=0; solidHits=0; side=0; own=0; oS=0; oL=-Infinity; ownN=0; };
+      for(let t=T0;t<=T1;t++){
+        const x=Math.round(c*t-sn*o), y=Math.round(sn*t+c*o);
+        const p=(x>=x0&&x<=x1&&y>=y0&&y<=y1)?(y*w+x):-1;
+        if(p>=0&&g[p]){ if(!n)tf=t; tl=t; if(n<cap)buf[n++]=p; miss=0; { const qx=Math.round(-sn), qy=Math.round(c);
+            if(core[p]||(x+qx>=0&&y+qy>=0&&x+qx<w&&y+qy<h&&core[(y+qy)*w+x+qx])||(x-qx>=0&&y-qy>=0&&x-qx<w&&y-qy<h&&core[(y-qy)*w+x-qx]))solidHits++; }
+          /* the longest unbroken stretch of the candidate's own ink along this run: a stub that merely
+             lines up with something long is not a line by borrowing that thing's length */
+          if(mg[p]){ if(t-oL>gap+1)oS=t; oL=t; if(t-oS+1>own)own=t-oS+1; }
+          const ax=x+px, ay=y+py, bx=x-px, by=y-py;
+          if(mg[p])ownN++;
+          if(mg[p]&&(ax>=0&&ay>=0&&ax<w&&ay<h&&core[ay*w+ax])||(bx>=0&&by>=0&&bx<w&&by<h&&core[by*w+bx]))side++; }
+        else if(n){ if(++miss>gap)flush(); }
+      }
+      flush();
+    }
+  }
+  return out;
+}
 function skAutoSolid(g,cv,minLen,rounds){
   const w=cv.width,h=cv.height;
   const ink0=skInkMask(g,cv,40);
@@ -3576,7 +3646,7 @@ function skAutoSolid(g,cv,minLen,rounds){
      has no shape to keep, and saying so (with nothing changed) is the answer. */
   if(nKeep<total*AUTO_MIN_KEEP)
     return {noSubject:true, nInk:total, keptPct:Math.round(100*nKeep/total)};
-  if(nStray){
+  {
     /* v66 — WHAT IS OUTSIDE THE CONTOUR IS SPLIT INTO ITS BODY AND ITS LINES, and only lines go.
        v65 judged each outside piece whole, and on Ced's own raw captures every outside piece was ONE
        piece — the stray leaders run into chunks of the equipment — so the chunks saved the leaders
@@ -3599,14 +3669,45 @@ function skAutoSolid(g,cv,minLen,rounds){
     const lineW=ridge.length?Math.max(1.5,2*ridge[Math.floor(ridge.length*0.33)]):2;
     const wMax=Math.max(3,Math.min(28,lineW*1.6));     /* no leader is heavier than this */
     const rT=wMax/2+0.5;
+    /* v71 — AND WHAT IS INSIDE THE CONTOUR BUT BOUNDS NOTHING. A leader that runs into the shape, a
+       dimension line whose extension lines meet a leader, a grid line through a label: each one closes
+       a cycle with the outline somewhere, so the contour test counts it as part of the shape. What it
+       does not do is bound any enclosed area — no part of the shape's inside lies beside it. So the
+       candidates are the outside ink, plus every inked pixel more than a stroke away from any enclosed
+       area; and of those, only the thin, straight, long runs (and what they leave) are taken. */
+    /* and it goes round: a line taken can open a region that only it was closing — two grid lines and
+       a leader boxing in a corner of paper — and the next look sees the leader for what it is */
+    const origStray=Uint8Array.from(strayAll), takenAll=new Uint8Array(w*h);
+    const seen=new Uint8Array(w*h), q=new Int32Array(w*h);
+    for(let round=0;round<3;round++){
+    const live=new Uint8Array(w*h);
+    for(let p=0;p<ink0.length;p++)if(ink0[p]&&!takenAll[p])live[p]=1;
+    const holes=new Uint8Array(w*h);
+    if(round===0){ for(let p=0;p<solid.length;p++)if(solid[p]&&!ink0[p])holes[p]=1; }
+    else { const s2=skMaskHoles(live,w,h); for(let p=0;p<solid.length;p++)if(solid[p]&&s2[p]&&!ink0[p])holes[p]=1; }
+    const edgeZ=skMaskGrow(holes,w,h,Math.ceil(wMax)+2);
+    const cand=new Uint8Array(w*h); let nCand=0;
+    for(let p=0;p<ink0.length;p++)if(live[p]&&(origStray[p]||!edgeZ[p])){ cand[p]=1; nCand++; }
+    if(!nCand)break;
+    {
     const seed=new Uint8Array(w*h);
-    for(let p=0;p<strayAll.length;p++)if(strayAll[p]&&dist[p]>=rT)seed[p]=1;
+    for(let p=0;p<cand.length;p++)if(cand[p]&&dist[p]>=rT)seed[p]=1;
     const bodyOut=skMaskGrow(seed,w,h,Math.ceil(rT));
     const thin=new Uint8Array(w*h);
-    for(let p=0;p<strayAll.length;p++)if(strayAll[p]&&!bodyOut[p])thin[p]=1;
+    for(let p=0;p<cand.length;p++)if(cand[p]&&!bodyOut[p])thin[p]=1;
     const minLen=Math.max(2*L*f, 24);
-    const take=new Uint8Array(w*h);
-    const seen=new Uint8Array(w*h), q=new Int32Array(w*h);
+    /* v71 — Ced: "auto edit is not getting rid of lines outside the concrete shapes anymore." v66
+       judged each thin piece WHOLE, and on a real sheet the lines outside a shape are never alone: a
+       dimension line carries its ticks, its extension lines and its figure; a leader runs into its
+       label; two grid lines cross under a grid bubble. Each of those is one connected piece with far
+       more ink than a single line of its length, so the test "is this piece a line" said no and the
+       whole network stayed. Now the STRAIGHT RUNS are found first, at every angle, wherever they are:
+       any thin ink lying on a straight run at least `minLen` long is a line and goes, whatever it is
+       joined to. What a line leaves behind — a tick, an arrowhead, a stub — goes with it when it is
+       small and touches nothing that stays. Letters, bolts, fins and hatching are short in every
+       direction, so they are never a run. */
+    const take=skStraightRuns(thin,w,h,minLen,Math.max(3,Math.round(lineW*2)),live,Math.ceil(wMax)+3);
+    seen.fill(0);
     for(let p0=0;p0<thin.length;p0++){
       if(!thin[p0]||seen[p0])continue;
       let qh=0, qt=0; q[qt++]=p0; seen[p0]=1;
@@ -3625,9 +3726,69 @@ function skAutoSolid(g,cv,minLen,rounds){
       const lineLike=(width<=wMax)&&(len>=6*width)&&(len>=minLen)&&(n<=len*width*1.6);
       if(lineLike)for(let k=0;k<qt;k++)take[q[k]]=1;
     }
-    for(let p=0;p<strayAll.length;p++){
-      if(strayAll[p]&&!take[p]){ strayAll[p]=0; nStray--; nKeep++; }
+    /* v71 — the edges of a taken run, and what the line leaves behind */
+    {
+      const near=skMaskGrow(take,w,h,1);
+      for(let p=0;p<thin.length;p++)if(thin[p]&&near[p])take[p]=1;
+      const left=new Uint8Array(w*h);
+      for(let p=0;p<cand.length;p++)if(cand[p]&&!take[p])left[p]=1;
+      const kept=new Uint8Array(w*h);
+      for(let p=0;p<ink0.length;p++)if(live[p]&&!cand[p])kept[p]=1;
+      const keptNear=skMaskGrow(kept,w,h,2), takeNear=skMaskGrow(take,w,h,2);
+      const seen2=new Uint8Array(w*h);
+      const nMax=Math.max(160,minLen*lineW*1.2), span=minLen*0.6;
+      const pieces=[];
+      for(let p0=0;p0<left.length;p0++){
+        if(!left[p0]||seen2[p0])continue;
+        let qh=0, qt=0; q[qt++]=p0; seen2[p0]=1;
+        let x0=w,y0=h,x1=0,y1=0, touchKeep=false, touchTake=false;
+        while(qh<qt){
+          const p=q[qh++]; const x=p%w, y=(p/w)|0;
+          if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+          if(keptNear[p])touchKeep=true; if(takeNear[p])touchTake=true;
+          for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+            if(!dx&&!dy)continue; const X=x+dx, Y=y+dy;
+            if(X<0||Y<0||X>=w||Y>=h)continue; const k=Y*w+X;
+            if(left[k]&&!seen2[k]){ seen2[k]=1; q[qt++]=k; }
+          }
+        }
+        if(touchTake&&!touchKeep&&qt<=nMax&&Math.max(x1-x0,y1-y0)<=span)pieces.push(q.slice(0,qt));
+      }
+      /* a piece with other ink of its own kind right beside it is a letter in a word, not a tick */
+      const dc=new Uint8Array(w*h); pieces.forEach(P=>P.forEach(k=>{ dc[k]=1; }));
+      const other=new Uint8Array(w*h);
+      for(let p=0;p<left.length;p++)if(left[p]&&!dc[p])other[p]=1;
+      const nearOther=skMaskGrow(other,w,h,5);
+      pieces.forEach(P=>{ if(!P.some(k=>nearOther[k]))P.forEach(k=>{ take[k]=1; }); });
     }
+    let fresh=0;
+    for(let p=0;p<take.length;p++)if(take[p]&&cand[p]&&!takenAll[p]){ takenAll[p]=1; fresh++; }
+    if(!fresh)break;
+    }
+    }
+    for(let p=0;p<strayAll.length;p++){
+      if(origStray[p]&&!takenAll[p]){ strayAll[p]=0; nStray--; nKeep++; }
+      else if(!origStray[p]&&takenAll[p]){ strayAll[p]=1; nStray++; nKeep--; solid[p]=0; }
+    }
+  }
+  /* v71 — a region that was closed only by a line just taken is not inside the shape any more: the
+     fill is worked out again from the ink that stays, so no white patch is left where a leader or a
+     grid line used to box in a corner of paper. */
+  if(nStray){
+    const keepInk=new Uint8Array(w*h);
+    for(let p=0;p<ink0.length;p++)if(ink0[p]&&!strayAll[p])keepInk[p]=1;
+    const s2=skMaskHoles(keepInk,w,h);
+    nFill=0;
+    for(let p=0;p<solid.length;p++){ if(solid[p]&&!s2[p])solid[p]=0; if(solid[p]&&!ink0[p])nFill++; }
+  }
+  /* v71 — and the soft edge of what went. A line's anti-aliased fringe sits below the ink threshold, so
+     taking the line left a faint dotted ghost of it; the fringe goes with the line it belonged to. */
+  if(nStray){
+    const any=skInkMask(g,cv,0), near=skMaskGrow(strayAll,w,h,1);
+    const keep=new Uint8Array(w*h);
+    for(let p=0;p<ink0.length;p++)if(ink0[p]&&!strayAll[p])keep[p]=1;
+    const keepNear=skMaskGrow(keep,w,h,1);
+    for(let p=0;p<any.length;p++)if(any[p]&&!ink0[p]&&near[p]&&!keepNear[p]&&!solid[p])strayAll[p]=1;
   }
   return {stray:strayAll, solid, nStray, nFill, nInk:total, minLen:L*f, stroke:R, nClosed, nEnds};
 }

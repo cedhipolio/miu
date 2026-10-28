@@ -626,7 +626,10 @@ async def t_picture(T):
     async def ink():
         return await T.page.evaluate(
             """()=>{const cv=document.querySelector(".sk-edcanvas");
-                    const g=cv.getContext("2d",{willReadFrequently:true});
+                    /* v62 — shapes are live on their own layer until Save: count what is SEEN */
+                    const t=document.createElement("canvas"); t.width=cv.width; t.height=cv.height;
+                    const g=t.getContext("2d",{willReadFrequently:true}); g.drawImage(cv,0,0);
+                    const L=document.querySelector(".sk-edobj"); if(L&&L.width)g.drawImage(L,0,0);
                     const d=g.getImageData(0,0,cv.width,cv.height).data;
                     let n=0; for(let i=0;i<d.length;i+=4)
                       if(d[i+3]>8 && d[i]>140 && d[i+1]<120 && d[i+2]<120)n++;
@@ -677,10 +680,13 @@ async def _open_editor(T, draw):
     await T.page.evaluate(
         """(src)=>new Promise(async res=>{
              S.annos=[]; S.lines=[]; layoutAnnos();
-             const c=document.createElement("canvas"); c.width=560; c.height=760;
-             const q=c.getContext("2d");
-             (new Function("q","w","h",src))(q,c.width,c.height);
-             const id=skPlaceSnapshot(0,[0.10,0.10,0.60,0.62],c.toDataURL("image/png"));
+             let url=src;
+             if(String(src).indexOf("data:image")!==0){      /* v65 — or a picture as it is */
+               const c=document.createElement("canvas"); c.width=560; c.height=760;
+               const q=c.getContext("2d");
+               (new Function("q","w","h",src))(q,c.width,c.height);
+               url=c.toDataURL("image/png"); }
+             const id=skPlaceSnapshot(0,[0.10,0.10,0.60,0.62],url);
              layoutAnnos();
              setTimeout(()=>{ skEditor(S.annos.find(z=>z.id===id)); res(1); },300);
            })""", draw)
@@ -874,6 +880,287 @@ async def t_auto(T):
           and ms < 4000)
     await T.page.keyboard.press("Escape")
     return ok, out
+
+
+@case("Auto never makes a fine shape smaller")
+async def t_auto_fine(T):
+    """v65 — Ced: "make the auto in edit photo better, it should never make shapes smaller if it has a
+    fine shape." A body with bolts on its corners, side tabs, a row of fins and an open handle — and
+    not one stray line. Before v65 Auto took 7.7% of this (the fins, the handle, a tab), and 40% of
+    Ced's own finished cut-out from SOH1350. Every pixel of ink has to survive, and it still fills."""
+    if not await _open_editor(T, """
+        q.strokeStyle='#e31e24'; q.lineWidth=3;
+        q.strokeRect(120,200,260,200);
+        for(let i=0;i<10;i++){ q.beginPath(); q.moveTo(130+i*24,210); q.lineTo(130+i*24,390); q.stroke(); }
+        [[120,200],[380,200],[120,400],[380,400]].forEach(([x,y])=>{ q.beginPath(); q.arc(x,y,9,0,7); q.stroke(); });
+        q.strokeRect(90,270,30,60); q.strokeRect(380,280,40,40);
+        for(let i=0;i<6;i++){ q.beginPath(); q.moveTo(160+i*30,400); q.lineTo(160+i*30,440); q.stroke(); }
+        q.beginPath(); q.moveTo(250,200); q.lineTo(250,150); q.lineTo(300,150); q.stroke();"""):
+        return False, {"why": "the picture editor did not open"}
+    # what Auto ERASES is what it took away: ink that was there and is now clear. (Counting red
+    # pixels would count the fill too — antialiased edges turn pink over the new white ground.)
+    ink = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                window.__a0=new Uint8Array(d.length/4); let n=0;
+                for(let i=0;i<window.__a0.length;i++){ window.__a0[i]=d[i*4+3]; if(d[i*4+3]>20)n++; }
+                return n;}""")
+    if not await _ed_click(T, "auto"):
+        return False, {"why": "no Auto on the editor's bar"}
+    await T.page.wait_for_timeout(900)
+    after = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                let gone=0, filled=0;
+                for(let i=0;i<window.__a0.length;i++){
+                  if(window.__a0[i]>20&&d[i*4+3]<20)gone++;
+                  if(window.__a0[i]<20&&d[i*4+3]>200)filled++; }
+                return {gone, filled};}""")
+    await T.page.keyboard.press("Escape")
+    out = {"ink": ink, "erased": after["gone"], "filled": after["filled"]}
+    return (after["gone"] <= ink * 0.005 and after["filled"] > 5000), out
+
+
+@case("Auto leaves a finished cut-out exactly as it is")
+async def t_auto_finished(T):
+    """v65 — the picture Ced had already finished in the editor (a red equipment cut-out off
+    SOH1350's sheet C-2, test/fixtures/auto-finished-cutout.png). Before v65 a press of Auto erased
+    40% of it. Nothing on it is a stray line, so nothing may go."""
+    import base64
+    png = (HERE / "fixtures" / "auto-finished-cutout.png").read_bytes()
+    if not await _open_editor(T, "data:image/png;base64," + base64.b64encode(png).decode()):
+        return False, {"why": "the picture editor did not open"}
+    ink = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                window.__a0=new Uint8Array(d.length/4); let n=0;
+                for(let i=0;i<window.__a0.length;i++){ window.__a0[i]=d[i*4+3]; if(d[i*4+3]>20)n++; }
+                return n;}""")
+    if not await _ed_click(T, "auto"):
+        return False, {"why": "no Auto on the editor's bar"}
+    await T.page.wait_for_timeout(900)
+    gone = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                let g=0; for(let i=0;i<window.__a0.length;i++)if(window.__a0[i]>20&&d[i*4+3]<20)g++;
+                return g;}""")
+    await T.page.keyboard.press("Escape")
+    return gone <= ink * 0.005, {"ink": ink, "erased": gone, "pct": round(100 * gone / max(1, ink), 1)}
+
+
+@case("Auto takes the stray line off a real capture and none of the equipment")
+async def t_auto_raw(T):
+    """v66 — Ced: "the tool became worse than v64" — Auto in Edit picture. On his raw SOH1350 capture
+    (test/fixtures/auto-raw-capture.png: the red equipment with the drawing's long vertical line down
+    its left side) v64 erased 39% of the ink, most of it the equipment's own masses, and v65 erased
+    nothing at all. The line has to go and the masses have to stay: between 1.5% and 6% of the ink."""
+    import base64
+    png = (HERE / "fixtures" / "auto-raw-capture.png").read_bytes()
+    if not await _open_editor(T, "data:image/png;base64," + base64.b64encode(png).decode()):
+        return False, {"why": "the picture editor did not open"}
+    ink = await T.page.evaluate(
+        """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                window.__a0=new Uint8Array(d.length/4); let n=0;
+                for(let i=0;i<window.__a0.length;i++){ window.__a0[i]=d[i*4+3]; if(d[i*4+3]>20)n++; }
+                return n;}""")
+    if not await _ed_click(T, "auto"):
+        return False, {"why": "no Auto on the editor's bar"}
+    await T.page.wait_for_timeout(900)
+    # v71 — judged against Ced's OWN finished edit of this capture (auto-finished-cutout.png): what Auto
+    # erases must be ink he erased too (precision), and it must get most of what he took (recall).
+    fin = (HERE / "fixtures" / "auto-finished-cutout.png").read_bytes()
+    got = await T.page.evaluate(
+        """(src)=>new Promise(res=>{const im=new Image(); im.onload=()=>{
+                const c=document.querySelector(".sk-edcanvas"), w=c.width;
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data;
+                const k=document.createElement("canvas"); k.width=c.width; k.height=c.height;
+                const kg=k.getContext("2d"); kg.drawImage(im,0,0); const f=kg.getImageData(0,0,k.width,k.height).data;
+                let g=0, ced=0, both=0;
+                for(let i=0;i<window.__a0.length;i++){ if(window.__a0[i]<=20)continue;
+                  const o=d[i*4+3]<20, c2=f[i*4+3]<20; if(o)g++; if(c2)ced++; if(o&&c2)both++; }
+                res({gone:g, ced, both}); }; im.src=src; })""",
+        "data:image/png;base64," + base64.b64encode(fin).decode())
+    await T.page.keyboard.press("Escape")
+    pct = 100 * got["gone"] / max(1, ink)
+    prec = got["both"] / max(1, got["gone"]); rec = got["both"] / max(1, got["ced"])
+    out = {"ink": ink, "erased": got["gone"], "pct": round(pct, 1), "Ced erased": got["ced"],
+           "precision": round(prec, 3), "recall": round(rec, 3)}
+    return (1.5 <= pct <= 8 and prec >= 0.95 and rec >= 0.6), out
+
+
+@case("Auto takes the lines outside a concrete pad and keeps the pad and its words")
+async def t_auto_pad(T):
+    """v71 — Ced: "auto edit is not getting rid of lines outside the concrete shapes anymore." A pad with
+    two cabinets on it, and round it what a sheet always has: a dimension line with ticks, extension
+    lines and its figure; a leader from a label into the pad; a leader into a cabinet; two grid lines.
+    Every one of them joins something, so v66 judged each as part of a bigger piece and kept them all."""
+    draw = """q.canvas.width=900; q.canvas.height=700; w=900; h=700; q.clearRect(0,0,w,h);
+      q.strokeStyle="#e8322e"; q.fillStyle="#e8322e"; q.lineCap="butt";
+      const L=(x1,y1,x2,y2,lw)=>{ q.lineWidth=lw; q.beginPath(); q.moveTo(x1,y1); q.lineTo(x2,y2); q.stroke(); };
+      const R=(x,y,ww,hh,lw)=>{ q.lineWidth=lw; q.strokeRect(x,y,ww,hh); };
+      R(250,300,400,220,5);
+      let s=7; for(let i=0;i<70;i++){ s=(s*9301+49297)%233280; const x=262+(s/233280)*375; s=(s*9301+49297)%233280; const y=312+(s/233280)*195;
+        if(x>315&&x<425&&y>335&&y<465)continue; if(x>465&&x<605&&y>335&&y<465)continue;
+        q.beginPath(); q.arc(x,y,2.2,0,7); q.fill(); }
+      R(320,340,100,120,4); L(320,380,420,380,3); L(370,340,370,460,3);
+      R(470,340,130,120,4); R(490,360,90,30,3); R(490,410,90,30,3);
+      L(250,250,650,250,2); L(242,258,258,242,2); L(642,258,658,242,2);
+      L(250,236,250,292,2); L(650,236,650,292,2);
+      q.font="bold 22px Arial"; q.fillText("12'-0\\"",415,240);
+      L(690,200,565,372,2); q.beginPath(); q.moveTo(560,380); q.lineTo(560,363); q.lineTo(574,370); q.closePath(); q.fill();
+      q.fillText("NEW CONCRETE PAD",690,195);
+      L(40,430,318,405,2); q.fillText("CABINET",30,455);
+      L(120,0,120,h,2); L(0,620,w,620,2);"""
+    if not await _open_editor(T, draw):
+        return False, {"why": "the picture editor did not open"}
+    probe = """()=>{const c=document.querySelector(".sk-edcanvas");
+                const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height).data, w=c.width;
+                const red=(x,y)=>{ const k=(y*w+x)*4; return d[k+3]>120&&d[k]-d[k+1]>60; };
+                const box=(x0,y0,x1,y1)=>{ let n=0; for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(red(x,y))n++; return n; };
+                return {dim:box(300,248,600,253), grid:box(118,40,123,230)+box(700,618,880,623),
+                        leader:box(620,268,642,292), pad:box(300,296,600,304)+box(246,330,254,500),
+                        cabinets:box(320,338,420,343)+box(470,338,600,343),
+                        words:box(690,175,890,200)+box(30,438,130,456)+box(415,222,470,241)};}"""
+    before = await T.page.evaluate(probe)
+    if not await _ed_click(T, "auto"):
+        return False, {"why": "no Auto on the editor's bar"}
+    await T.page.wait_for_timeout(1500)
+    after = await T.page.evaluate(probe)
+    await T.page.keyboard.press("Escape")
+    keep = lambda k: after[k] >= before[k] * 0.95
+    gone = lambda k: after[k] <= before[k] * 0.1
+    out = {"before": before, "after": after}
+    return (gone("dim") and gone("grid") and gone("leader") and keep("pad") and keep("cabinets")
+            and keep("words")), out
+
+
+@case("A tool in the hand draws over a redline and never picks it up")
+async def t_place_over(T):
+    """v71 — Ced: "when the user is putting a redline or a shape or a line or a length tool, disable the
+    select tool for a moment … so the user will not accidentally select a different redline in that area
+    when adding a new redline on the same space." Box, then a line drawn across it, then an arrow
+    started ON that line, a click on the box with the arrow up, and a length laid across the box."""
+    await T.reset()
+    await T.pick("box"); await T.drag(T.at(0.2, 0.6), T.at(0.5, 0.7))
+    await T.pick("line"); await T.drag(T.at(0.15, 0.65), T.at(0.6, 0.66))
+    l0 = await T.page.evaluate("()=>S.lines.map(l=>[l.x1,l.y1,l.x2,l.y2])")
+    await T.pick("arrow"); await T.drag(T.at(0.3, 0.6545), T.at(0.4, 0.8))
+    s1 = await T.state()
+    l1 = await T.page.evaluate("()=>S.lines.map(l=>[l.x1,l.y1,l.x2,l.y2])")
+    await T.click(T.at(0.35, 0.62))
+    s2 = await T.state()
+    await T.pick("dim"); await T.drag(T.at(0.25, 0.68), T.at(0.45, 0.68))
+    s3 = await T.state()
+    out = {"after arrow": s1, "after click": s2, "after length": s3}
+    ok = (s1["nL"] == 2 and l1[0] == l0[0] and s2["mode"] == "arrow" and s2["sel"] is None
+          and s3["nL"] == 3)
+    return ok, out
+
+
+@case("A length is laid by two clicks, with the line following the pointer between them")
+async def t_dim_clicks(T):
+    """v71 — Ced: "when adding a line by points, make sure the line is shown in preview in realtime."
+    Between the two clicks of a Line or a Length the ghost was cleared by the click that armed it, and a
+    Length could not be laid by clicks at all."""
+    await T.reset()
+    out = {}
+    for mode in ("line", "dim"):
+        await T.pick(mode)
+        await T.click(T.at(0.2, 0.6))
+        await T.page.mouse.move(*T.at(0.4, 0.6), steps=8)
+        await T.page.wait_for_timeout(120)
+        ghost = await T.page.evaluate(
+            """()=>[...document.querySelectorAll('.page[data-idx="0"] svg.draw polyline')]
+                     .filter(p=>p.getAttribute('stroke')!=='transparent').length""")
+        await T.click(T.at(0.4, 0.6))
+        out[mode] = {"ghost lines while moving": ghost,
+                     "made": await T.page.evaluate("(m)=>S.lines.filter(l=>(m==='dim')===(l.maKind==='dim')).length", mode)}
+        await T.key("Escape", 2)
+    return (out["line"]["ghost lines while moving"] > 0 and out["dim"]["ghost lines while moving"] > 0
+            and out["line"]["made"] == 1 and out["dim"]["made"] == 1), out
+
+
+@case("Several kinds selected open one panel that edits them all")
+async def t_mixed_props(T):
+    """v71 — Ced: "the tool must be able to select multiple redlines, and edit the properties of all
+    the redlines and items in properties setting in one go." A text box, a rectangle, a line and an
+    arrow, caught in one marquee; one colour and one line style land on every one that can carry it."""
+    await T.reset()
+    await T.pick("text"); await T.drag(T.at(0.15, 0.60), T.at(0.35, 0.64)); await T.page.keyboard.type("ONE")
+    await T.key("Escape", 2)
+    await T.pick("box"); await T.drag(T.at(0.45, 0.60), T.at(0.6, 0.68)); await T.key("Escape")
+    await T.pick("line"); await T.drag(T.at(0.15, 0.72), T.at(0.6, 0.74)); await T.key("Escape")
+    await T.pick("arrow"); await T.drag(T.at(0.15, 0.78), T.at(0.6, 0.80)); await T.key("Escape")
+    await T.pick("select")
+    await T.drag(T.at(0.1, 0.55), T.at(0.7, 0.85))
+    b = await T.rect('#selbar .sb-b[title="Edit properties"]')
+    if not b:
+        return False, {"why": "no Properties on the selection bar"}
+    await T.page.mouse.click(b["cx"], b["cy"]); await T.page.wait_for_timeout(400)
+    head = await T.page.evaluate("()=>document.querySelector('#toolpop .tp-title').textContent")
+    kinds = await T.page.evaluate("()=>[...document.querySelectorAll('#toolpop .tp-kind')].map(b=>b.textContent)")
+    sw = await T.rect('#toolpop .tp-sw[title="Blue"]')
+    await T.page.mouse.click(sw["cx"], sw["cy"]); await T.page.wait_for_timeout(300)
+    dash = await T.rect('#toolpop .tp-lines .tp-cb:nth-child(2)')
+    await T.page.mouse.click(dash["cx"], dash["cy"]); await T.page.wait_for_timeout(300)
+    got = await T.page.evaluate("()=>({cols:S.annos.map(a=>a.col).concat(S.lines.map(l=>l.col)),"
+                                "dash:S.lines.map(l=>l.dash).concat(S.annos.filter(a=>a.shape).map(a=>a.dash))})")
+    out = {"panel": head, "kinds": kinds, "after": got}
+    ok = (head.lower() == "selection" and len(kinds) == 5
+          and len(set(got["cols"])) == 1 and got["cols"][0] != "#fa3237"
+          and all(d and d != "solid" for d in got["dash"]))
+    return ok, out
+
+
+@case("The text box bar names its font, and sets where the text sits and how it wraps")
+async def t_textbar(T):
+    """v71 — Ced: "in textbox mini toolbar, add a setting to change font with the font name on the
+    display, add vertical alignment and wrap as well." """
+    await T.reset()
+    await T.pick("text"); await T.drag(T.at(0.2, 0.6), T.at(0.45, 0.68)); await T.page.keyboard.type("SAMPLE TEXT")
+    await T.key("Escape")
+    r = await T.mark_rect((await T.annos())[0]["id"])
+    await T.pick("select"); await T.click((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2))
+    shown = await T.page.evaluate("()=>{const n=document.querySelector('#annobar .tp-fontname'); return n&&n.textContent}")
+    fp = await T.rect('#annobar .ab-fontpick'); await T.page.mouse.click(fp["cx"], fp["cy"]); await T.page.wait_for_timeout(300)
+    tn = await T.page.evaluate("()=>{const b=[...document.querySelectorAll('.tp-fontitem')].find(b=>/Times/.test(b.textContent)); const q=b.getBoundingClientRect(); return [q.x+q.width/2,q.y+q.height/2]}")
+    await T.page.mouse.click(*tn); await T.page.wait_for_timeout(300)
+    await T.page.mouse.click(5, 300); await T.page.wait_for_timeout(200)
+    await T.click((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2))
+    after = await T.page.evaluate("()=>document.querySelector('#annobar .tp-fontname').textContent")
+    va = await T.rect('#annobar [data-valign]'); await T.page.mouse.click(va["cx"], va["cy"]); await T.page.wait_for_timeout(250)
+    bot = await T.page.evaluate("()=>{const b=[...document.querySelectorAll('.sb-menu .sb-mi')].find(b=>/Bottom/.test(b.textContent)); const q=b.getBoundingClientRect(); return [q.x+q.width/2,q.y+q.height/2]}")
+    await T.page.mouse.click(*bot); await T.page.wait_for_timeout(250)
+    wr = await T.rect('#annobar [data-wrapm]'); await T.page.mouse.click(wr["cx"], wr["cy"]); await T.page.wait_for_timeout(250)
+    wd = await T.page.evaluate("()=>{const b=[...document.querySelectorAll('.sb-menu .sb-mi')].find(b=>/Between/.test(b.textContent)); const q=b.getBoundingClientRect(); return [q.x+q.width/2,q.y+q.height/2]}")
+    await T.page.mouse.click(*wd); await T.page.wait_for_timeout(250)
+    a = await T.page.evaluate("()=>({font:S.annos[0].font, valign:S.annos[0].valign, wrap:S.annos[0].wrapMode})")
+    out = {"shown": shown, "after pick": after, "mark": a}
+    return (shown == "Arial" and "Times" in (after or "") and a["font"].startswith("times")
+            and a["valign"] == "bottom" and a["wrap"] == "words"), out
+
+
+@case("A length's bar clears its reading, and its ticks end square")
+async def t_dim_bar(T):
+    """v71 — Ced: "the length tool is not sharp cornered" and "the mini toolbar in length tool is
+    covering the text part"."""
+    await T.reset()
+    await T.pick("dim"); await T.drag(T.at(0.2, 0.62), T.at(0.45, 0.62))
+    await T.page.keyboard.type("6'-5\" (TYP.)")
+    await T.key("Escape", 2)
+    await T.page.evaluate("()=>{const l=S.lines[0]; l.le0='slash'; l.le1='slash'; drawAllLines();}")
+    await T.pick("select")
+    await T.click(T.at(0.205, 0.62))
+    got = await T.page.evaluate(
+        """()=>{const b=document.getElementById('linebar'), a=document.querySelector('.anno[data-id="'+S.lines[0].dimFor+'"]');
+                const r=b.getBoundingClientRect(), q=a.getBoundingClientRect();
+                const caps=[...document.querySelectorAll('.page[data-idx="0"] svg path')]
+                   .filter(p=>p.getAttribute('fill')==='none').map(p=>p.getAttribute('stroke-linecap'));
+                return {shown:b.classList.contains('show'), sel:S.selLine, barBottom:r.bottom, barTop:r.top,
+                        labelTop:q.top, labelBottom:q.bottom, caps};}""")
+    clear = got["barBottom"] <= got["labelTop"] or got["barTop"] >= got["labelBottom"]
+    return (got["shown"] and clear and got["caps"] and all(c == "butt" for c in got["caps"])), got
 
 
 @case("The picture editor keeps up with the hand")
@@ -2984,7 +3271,9 @@ async def t_adjust_view(T):
     after = await T.page.evaluate(seen)
     ok = (before["grips"] > 0                 # there really is furniture to get out of the way
           and during["body"] and during["washed"] and during["wash"]
-          and during["grips"] == 0            # … and all of it went
+          and during["grips"] <= 1            # … and all of it went, but for the grip in the hand,
+                                              # which v71 leaves as a faint outline (Ced: "make its
+                                              # opacity less so the user knows where exactly it goes")
           and not after["body"] and not after["washed"]
           and after["grips"] == before["grips"])     # … and all of it came back
     return ok, {"selected": before, "while holding": during, "after letting go": after}
@@ -3419,7 +3708,7 @@ async def t_group_chrome(T):
           and (got["rot"]["below"] or got["flipped"])
           and got["mov"] and got["mov"]["right"]
           and got["x"] and got["x"]["right"]
-          and got["dashed"] == "dashed")      # the one difference that is meant to be there
+          and got["dashed"] == "solid")       # v61 — Ced: "for the cross box, make sure it is the straight line not the dotted"
     return ok, got
 
 
@@ -3661,7 +3950,7 @@ async def t_editor_icons(T):
     return ok, got
 
 
-@case("The picture editor is two columns of tabs")
+@case("The picture editor is one column of tabs")
 async def t_editor_columns(T):
     """Ced: "in edit photo, put all the tool tabs on the left and stack individual tools. the main
     tab, the brush, rotate, and border. while the undo redo and zoom are stacked on the right" ·
@@ -3718,20 +4007,23 @@ async def t_editor_columns(T):
                           footPad:Math.round(parseFloat(cs.paddingBottom)||0),
                           clearL:Math.round(wrr.left-L.getBoundingClientRect().right),
                           clearR:Math.round(R.getBoundingClientRect().left-wrr.right),
+                          clearStage:Math.round(sr.right-wrr.right),
                           borderStep:parseFloat(
                             document.querySelector('.sk-edborder input[type=range]').step) }; }""")
     await T.page.keyboard.press("Escape")
     await T.page.wait_for_timeout(300)
     if not got:
         return False, {"why": "the editor's columns were not found"}
-    ok = (got["left"] == ["tools", "brush", "rotate", "border"]
-          and got["right"] == ["history", "zoom"]
-          and got["stackedL"] and got["stackedR"]
+    # v62 — Ced: "i think 6 max is better. and also, fit the other tools from right to the left as
+    # well." One column now: history and zoom at its head, nothing on the right.
+    ok = (got["left"] == ["history", "zoom", "tools", "brush", "rotate", "border"]
+          and got["right"] == []
+          and got["stackedL"]
           and all(p["r"] == 12 and p["bare"] and p["lifted"] for p in got["plates"])
           and got["btnR"] >= 9
           and got["tracks"] and min(got["tracks"]) >= 150
           and got["footPad"] <= 12
-          and got["clearL"] >= 10 and got["clearR"] >= 10)
+          and got["clearL"] >= 10 and got["clearStage"] >= 0)
     return ok, got
 
 
@@ -4009,6 +4301,129 @@ async def t_find(T):
           and back["count"] == f"1/{total}"
           and gone["box"] == "" and gone["count"] == "" and gone["hits"] == 0)
     return ok, out
+
+
+@case("A font from the library reaches the mark, and the ✕ works with a tool in the hand")
+async def t_v61(T):
+    """v61 — two things Ced found by using the tool.
+
+    "the newly added fonts are not working": the picker wrote the family into the ribbon's hidden
+    font <select>, which had no <option> for it, so the browser refused the value and the mark stayed
+    in Arial. Picked here through the panel, exactly as a hand would.
+
+    "sometimes the x is not working": with Box (or Line) still in the hand after drawing, a press on
+    the mark's ✕ started a new box under it and the click never arrived.
+    """
+    await T.reset()
+    await T.pick("text")
+    await T.drag(T.at(0.30, 0.60), T.at(0.55, 0.64))
+    await T.page.keyboard.type("Hello fonts")
+    await T.page.keyboard.press("Escape")
+    await T.page.wait_for_timeout(300)
+    await T.page.locator("#selbar button").first.click()
+    await T.page.wait_for_timeout(500)
+    await T.page.locator("#toolpop .tp-fontpick").first.click()
+    await T.page.wait_for_timeout(250)
+    await T.page.keyboard.type("roboto")
+    await T.page.wait_for_timeout(150)
+    await T.page.locator(".tp-fontitem").first.click()
+    await T.page.wait_for_timeout(500)
+    font = await T.page.evaluate("()=>{ const a=S.annos[S.annos.length-1]; const e=markEl(a.id).querySelector('.ed');"
+                                 " return {key:a.font, css:getComputedStyle(e).fontFamily}; }")
+    await T.page.keyboard.press("Escape"); await T.page.keyboard.press("Escape")
+    # the ✕ with Box in the hand
+    await T.page.evaluate("()=>{S.annos=[];S.lines=[];layoutAnnos();drawAllLines();}")
+    await T.pick("box")
+    await T.drag(T.at(0.30, 0.70), T.at(0.45, 0.76))
+    await T.page.wait_for_timeout(300)
+    before = await T.page.evaluate("()=>S.annos.length")
+    x = await T.page.evaluate("()=>{ const e=[...document.querySelectorAll('.anno.sel > .x')].pop(); if(!e)return null;"
+                              " const r=e.getBoundingClientRect(); return [r.x+r.width/2, r.y+r.height/2]; }")
+    after = None
+    if x:
+        await T.page.mouse.move(*x, steps=5)
+        await T.page.mouse.click(*x)
+        await T.page.wait_for_timeout(300)
+        after = await T.page.evaluate("()=>S.annos.length")
+    out = {"font": font, "before": before, "after": after}
+    return (font["key"] == "roboto" and "MA Roboto" in font["css"] and before == 1 and after == 0), out
+
+
+@case("My tools: a copy of Box draws with its own colour and Box keeps its own")
+async def t_customtools(T):
+    """v61 — Ced: "add a tool on the ribbon where the user will be able to add a copy of the existing
+    tools so the settings can be different each tool." The + in My tools, Box from its menu, the copy
+    given a blue in its own panel, one box drawn with each. The copy's blue must not leak into Box."""
+    await T.reset()
+    await T.page.evaluate("()=>{ try{ (MIU_CUSTOM_TOOLS.list()||[]).forEach(t=>MIU_CUSTOM_TOOLS.remove(t.id)); }catch(e){} }")
+    await T.page.mouse.move(T.box["x"] + 20, 5); await T.page.wait_for_timeout(400)
+    await T.page.locator(".ct-add").click()
+    await T.page.wait_for_timeout(250)
+    await T.page.locator(".ct-menu .sb-mi", has_text="Box").first.click()
+    await T.page.wait_for_timeout(500)
+    await T.page.evaluate("()=>{ tpApply('col','#1c60ff'); tpClose(); }")
+    await T.drag(T.at(0.30, 0.60), T.at(0.45, 0.66))
+    await T.page.keyboard.press("Escape"); await T.page.keyboard.press("Escape")
+    await T.pick("box")
+    await T.drag(T.at(0.30, 0.72), T.at(0.45, 0.78))
+    got = await T.page.evaluate("()=>({cols:S.annos.map(a=>a.col), n:MIU_CUSTOM_TOOLS.list().length,"
+                                " box:MA_TOOL_STYLES.box.col})")
+    await T.page.evaluate("()=>{ (MIU_CUSTOM_TOOLS.list()||[]).forEach(t=>MIU_CUSTOM_TOOLS.remove(t.id)); }")
+    ok = got["n"] == 1 and got["cols"] == ["#1c60ff", got["box"]] and got["box"] != "#1c60ff"
+    return ok, got
+
+
+@case("My tools: Box's own ▾ opened while its copy is in the hand edits Box, not the copy")
+async def t_customtools_split(T):
+    """v62 — Ced: "my tools and regular tools should not share the same properties at once. if the
+    properties of my tools is set, it should not change the properties of a regular tool." In v61 the
+    copy answered for Box while it was in the hand, so Box's own ▾ opened the copy's panel."""
+    await T.reset()
+    await T.page.evaluate("()=>{ try{ (MIU_CUSTOM_TOOLS.list()||[]).forEach(t=>MIU_CUSTOM_TOOLS.remove(t.id)); }catch(e){} }")
+    await T.page.mouse.move(T.box["x"] + 20, 5); await T.page.wait_for_timeout(400)
+    await T.page.locator(".ct-add").click(); await T.page.wait_for_timeout(250)
+    await T.page.locator(".ct-menu .sb-mi", has_text="Box").first.click(); await T.page.wait_for_timeout(500)
+    await T.page.evaluate("()=>{ tpApply('col','#1c60ff'); }")
+    # the copy is still in the hand; open BOX's own caret with the mouse and set green there
+    await T.page.locator('#tools .tool[data-mode="box"] .tcaret').click(); await T.page.wait_for_timeout(400)
+    got = await T.page.evaluate("()=>({panel:TP_TOOL, active:MIU_CUSTOM_TOOLS.active()})")
+    await T.page.evaluate("()=>{ tpApply('col','#2b8a3e'); tpClose(); }")
+    got.update(await T.page.evaluate("()=>{ const id=MIU_CUSTOM_TOOLS.list()[0].id;"
+                                     " return {box:MA_TOOL_STYLES.box.col, copy:MA_TOOL_STYLES[id].col}; }"))
+    # the badge is gone and the caret is visible on the copy's button
+    await T.page.mouse.move(T.box["x"] + 20, 5); await T.page.wait_for_timeout(400)
+    got.update(await T.page.evaluate("""()=>{ const b=document.querySelector('.ct-tool'); const c=b&&b.querySelector('.tcaret');
+        const r=c&&c.getBoundingClientRect(), br=b&&b.getBoundingClientRect();
+        return {badge:!!document.querySelector('.ct-badge'), b:br&&[br.x,br.y,br.width,br.height], c:r&&[r.x,r.y,r.width,r.height],
+                caretInCorner:!!(r&&r.width>0&&r.right<=br.right+1&&r.bottom<=br.bottom+1&&r.left>=br.left+br.width/2)}; }"""))
+    await T.page.evaluate("()=>{ (MIU_CUSTOM_TOOLS.list()||[]).forEach(t=>MIU_CUSTOM_TOOLS.remove(t.id)); }")
+    ok = (got["panel"] == "box" and got["active"] is None and got["box"] == "#2b8a3e"
+          and got["copy"] == "#1c60ff" and not got["badge"] and got["caretInCorner"])
+    return ok, got
+
+
+@case("A value picked from a property list leaves the list and the panel open")
+async def t_vmenu_stays(T):
+    """v62 — Ced: "changing properties on dropdown should not exit the dropdown or properties tab
+    immediately." The press on the list counted as a click away and shut the panel."""
+    await T.reset()
+    await T.page.locator('#tools .tool[data-mode="box"] .tcaret').click(); await T.page.wait_for_timeout(400)
+    await T.page.locator("#toolpop .tp-pilldrop").first.click(); await T.page.wait_for_timeout(250)
+    items = T.page.locator(".tp-vmenu .tp-vmi")
+    n = await items.count()
+    await items.nth(n - 1).click(); await T.page.wait_for_timeout(300)
+    s1 = await T.page.evaluate("()=>({panel:!document.getElementById('toolpop').hasAttribute('hidden'),"
+                               " list:!!document.querySelector('.tp-vmenu'), sw:MA_TOOL_STYLES.box.sw})")
+    await items.nth(1).click(); await T.page.wait_for_timeout(300)
+    s2 = await T.page.evaluate("()=>({panel:!document.getElementById('toolpop').hasAttribute('hidden'), sw:MA_TOOL_STYLES.box.sw})")
+    await T.page.keyboard.press("Escape"); await T.page.wait_for_timeout(150)
+    s3 = await T.page.evaluate("()=>({panel:!document.getElementById('toolpop').hasAttribute('hidden'),"
+                               " list:!!document.querySelector('.tp-vmenu')})")
+    await T.page.keyboard.press("Escape")
+    got = {"after1": s1, "after2": s2, "esc": s3, "n": n}
+    ok = (s1["panel"] and s1["list"] and s2["panel"] and s2["sw"] != s1["sw"]
+          and s3["panel"] and not s3["list"])
+    return ok, got
 
 
 async def main():

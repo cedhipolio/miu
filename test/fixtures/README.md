@@ -27,3 +27,16 @@ that have nothing to do with the build.
 
 `scenario_v12`, run via `test/harness.py`, has three expected `false` results — `.z3.pageCentred`,
 `.z3.pageLeftVisible` and `.ungrouped.textAbove`. They are the known baseline, not regressions.
+
+## auto-finished-cutout.png (v65)
+
+A picture Ced had already finished in the picture editor: a red equipment cut-out off sheet C-2 of
+SOH1350, 344×413 with transparency. `behave.py` "Auto leaves a finished cut-out exactly as it is"
+presses Auto on it and allows no ink to be erased — v64 erased 39.6% of it.
+
+## auto-raw-capture.png (v66)
+
+The same equipment from SOH1350 BEFORE Ced edited it: the drawing's long vertical line still runs
+down its left side. "Auto takes the stray line off a real capture and none of the equipment" wants
+1.5–6% of the ink erased, most of it in the left strip — v64 erased 39% (the equipment's masses),
+v65 erased nothing.
