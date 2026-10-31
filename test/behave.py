@@ -989,7 +989,7 @@ async def t_auto_raw(T):
     return (1.5 <= pct <= 8 and prec >= 0.95 and rec >= 0.6), out
 
 
-@case("Auto takes the lines outside a concrete pad and keeps the pad and its words")
+@case("Auto takes the lines outside a concrete pad and keeps the pad")
 async def t_auto_pad(T):
     """v71 — Ced: "auto edit is not getting rid of lines outside the concrete shapes anymore." A pad with
     two cabinets on it, and round it what a sheet always has: a dimension line with ticks, extension
@@ -1019,7 +1019,7 @@ async def t_auto_pad(T):
                 const red=(x,y)=>{ const k=(y*w+x)*4; return d[k+3]>120&&d[k]-d[k+1]>60; };
                 const box=(x0,y0,x1,y1)=>{ let n=0; for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(red(x,y))n++; return n; };
                 return {dim:box(300,248,600,253), grid:box(118,40,123,230)+box(700,618,880,623),
-                        leader:box(620,268,642,292), pad:box(300,296,600,304)+box(246,330,254,500),
+                        leader:box(655,224,680,248), pad:box(300,296,600,304)+box(246,330,254,500),
                         cabinets:box(320,338,420,343)+box(470,338,600,343),
                         words:box(690,175,890,200)+box(30,438,130,456)+box(415,222,470,241)};}"""
     before = await T.page.evaluate(probe)
@@ -1031,8 +1031,8 @@ async def t_auto_pad(T):
     keep = lambda k: after[k] >= before[k] * 0.95
     gone = lambda k: after[k] <= before[k] * 0.1
     out = {"before": before, "after": after}
-    return (gone("dim") and gone("grid") and gone("leader") and keep("pad") and keep("cabinets")
-            and keep("words")), out
+    # v74 — the labels are the sheet's, not the pad's: a subject cut-out may take them
+    return (gone("dim") and gone("grid") and gone("leader") and keep("pad") and keep("cabinets")), out
 
 
 @case("A tool in the hand draws over a redline and never picks it up")
@@ -1161,6 +1161,158 @@ async def t_dim_bar(T):
                         labelTop:q.top, labelBottom:q.bottom, caps};}""")
     clear = got["barBottom"] <= got["labelTop"] or got["barTop"] >= got["labelBottom"]
     return (got["shown"] and clear and got["caps"] and all(c == "butt" for c in got["caps"])), got
+
+
+@case("A text box can be made shorter than its text")
+async def t_tb_short(T):
+    """v72 — Ced: "minimum height of a textbox should be less than the height of the text … on cases
+    where the text is inserted in small spaces." Large text, the top grip dragged down past it."""
+    await T.reset()
+    await T.pick("text"); await T.drag(T.at(0.3, 0.6), T.at(0.45, 0.66))
+    await T.page.keyboard.type("aA"); await T.key("Escape")
+    await T.page.evaluate("""()=>{S.annos[0].size=30; layoutAnnos(); const e=document.querySelector('.anno .ed');
+        growTextBox(S.annos[0],e,document.querySelector('.page[data-idx="0"]')); layoutAnnos();}""")
+    a = (await T.annos())[0]; r = await T.mark_rect(a["id"])
+    await T.pick("select"); await T.click((r["x"] + r["w"] / 2, r["y"] + r["h"] / 2))
+    n = await T.rect('.anno.sel .rz.n')
+    await T.drag((n["cx"], n["cy"]), (n["cx"], n["cy"] + r["h"] * 0.6), steps=12)
+    await T.page.mouse.click(5, 300); await T.page.wait_for_timeout(300)
+    got = await T.page.evaluate("""(id)=>{const e=document.querySelector('.anno[data-id="'+id+'"] .ed');
+        return {box:e.offsetHeight, text:e.scrollHeight, nh:S.annos[0].nh}}""", a["id"])
+    return got["box"] < got["text"] - 4, dict(got, before=r["h"])
+
+
+@case("A COP stamp run over every page is one undo")
+async def t_stamp_one_undo(T):
+    """v72 — Ced: "stamping the tool should be one step, not each page." """
+    await T.reset()
+    await T.page.evaluate("()=>document.getElementById('stampBtn').click()")
+    await T.page.wait_for_timeout(1200)
+    h0 = await T.page.evaluate("()=>S.history.length")
+    g = await T.rect('.ma-stampgo'); await T.page.mouse.click(g["cx"], g["cy"])
+    for _ in range(100):
+        await T.page.wait_for_timeout(200)
+        if not await T.page.evaluate("()=>document.querySelector('.ma-stampgo').disabled"):
+            break
+    h1 = await T.page.evaluate("()=>[S.history.length, S.annos.length, new Set(S.annos.map(a=>a.page)).size]")
+    await T.page.mouse.click(5, 600)
+    await T.page.keyboard.press("Control+z"); await T.page.wait_for_timeout(300)
+    h2 = await T.page.evaluate("()=>S.annos.length")
+    out = {"history before": h0, "after stamping": h1, "marks after one undo": h2}
+    return (h1[0] - h0 == 1 and h1[2] > 1 and h2 == 0), out
+
+
+@case("Tabs and spaces from a spreadsheet come out of the file where the screen put them")
+async def t_tabs_export(T):
+    """v72 — Ced: "the text box should render exactly what is on the ui, especially on spaces when the
+    text are from a spreadsheet." Tabs were dropped from the file and runs of spaces collapsed."""
+    await T.reset()
+    await T.pick("text"); await T.drag(T.at(0.1, 0.55), T.at(0.8, 0.75))
+    await T.page.keyboard.type("x"); await T.key("Escape", 2)
+    await T.page.evaluate("""()=>{const a=S.annos[0]; a.text="Who:\\tEricsson / TSC\\nTab\\there\\tand\\tthere\\nTwo  spaces";
+        a.font='carlito'; a.size=9; a.wrapMode='words'; layoutAnnos();}""")
+    want = await T.page.evaluate("""()=>{const a=S.annos[0];
+        return String(a.text).split('\\n').map(t=>expandTabs(t,a.size,a.page,markFontKey(a),markLsp(a)));}""")
+    # where the screen put each word, as a fraction of its line, against the same from the expansion
+    scr = await T.page.evaluate("""()=>{const e=document.querySelector('.anno .ed'); const tn=[...e.childNodes].find(n=>n.nodeType===3)||e.firstChild;
+        const rg=document.createRange(); const txt=tn.textContent; const i=txt.indexOf('and'), j=txt.indexOf('Tab');
+        rg.setStart(tn,j); rg.setEnd(tn,j+1); const x0=rg.getBoundingClientRect().left;
+        rg.setStart(tn,i); rg.setEnd(tn,i+1); const x1=rg.getBoundingClientRect().left;
+        return (x1-x0)/(S.annos[0].size*S.scale);}""")
+    exp = await T.page.evaluate("""(t)=>{const a=S.annos[0]; const k=t.indexOf('and');
+        return measureTextNorm(t.slice(0,k),a.size,a.page,markFontKey(a),markLsp(a))*S.pages[a.page].w1/a.size;}""", want[1])
+    import tempfile, os
+    async with T.page.expect_download(timeout=60000) as dl:
+        await T.page.evaluate("()=>exportPdf()")      # the export is the measuring step here
+    d = await dl.value
+    path = os.path.join(tempfile.mkdtemp(), "t.pdf"); await d.save_as(path)
+    import pypdf, re
+    r = pypdf.PdfReader(path)
+    ap = None
+    for a in r.pages[0].get("/Annots") or []:
+        o = a.get_object()
+        if o.get("/Subtype") == "/FreeText":
+            ap = o["/AP"]["/N"].get_object().get_data().decode("latin1")
+    shown = re.findall(r"\((.*?)\) Tj", ap or "")
+    out = {"expanded": want, "in the file": shown, "screen gap (em)": round(scr, 2), "expansion gap (em)": round(exp, 2)}
+    ok = (any("Who:  " in t and "Ericsson" in t for t in shown)
+          and any("Two  spaces" == t for t in shown)
+          and any(t.startswith("Tab ") and "  and" in t for t in shown)
+          and abs(scr - exp) < 0.35)
+    return ok, out
+
+
+@case("My tools' remove mark is whole, and a stroke's tip size slides from its bar")
+async def t_ctx_tip(T):
+    """v72 — Ced: "the delete icon on my tools is not completely visible" and "make the arrowhead tip
+    size … a slider … add this as well on mini tool bar of those tools"."""
+    await T.reset()
+    await T.page.evaluate("()=>MIU_CUSTOM_TOOLS.add('redline')"); await T.page.wait_for_timeout(500)
+    await T.key("Escape", 2)
+    t = await T.rect('#toolbar .ct-tool'); await T.page.mouse.move(t["cx"], t["cy"]); await T.page.wait_for_timeout(300)
+    x = await T.rect('#toolbar .ct-tool .ct-x')
+    inside = x and x["x"] >= t["x"] and x["y"] >= t["y"] and x["x"] + x["w"] <= t["x"] + t["w"] and x["y"] + x["h"] <= t["y"] + t["h"]
+    await T.pick("arrow"); await T.drag(T.at(0.2, 0.62), T.at(0.5, 0.62)); await T.key("Escape")
+    await T.pick("select")
+    await T.page.evaluate("()=>selectLine(S.lines[S.lines.length-1].id)"); await T.page.wait_for_timeout(300)
+    b = await T.rect('#linebar [data-ltip]')
+    if not b or not b["w"]:
+        return False, {"why": "no tip control on the stroke's bar", "x inside": inside}
+    await T.page.mouse.click(b["cx"], b["cy"]); await T.page.wait_for_timeout(300)
+    rg = await T.rect('.tip-pop input')
+    h0 = await T.page.evaluate("()=>S.history.length")
+    await T.page.mouse.move(rg["x"] + rg["w"] * 0.5, rg["cy"]); await T.page.mouse.down()
+    for i in range(10):
+        await T.page.mouse.move(rg["x"] + rg["w"] * (0.5 + i * 0.03), rg["cy"]); await T.page.wait_for_timeout(20)
+    await T.page.mouse.up(); await T.page.wait_for_timeout(300)
+    got = await T.page.evaluate("()=>[S.lines[0].leSz, S.history.length, S.selLine]")
+    # v72b — the slider sits IN the stroke's bar, and the bar stands clear of the stroke
+    inbar = await T.page.evaluate("()=>!!document.querySelector('#linebar .tip-inline input')")
+    clear = await T.page.evaluate("""()=>{const b=document.getElementById('linebar').getBoundingClientRect();
+        const pg=document.querySelector('.page[data-idx="0"]').getBoundingClientRect(); const l=S.lines[S.lines.length-1];
+        const ys=linePts(l).map(p=>pg.top+p[1]*pg.height); return b.bottom<=Math.min(...ys)-4||b.top>=Math.max(...ys)+4;}""")
+    out = {"x": x, "tool": t, "x inside": inside, "tip": got[0], "undo steps": got[1] - h0,
+           "slider in the bar": inbar, "bar clear of the stroke": clear}
+    return (bool(inside) and got[0] and got[0] > 1.2 and got[1] - h0 == 1 and got[2] is not None
+            and inbar and clear), out
+
+
+@case("Auto works on a plain capture and takes the sheet off the subject")
+async def t_auto_plain(T):
+    """v74 — Ced: "improve the auto in edit photo, it is still not working well. it's not even working at
+    all now." A Plain snapshot is opaque, and Auto read the whole of it as ink and said "the picture is
+    empty"; on a Redline one it took the labels along with their leaders. The mount sheet of the fixture
+    — a frame with four leaders and four labels — snapped Plain and Redline."""
+    out = {}
+    for tint in (False, True):
+        await T.page.evaluate("()=>gotoPageInstant(4)"); await T.page.wait_for_timeout(1200)
+        T.box = await T.page.evaluate("""()=>{const p=document.querySelector('.page[data-idx="4"]');
+            const r=p.getBoundingClientRect(); return {x:r.x,y:r.y,w:r.width,h:r.height};}""")
+        await T.reset()
+        await T.page.evaluate("(t)=>{MA_TOOL_STYLES.snapshot=Object.assign({},MA_TOOL_STYLES.snapshot||{},{tint:t})}", tint)
+        await T.pick("snapshot")
+        await T.drag(T.at(0.15, 0.35), T.at(0.85, 0.75)); await T.page.wait_for_timeout(2000)
+        await T.key("Escape", 2)
+        await T.page.evaluate("()=>skEditor(S.annos.find(a=>a.maKind==='snapshot'))")
+        for _ in range(40):
+            await T.page.wait_for_timeout(200)
+            if await T.page.evaluate("()=>document.querySelectorAll('.sk-edbar .sk-edb').length>8"): break
+        probe = """()=>{const c=document.querySelector('.sk-edcanvas'), w=c.width, h=c.height;
+            const d=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+            const dark=(x,y)=>{const k=(y*w+x)*4; return d[k+3]>120 && Math.min(d[k],d[k+1],d[k+2])<140 || (d[k+3]>120&&d[k]-d[k+1]>60);};
+            const box=(fx0,fy0,fx1,fy1)=>{let n=0; for(let y=Math.round(fy0*h);y<Math.round(fy1*h);y++)
+                for(let x=Math.round(fx0*w);x<Math.round(fx1*w);x++)if(dark(x,y))n++; return n;};
+            return {leaders:box(0.66,0.05,0.79,0.95), words:box(0.80,0.05,1,0.95), frame:box(0.05,0.05,0.65,0.95)};}"""
+        before = await T.page.evaluate(probe)
+        await _ed_click(T, "auto"); await T.page.wait_for_timeout(3500)
+        after = await T.page.evaluate(probe)
+        said = await T.page.evaluate("()=>(document.getElementById('status')||{}).textContent||''")
+        await T.page.keyboard.press("Escape")
+        out["redline" if tint else "plain"] = {"before": before, "after": after, "said": said[:90]}
+    # the subject is the frame: its leaders and its labels are the sheet's, not the subject's
+    ok = all(v["after"]["leaders"] <= v["before"]["leaders"] * 0.15
+             and v["after"]["frame"] >= v["before"]["frame"] * 0.95 and "empty" not in v["said"] for v in out.values())
+    return ok, out
 
 
 @case("The picture editor keeps up with the hand")
@@ -4424,6 +4576,98 @@ async def t_vmenu_stays(T):
     ok = (s1["panel"] and s1["list"] and s2["panel"] and s2["sw"] != s1["sw"]
           and s3["panel"] and not s3["list"])
     return ok, got
+
+
+@case("v74 Default properties: Apply sets every tool and keeps a tool's own setting")
+async def t_defaults(T):
+    """v74 — Ced: "make a default settings configuration for ALL properties in all tools ... the default
+    has to have an APPLY button and should only apply when clicked and will not rule over overrides"."""
+    await T.reset()
+    keep = await T.page.evaluate("()=>JSON.stringify({st:MA_TOOL_STYLES, d:MA_DEFAULTS, o:MA_OVR})")
+    await T.page.evaluate("()=>{ MA_OVR={}; maOverridesSave(); tpOpen('box',document.querySelector('#tools .tool[data-mode=box]'),false);"
+                          " tpApply('col','#00aa00'); tpClose(); }")
+    await T.page.mouse.move(T.box["x"] + 20, 5); await T.page.wait_for_timeout(300)
+    await T.page.locator(".ct-def").click(); await T.page.wait_for_timeout(400)
+    g = await T.page.evaluate("()=>({panel:TP_TOOL, apply:!!document.querySelector('.tp-defapply')})")
+    await T.page.evaluate("()=>{ tpApply('col','#1144cc'); tpApply('sw',3); }")
+    g["beforeApply"] = await T.page.evaluate("()=>MA_TOOL_STYLES.line.col")
+    await T.page.locator(".tp-defapply").click(); await T.page.wait_for_timeout(300)
+    g.update(await T.page.evaluate("()=>({line:MA_TOOL_STYLES.line.col, lsw:MA_TOOL_STYLES.line.sw, circle:MA_TOOL_STYLES.circle.col,"
+                                   " box:MA_TOOL_STYLES.box.col, bsw:MA_TOOL_STYLES.box.sw})"))
+    await T.page.evaluate("(k)=>{ const o=JSON.parse(k); Object.keys(o.st).forEach(t=>MA_TOOL_STYLES[t]=o.st[t]); maSaveToolStyles();"
+                          " MA_DEFAULTS=o.d; MA_OVR=o.o; maDefaultsSave(); maOverridesSave(); tpClose(); }", keep)
+    ok = (g["panel"] == "defaults" and g["apply"] and g["beforeApply"] != "#1144cc" and g["line"] == "#1144cc"
+          and g["lsw"] == 3 and g["circle"] == "#1144cc" and g["box"] == "#00aa00" and g["bsw"] == 3)
+    return ok, g
+
+
+@case("v74 Stamp button runs as a progress bar and turns back into the button")
+async def t_stamp_progress(T):
+    """v74 — Ced: "the animation is just a simple loading screen, i suggest make the stamp bar a
+    progress bar overlay"."""
+    await T.reset()
+    await T.page.evaluate("()=>document.getElementById('stampBtn').click()"); await T.page.wait_for_timeout(1200)
+    await T.page.locator("#maPanel .ma-stampgo").click()
+    seen = []
+    for _ in range(12):
+        await T.page.wait_for_timeout(150)
+        seen.append(await T.page.evaluate("()=>{const o=document.querySelector('.cop-prog'); return o?parseFloat(o.style.getPropertyValue('--p')||'0'):null}"))
+    await T.page.wait_for_timeout(3500)
+    end = await T.page.evaluate("()=>({gone:!document.querySelector('.cop-prog'), busy:document.querySelector('.ma-stampgo').classList.contains('cop-busy'),"
+                                " stamps:S.annos.filter(a=>a.maKind==='cop'||/cop/i.test(a.maKind||'')).length, n:S.pages.length})")
+    vals = [v for v in seen if v is not None]
+    ok = len(vals) >= 3 and vals == sorted(vals) and vals[-1] > vals[0] and end["gone"] and not end["busy"]
+    try: await T.page.evaluate("()=>{ undo(); maPanelOpen(false); }")
+    except Exception: pass
+    return ok, {"seen": seen, **end}
+
+
+@case("v74 A photo's bar has no font or alignment; a group resize scales the outline")
+async def t_v74_bar_group(T):
+    """v74 — Ced: "do not put some functions on tools that do not need that function. ie. a photo has
+    alignment and font tools in mini toolbar" and "when a grouped shape is adjusted size, make the
+    thickness of outline relative to the adjustment"."""
+    await T.reset()
+    await T.pick("snapshot"); await T.drag(T.at(0.1, 0.12), T.at(0.5, 0.3)); await T.page.wait_for_timeout(1500); await T.key("Escape", 2)
+    await T.page.evaluate("()=>selectAnno(S.annos[0].id)"); await T.page.wait_for_timeout(300)
+    g = await T.page.evaluate("""()=>{ const v=sel=>[...document.querySelectorAll('#annobar '+sel)].filter(n=>n.offsetParent!==null).length;
+        return {font:v('[data-fs]'), align:v('[data-al]')}; }""")
+    await T.reset()
+    await T.pick("box"); await T.drag(T.at(0.3, 0.55), T.at(0.5, 0.7)); await T.key("Escape")
+    await T.pick("line"); await T.drag(T.at(0.3, 0.75), T.at(0.5, 0.75)); await T.key("Escape")
+    await T.pick("select"); await T.drag(T.at(0.25, 0.5), T.at(0.6, 0.8))
+    await T.page.evaluate("()=>groupSelected()"); await T.page.wait_for_timeout(300)
+    g["sw0"] = await T.page.evaluate("()=>[S.annos[0].sw, S.lines[0].sw]")
+    h = await T.rect('.gframe .gh.se')
+    await T.drag((h['cx'], h['cy']), (h['cx'] - 120, h['cy'] - 80), steps=12)
+    g["sw1"] = await T.page.evaluate("()=>[S.annos[0].sw, S.lines[0].sw]")
+    ok = (g["font"] == 0 and g["align"] == 0 and g["sw1"][0] < g["sw0"][0] and g["sw1"][1] < g["sw0"][1])
+    return ok, g
+
+
+@case("v74 Polyline closes on its first point, takes a fill, and loses a point on double-click")
+async def t_v74_poly(T):
+    """v74 — Ced: "in polyline, allow user to remove points ... fill in polyline not working when editing
+    on properties ... make the polyline start and end enclose if the last point is clicked on the first"."""
+    await T.reset()
+    await T.pick("poly")
+    for p in [(0.3, 0.55), (0.5, 0.55), (0.5, 0.7), (0.3, 0.7)]:
+        await T.click(T.at(*p))
+    await T.click(T.at(0.3005, 0.5505))
+    g = {"closed": await T.page.evaluate("()=>S.lines.map(l=>[!!l.closed, l.pts&&l.pts.length])")}
+    await T.key("Escape", 2)
+    await T.page.evaluate("()=>{selectLine(S.lines[0].id); tpOpen('poly',document.getElementById('linebar'),true)}"); await T.page.wait_for_timeout(400)
+    await T.page.evaluate("()=>{const b=[...document.querySelectorAll('#toolpop .tp-target')].find(x=>/Fill/.test(x.textContent)); b&&b.click()}"); await T.page.wait_for_timeout(200)
+    await T.page.locator('#toolpop .tp-sw[title="Blue"]').first.click(); await T.page.wait_for_timeout(300)
+    g["fill"] = await T.page.evaluate("()=>[S.lines[0].fill, S.lines[0].fillOp]")
+    await T.page.evaluate("()=>tpClose()")
+    await T.page.evaluate("()=>selectLine(S.lines[0].id)"); await T.page.wait_for_timeout(300)
+    n0 = await T.page.evaluate("()=>S.lines[0].pts.length")
+    cc = await T.page.evaluate("()=>{const c=[...document.querySelectorAll('circle')].filter(c=>c.getAttribute('r')==='6')[2]; const r=c.getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2]}")
+    await T.page.mouse.dblclick(*cc); await T.page.wait_for_timeout(300)
+    g["pts"] = [n0, await T.page.evaluate("()=>S.lines[0].pts.length")]
+    ok = (g["closed"] and g["closed"][0][0] and g["fill"][0] and (g["fill"][1] or 0) > 0 and g["pts"][1] == g["pts"][0] - 1)
+    return ok, g
 
 
 async def main():

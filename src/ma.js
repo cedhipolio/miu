@@ -2052,8 +2052,9 @@ function maPlaceMarkup(rec,pi,x,y,anchor){
         S.lines.push(b);
       });
     });
-    layoutAnnos(); drawAllLines(); updateRail(); updateCount();
-    setStatus(`“${rec.name}” placed on page ${page+1}.`);
+    /* v72 — a run over many pages lays out once, at the end, not once per page */
+    if(!window._maBulk){ layoutAnnos(); drawAllLines(); updateRail(); updateCount();
+      setStatus(`“${rec.name}” placed on page ${page+1}.`); }
     return ids[0]!=null?ids[0]:null;
   }
   const pt=maPt(page);

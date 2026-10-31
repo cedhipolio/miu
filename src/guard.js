@@ -23,7 +23,7 @@
      · offers `MIU_GUARD.safe(fn,label)` for the handful of entry points (open, export) that must
        never fail silently.
    ================================================================================================== */
-var MIU_VERSION = "71.0.0";
+var MIU_VERSION = "74.0.0";
 var MIU_GUARD = (function () {
   "use strict";
   var errs = [];               /* the last 40, newest last */

@@ -815,7 +815,7 @@ function _cleanA(a){ return { id:a.id, page:a.page, fixFree:a.fixFree, nx:a.nx, 
   /* 6i6 — a mirrored picture */
   flipX:a.flipX, flipY:a.flipY,
   /* 6hh — the height a text box was DRAWN at, which is the floor it grows back down to */
-  minNh:a.minNh,
+  minNh:a.minNh, hFixed:a.hFixed,
   pat:a.pat, patCol:a.patCol, patScale:a.patScale, patRot:a.patRot, patOp:a.patOp, hl:a.hl,
   /* 6fb — what the selection bar sets: a label, a lock, and whether it burns into the page */
   subj:a.subj, lock:a.lock, flat:a.flat,
@@ -5596,7 +5596,17 @@ function drawPageLines(i){
             x.setAttribute("stroke",selInk()); x.setAttribute("stroke-width","1");
             x.style.pointerEvents="none"; uiLayer().appendChild(x); });
         }
-        c.addEventListener("pointerdown",ev=>{ ev.stopPropagation(); selectLine(l.id); startLineDrag(ev,l,"pt"+k,pg); });
+        c.addEventListener("pointerdown",ev=>{ ev.stopPropagation();
+          /* v74 — Ced: "in polyline, allow user to remove points." A double-click on a corner takes it
+             out (the grips are redrawn between the two clicks, so the pair is matched by stroke and
+             corner rather than by element); Alt+click does the same in one. */
+          const now=Date.now(), last=_vtxClick;
+          _vtxClick={id:l.id,k,t:now};
+          if(ev.altKey||(last&&last.id===l.id&&last.k===k&&now-last.t<400)){
+            _vtxClick=null; ev.preventDefault();
+            if(removeLinePoint(l,k))return;
+          }
+          selectLine(l.id); startLineDrag(ev,l,"pt"+k,pg); });
         uiLayer().appendChild(c);        /* 6lp — above every band, not in the stroke's own layer */
       });
       /* 6g9 — A STROKE GETS THE SAME TWO GRIPS A MARK HAS.
@@ -5709,6 +5719,28 @@ function startLineRotate(ev,l,pg){
   window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
 }
 let _ldrag=null;
+let _vtxClick=null;
+/* v74 — take one corner out of a polyline. A run keeps at least two points; a closed one at least three
+   corners, and if its first corner goes the ring is rebuilt from the next one so it stays closed. */
+function removeLinePoint(l,k){
+  const pts=linePts(l).map(p=>[p[0],p[1]]);
+  if(l.closed){
+    const ring=pts.slice(0,-1);                 /* the last point repeats the first */
+    if(ring.length<=3){ setStatus("A closed shape keeps at least three corners.",true); return false; }
+    const i=(k>=ring.length)?0:k;
+    ring.splice(i,1);
+    const np=ring.concat([ring[0].slice()]);
+    pushHistory(); l.pts=np;
+  }else{
+    if(pts.length<=2){ setStatus("A line keeps its two ends — delete the line instead.",true); return false; }
+    pts.splice(k,1); pushHistory(); l.pts=pts;
+  }
+  const P=l.pts; l.x1=P[0][0]; l.y1=P[0][1]; l.x2=P[P.length-1][0]; l.y2=P[P.length-1][1];
+  if(l.pts.length===2&&!l.closed)delete l.pts;
+  drawPageLines(l.page); try{ dimRelayout(l); }catch(e){} try{ autosave(); }catch(e){}
+  setStatus("Point removed — Ctrl+Z puts it back.");
+  return true;
+}
 function startLineDrag(ev,l,mode,pg){
   selNotFromDraw();                    /* 6l1 — a stroke picked up is not a stroke drawn */
   if(l&&l.lock){ try{toast("This stroke is locked");}catch(_){ } return; }   /* 6fb */
@@ -5739,6 +5771,8 @@ window.addEventListener("pointermove",e=>{
     if(!(k>=0&&k<pts.length))return;
     /* Shift keeps a two-point stroke level, which is what a strike through a printed value wants */
     pts[k]=[o[k][0]+dx,(e.shiftKey&&pts.length===2)?o[k][1]:o[k][1]+dy];
+    /* v74 — a closed run's first and last points are one corner: they move together */
+    const _ringPair=(l.closed&&pts.length>=4&&(k===0||k===pts.length-1))?(k===0?pts.length-1:0):-1;
     /* 6f9 — and the MAGNET pulls that one point onto the nearest printed or drawn line, which is what
        puts a leader's tip exactly on the member it points at. Ctrl holds it off for one drag. */
     if(!snapOff(e)){
@@ -5747,6 +5781,7 @@ window.addEventListener("pointermove",e=>{
       drawSnapGuides(_ldrag.pg,m.gx,m.gy,false,false);
     }
     else clearSnapGuides(_ldrag.pg);
+    if(_ringPair>=0)pts[_ringPair]=[pts[k][0],pts[k][1]];
   }
   /* 6ga — dragging a CALLOUT's elbow does not move a point: it sets the two numbers the leader keeps,
      where along the side it leaves the box and how far it stands off. The side belongs to the arrow,
@@ -5770,9 +5805,28 @@ window.addEventListener("pointermove",e=>{
   drawPageLines(l.page); dimRelayout(l);
 });
 window.addEventListener("pointerup",()=>{ if(_ldrag){ try{clearSnapGuides(_ldrag.pg);}catch(_){}
+  /* v74 — Ced: "make sure to also make the polyline start and end enclose if the last point is clicked on
+     the first point." The same rule after the fact: an end of an open polyline dragged onto its other end
+     closes the run, and it takes the tool's fill. */
+  try{
+    const dl=_ldrag, l=S.lines.find(x=>x.id===dl.id), k=parseInt(String(dl.mode).replace("pt",""),10);
+    if(dl.moved&&l&&!l.closed&&l.pts&&l.pts.length>=4&&(k===0||k===l.pts.length-1)&&typeof MA_CLOSE_TOL!=="undefined"){
+      const P=S.pages[l.page]||{}, ar=((P.w1||612)/(P.h1||792));
+      const a=l.pts[0], b=l.pts[l.pts.length-1];
+      if(Math.hypot(b[0]-a[0],(b[1]-a[1])*ar)<=MA_CLOSE_TOL){
+        if(k===0)l.pts[0]=[b[0],b[1]]; else l.pts[l.pts.length-1]=[a[0],a[1]];
+        syncLineEnds(l);
+        const st=(MA_TOOL_STYLES&&MA_TOOL_STYLES.poly)||MA_TOOL_DEFAULTS.poly||{};
+        l.closed=true; if(l.fill==null)l.fill=(st&&st.fill)||"#ffffff";
+        if(l.fillOp==null)l.fillOp=(st&&st.fillOp!=null)?st.fillOp:1;
+        l.le0=""; l.le1=""; try{ syncArrowFlag(l); }catch(_){}
+        drawPageLines(l.page); setStatus("Closed — the polyline is a shape now and takes a fill.");
+      }
+    }
+  }catch(_){}
   const did=_ldrag.moved; _ldrag=null; dropSnapCache();
   if(did){ try{ autosave(); }catch(_){} } } });
-function selectLine(id){ S.selLine=id; if(id!=null){ selectAnno(null); clearMulti(); } S.pages.forEach((_,i)=>{ if(pageRendered(i))drawPageLines(i); }); if(id==null)$("#linebar").classList.remove("show"); }
+function selectLine(id){ if(id!==S.selLine){ try{ tipPopClose(); }catch(e){} } S.selLine=id; if(id!=null){ selectAnno(null); clearMulti(); } S.pages.forEach((_,i)=>{ if(pageRendered(i))drawPageLines(i); }); if(id==null)$("#linebar").classList.remove("show"); }
 /* 6gc — and a STROKE's bar clears the stroke, the same way. It used to be placed off the first point
    and the middle one, which on a leader that rises to the right put it straight over the line. */
 function positionLineBar(l,pg){
@@ -5795,6 +5849,7 @@ function positionLineBar(l,pg){
   const ins=_chromeInset();
   if(top<Math.max(8,ins.top))top=bot+18;
   fitFloatingBar(bar,Math.max(8,Math.min(...xs)-14),top);
+  try{ const tb=bar.querySelector("[data-ltip]"); if(tb){ const e=endsOf(l); tb.hidden=!(e[0]||e[1]); } }catch(e){}
 }
 
 /* ---------- text annotations ---------- */
@@ -5949,15 +6004,56 @@ function wrapsWords(a){
   if(isTextBox(a))return false;      /* 6m4 — fill the line, the way the printed columns do */
   return isFreeBox(a);
 }
+/* v72 — A TAB, WHERE THE SCREEN PUTS IT. Text pasted from a spreadsheet carries tabs between its
+   cells. The screen lays them out to the browser's tab stops (every 8 spaces of the mark's own face,
+   measured from the start of the line); the standard PDF fonts have no tab at all, so the export
+   dropped them and "Who:<tab>Ericsson" came out "Who:Ericsson". Each tab becomes the run of spaces that
+   reaches the same stop, measured in the same face, size and tracking the screen used. */
+function expandTabs(line,size,pi,fontKey,lsp){
+  const t=String(line==null?"":line);
+  if(t.indexOf("\t")<0)return t;
+  const sp=measureTextNorm(" ",size,pi,fontKey,lsp)||0;
+  if(!(sp>0))return t.replace(/\t/g,"    ");
+  const stop=sp*8;
+  /* the stops are decided where the SCREEN's pen is, not where the spaces put ours: each tab moves the
+     true position to its stop, and the spaces are chosen to land as near it as whole spaces can, so a
+     rounding never carries into the next stop decision */
+  let out="", trueX=0, outX=0;
+  t.split(/(\t)/).forEach(seg=>{
+    if(seg==="\t"){
+      const next=(Math.floor(trueX/stop+1e-6)+1)*stop;
+      const n=Math.max(1,Math.round((next-outX)/sp));
+      out+=" ".repeat(n); outX=measureTextNorm(out,size,pi,fontKey,lsp)||outX+n*sp; trueX=next;
+      return;
+    }
+    if(!seg)return;
+    const before=measureTextNorm(out,size,pi,fontKey,lsp)||0;
+    out+=seg;
+    const after=measureTextNorm(out,size,pi,fontKey,lsp)||0;
+    trueX+=after-before; outX=after;
+  });
+  return out;
+}
 function redlineWrapLines(text,size,pi,maxW,fontKey,words,lsp){
   const s=String(text==null?"":text);
   const out=[]; let cur="";
   const wid=t=>measureTextNorm(String(t).replace(/\s+$/,""),size,pi,fontKey,lsp);
   if(words){
-    const parts=s.split(/\s+/).filter(t=>t.length);
-    parts.forEach(w=>{
+    /* v72 — the spaces between words are KEPT as typed. Ced: "the text box should render exactly what
+       is on the ui, especially on spaces when the text are from a spreadsheet." The screen lays text
+       out `pre-wrap`, so two spaces are two spaces; this used to split on any run of whitespace and
+       put back one. A run is still swallowed where the line breaks, as it is on screen. */
+    const toks=s.split(/(\s+)/).filter(t=>t.length);
+    let sep="";
+    const parts=[];
+    toks.forEach(t=>{ if(/^\s+$/.test(t)){ if(!parts.length&&cur===""){ parts.push({lead:t}); } else sep+=t; }
+                      else { parts.push({w:t,sep}); sep=""; } });
+    parts.forEach(P=>{
+      if(P.lead!=null){ cur=P.lead; return; }
+      const w=P.w, sp=P.sep||"";
       if(cur===""){ cur=w; }
-      else if(wid(cur+" "+w)<=maxW){ cur+=" "+w; }
+      else if(/^\s+$/.test(cur)){ cur+=w; }
+      else if(wid(cur+sp+w)<=maxW){ cur+=sp+w; }
       else { out.push(cur); cur=w; }
       /* a single word wider than the box still has to go somewhere — fill it per character */
       if(wid(cur)>maxW&&cur.indexOf(" ")<0){
@@ -6348,6 +6444,7 @@ function growTextBox(a,ed,pgEl){
      and still covers its own text.
      ============================================================================================== */
   if(a.userSized&&a.minNh==null)a.minNh=a.nh||0.03;
+  if(a.hFixed)return false;            /* v72 — a height set by hand stays, even below the text's */
   const ph=pgEl.offsetHeight; if(!(ph>0))return false;
   if(a.minNh==null)a.minNh=a.nh||0.03;
   const prev=ed.style.height;
@@ -8224,6 +8321,7 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
      and it means letting go of Ctrl halfway silently changes what the drag is doing. Held when you grab
      the handle is the whole gesture. */
   const startCtrl=!!(ev.ctrlKey||ev.metaKey);
+  const startShift=!!ev.shiftKey;          /* v74 — Shift squares a box off */
   const startW=ed.offsetWidth, startPx=a.size*S.scale, startLeft=parseFloat(d.style.left);
   const isImg=(a.kind==="img");
   const shp=isFreeBox(a);
@@ -8298,21 +8396,29 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          off. The rule is one rule: on a text box, Ctrl means the CENTRE stays put, and whichever
          axes the handle touches grow by twice the drag — a side touches width, a top or bottom
          touches height, a corner touches both. An axis the handle does not touch is left alone. */
+      /* v74 — Ced: "used the same logic in text box to shapes when you click ctrl when adjusting the
+         sides and top or bottom. clicking shift while adjusting will make the shape in perfect shape.
+         apply this to callouts as well." Ctrl is now the text box's rule for every box — shapes and
+         callouts too: the CENTRE stays put and whichever axes the handle touches grow by twice the
+         drag. The perfect shape (square, circle) moved to Shift, and works with Ctrl as well. */
       const _ctrl=(startCtrl||e.ctrlKey||e.metaKey);
-      const _tbMid=isTextBox(a)&&!isImg;
-      if(_ctrl&&_tbMid){
+      const _shift=(startShift||e.shiftKey);
+      const _tbMid=_ctrl&&!isImg;
+      if(_tbMid){
         const _ex=pos.indexOf("e")>=0, _wx=pos.indexOf("w")>=0;
         const _sy=pos.indexOf("s")>=0, _ny=pos.indexOf("n")>=0;
         nw=(_ex||_wx)?Math.max(FW,startW+(_ex?dx:-dx)*2):startW;
         nh=(_sy||_ny)?Math.max(FH,startH+(_sy?dy:-dy)*2):startH;
       }
-      else if(_ctrl&&!isImg){
-        const side=Math.max(nw,nh); nw=side; nh=side;
+      if(_shift&&!isImg&&!isTextBox(a)){
+        /* the side the handle moves decides the size; a corner takes the longer of the two */
+        const side=(pos==="e"||pos==="w")?nw:((pos==="n"||pos==="s")?nh:Math.max(nw,nh));
+        nw=side; nh=side;
       }
       /* 6lc — growing about the middle means the CENTRE is what stays put, not the opposite edge, so
          this one gesture places itself rather than asking `place()`, which holds the far edge. The
          box turns about its centre, so a rotated box needs no extra correction here. */
-      let [nl,nt]=(_ctrl&&_tbMid)
+      let [nl,nt]=(_tbMid)
         ? [startLeft+(startW-nw)/2, startTop+(startH-nh)/2]
         : place(nw,nh);
       ed.style.width=nw+"px"; ed.style.height=nh+"px";
@@ -8428,7 +8534,13 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
          from it. Measured with the re-fit left in: a text box dragged as small as it would go sprang
          back to 26.3pt tall whatever its point size, which is the floor Ced asked to be rid of.
          The re-wrap happens anyway, in CSS, at the width the box now has. */
-      if(isTextBox(a)&&_rsMoved){ a.minNh=a.nh; a.userSized=true; }
+      if(isTextBox(a)&&_rsMoved){ a.minNh=a.nh; a.userSized=true;
+        /* v72 — Ced: "minimum height of a textbox should be less than the height of the text … on cases
+           where the text is inserted in small spaces." A height the hand set with a top or bottom grip
+           is kept exactly, even below the text's own height: the words run past the edge, the way
+           they would in a cell they are squeezed into, and nothing grows the box back. A side grip
+           alone still lets the box grow to cover its text (6m4) unless the height was fixed before. */
+        if(/[ns]/.test(pos))a.hFixed=true; }
       if(!document.querySelector(".anno.editing")){ layoutAnnos(); }
       /* ==========================================================================================
          6m4 — AND THEN THE BOX IS MADE TALL ENOUGH TO HOLD WHAT IT NOW SAYS.
@@ -8862,8 +8974,14 @@ function startGroupScale(ev,pg,bb,pos){
   const ax=(pos.indexOf("w")>=0)?bb.r:bb.l, ay=(pos.indexOf("n")>=0)?bb.b:bb.t;   /* the anchor */
   const w0=Math.max(4,bb.r-bb.l), h0=Math.max(4,bb.b-bb.t);
   const cx=ev.clientX, cy=ev.clientY;
-  const A=multiAnnos().map(a=>({a,nx:a.nx,ny:a.ny,nw:a.nw||0,nh:a.nh||0,size:a.size||8}));
-  const L=multiLines().map(l=>({l,pts:linePts(l).map(p=>[p[0],p[1]])}));
+  const A=multiAnnos().map(a=>({a,nx:a.nx,ny:a.ny,nw:a.nw||0,nh:a.nh||0,size:a.size||8,sw:a.sw}));
+  const L=multiLines().map(l=>({l,pts:linePts(l).map(p=>[p[0],p[1]]),sw:l.sw}));
+  /* v74 — Ced: "when a grouped shape is adjusted size, make the thickness of outline relative to the
+     adjustment. do not retain thickness when it was adjusted to too small or too big." Every rule in
+     the group — a box's outline, a stroke, a leader — scales with the group, by the geometric mean of
+     the two stretches, so a group made half the size draws at half the weight. */
+  const swK=(sx,sy)=>Math.sqrt(Math.max(0.0025,sx*sy));
+  const swOf0=v=>(v!=null&&v>0)?v:parseFloat(($("#c_sw")&&$("#c_sw").value)||1.5)||1.5;
   const move=e=>{
     const dx=e.clientX-cx, dy=e.clientY-cy;
     /* 6nb — an axis the handle does not touch is NOT scaled. With only corners this was moot: every
@@ -8880,12 +8998,14 @@ function startGroupScale(ev,pg,bb,pos){
       if(o.nw)o.a.nw=o.nw*sx; if(o.nh)o.a.nh=o.nh*sy;
       o.a.size=Math.max(4,o.size*Math.min(sx,sy));
       o.a.manualW=true;
+      if(o.a.kind!=="img"&&(o.sw!=null||isShape(o.a)))o.a.sw=Math.max(0.1,Math.min(50,Math.round(swOf0(o.sw)*swK(sx,sy)*100)/100));
     });
     L.forEach(o=>{
       const np=o.pts.map(p=>[(ax+(p[0]*w-ax)*sx)/w,(ay+(p[1]*h-ay)*sy)/h]);
       if(o.l.pts||np.length>2)o.l.pts=np;
       o.l.x1=np[0][0]; o.l.y1=np[0][1];
       o.l.x2=np[np.length-1][0]; o.l.y2=np[np.length-1][1];
+      o.l.sw=Math.max(0.1,Math.min(50,Math.round(swOf0(o.sw)*swK(sx,sy)*100)/100));
     });
     layoutAnnos(); drawAllLines(); paintMulti();
   };
@@ -9067,6 +9187,7 @@ function dropSingleSel(){
   annobar.classList.remove("show"); $("#linebar").classList.remove("show");
 }
 function selectAnno(id){
+  if(id!==S.sel){ try{ tipPopClose(); }catch(e){} }
   S.sel=id;
   /* Selecting a mark gives up whatever stroke was selected. It always read that way on screen — one
      thing at a time carries handles — but the two selections were kept separately, so a restyle or a
@@ -9799,6 +9920,20 @@ function abSyncText(){
   const slot=bar.querySelector("[data-abfont]"), va=bar.querySelector("[data-valign]"), wr=bar.querySelector("[data-wrapm]");
   const texty=!!a&&a.kind!=="img";
   [slot,va,wr].forEach(n=>{ if(n)n.hidden=!texty; });
+  /* v74 — Ced: "do not put some functions on tools that do not need that function. ie. a photo has
+     alignment and font tools in mini toolbar." A control the selected mark cannot use is not shown:
+     a picture has no text to align, size or ground and no tool style to take. */
+  bar.querySelectorAll("[data-al],[data-fs],[data-bgoff],[data-style]").forEach(n=>n.classList.toggle("ab-off",!texty));
+  /* and a divider never stands at either end of a run of hidden controls */
+  { let seen=false, pendingSep=null;
+    [...bar.children].forEach(n=>{
+      if(n.classList.contains("sep")){ n.classList.add("ab-off"); if(seen)pendingSep=n; seen=false; return; }
+      const vis=!(n.hidden||n.classList.contains("ab-off"))&&getComputedStyle(n).display!=="none";
+      if(vis){ if(pendingSep)pendingSep.classList.remove("ab-off"); pendingSep=null; seen=true; }
+    }); }
+  { const tb=bar.querySelector("[data-atip]"); if(tb){ let has=false;
+      try{ const l=a&&maCalloutLeaderOf(a); if(l){ const e=endsOf(l); has=!!(e[0]||e[1]); } }catch(e){}
+      tb.hidden=!has; } }
   if(!texty)return;
   if(slot&&typeof tpFontPicker==="function"){
     const fk=a.font||markFontKey(a);
@@ -9864,6 +9999,79 @@ $("#linebar").querySelectorAll("[data-llay]").forEach(b=>b.onclick=()=>{
     drawAllLines();
     setStatus(l.arrow==="end"?"Arrowhead on the end.":(l.arrow==="both"?"Arrowheads on both ends.":"No arrowhead."));
   };
+})();
+/* =================================================================================================
+   v72 — THE TIP SIZE, ON THE BAR. Ced: "make the arrowhead tip size of all tools that has one a slider
+   instead of fixed. add this as well on mini tool bar of those tools." A small slider pops off the
+   stroke's bar (and a callout's bar, for its leader); it writes `leSz`, the same multiple the
+   properties panel writes, live as it is dragged and as one undo step per drag.
+   ================================================================================================= */
+function tipLinesOfSel(){
+  const out=[];
+  if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); if(l)out.push(l); }
+  else if(S.sel!=null){ const a=S.annos.find(x=>x.id===S.sel);
+    try{ const l=a&&maCalloutLeaderOf(a); if(l)out.push(l); }catch(e){} }
+  return out.filter(l=>{ const e=endsOf(l); return !!(e[0]||e[1]); });
+}
+function tipRebar(){
+  try{
+    if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine);
+      const pg=l&&document.querySelector(`.page[data-idx="${l.page}"]`); if(l&&pg)positionLineBar(l,pg); }
+    else positionBar();
+  }catch(e){}
+}
+function tipPopClose(){
+  let had=false;
+  document.querySelectorAll(".tip-pop").forEach(n=>{ had=true; try{ n._off&&n._off(); }catch(e){} n.remove(); });
+  document.querySelectorAll("[data-ltip].on,[data-atip].on").forEach(b=>b.classList.remove("on"));
+  if(had)tipRebar();
+}
+/* v72b — Ced: "make sure the slider is not in the way of the redline … follow the neumorphism … make
+   the slider a part of the mini toolbar itself not a separate tab." It opens INSIDE the bar, right of
+   its button: the bar already stands clear of the stroke and its reading, so the slider does too, and
+   it wears the bar's own embossed track and raised knob. */
+function tipPopOpen(anchor){
+  tipPopClose();
+  const ls=tipLinesOfSel();
+  if(!ls.length){ setStatus("This stroke has no arrowhead — give it one first.",true); return; }
+  const now=tipScaleOf(ls[0]);
+  const box=document.createElement("span"); box.className="tip-pop tip-inline"; box.setAttribute("role","group");
+  box.setAttribute("aria-label","Arrowhead tip size");
+  const rng=document.createElement("input"); rng.type="range"; rng.min="0"; rng.max="1000"; rng.step="1";
+  rng.setAttribute("aria-label","Arrowhead tip size");
+  /* laid out on a log scale, like the panel's, so 0.5× and 2× sit the same distance from 1× */
+  const LO=Math.log(0.2), HI=Math.log(4);
+  const toV=r=>Math.round(Math.exp(LO+(HI-LO)*(r/1000))*100)/100;
+  const toR=v=>Math.round((Math.log(Math.max(0.2,Math.min(4,v)))-LO)/(HI-LO)*1000);
+  rng.value=String(toR(now));
+  const fill=()=>rng.style.setProperty("--fill",(+rng.value/10)+"%");
+  fill();
+  const val=document.createElement("span"); val.className="tip-v"; val.textContent=now.toFixed(2)+"\u00d7";
+  let pushed=false;
+  const apply=()=>{
+    const v=toV(+rng.value);
+    if(!pushed){ try{ pushHistory(); }catch(e){} pushed=true; }
+    tipLinesOfSel().forEach(l=>{ l.leSz=v; });
+    val.textContent=v.toFixed(2)+"\u00d7"; fill();
+    drawAllLines();
+  };
+  rng.addEventListener("input",apply);
+  rng.addEventListener("change",()=>{ pushed=false; try{ autosave(); }catch(e){} });
+  rng.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Escape")tipPopClose(); });
+  box.appendChild(rng); box.appendChild(val);
+  anchor.after(box);
+  anchor.classList.add("on");
+  tipRebar();
+  const bar=anchor.closest("#linebar,#annobar");
+  const away=e=>{ if(!box.contains(e.target)&&e.target!==anchor&&!(bar&&bar.contains(e.target)))tipPopClose(); };
+  setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
+  box._off=()=>document.removeEventListener("pointerdown",away,true);
+}
+(function(){
+  const lb=$("#linebar").querySelector("[data-ltip]");
+  if(lb)lb.onclick=e=>{ e.stopPropagation(); if(document.querySelector(".tip-pop"))tipPopClose(); else tipPopOpen(lb); };
+  const ab=$("#annobar")&&$("#annobar").querySelector("[data-atip]");
+  if(ab)ab.onclick=e=>{ e.stopPropagation(); if(document.querySelector(".tip-pop"))tipPopClose(); else tipPopOpen(ab); };
 })();
 /* And the tool's properties applied to it, for a stroke drawn before you settled on the colour. */
 (function(){
@@ -11593,7 +11801,8 @@ async function exportPdf(){
         return Math.max(92,Math.min(108,100*s0/p0)); };
       /* hard breaks first, then width-wrapping inside each one — so a wrapped line can never carry a
          newline into drawText, which is exactly what raised "WinAnsi cannot encode 0x000a". */
-      const hard=sanitizePdfText(a.text).split("\n");
+      const hard=String(a.text==null?"":a.text).replace(/\r\n?/g,"\n").split("\n")
+        .map(t=>sanitizePdfText(expandTabs(t,size,a.page,fk,lsp)));   /* v72 — tabs as the screen sets them */
       let linesArr=hard;
       /* 6hh — a FREE BOX always wraps to its own width in the file, exactly as the screen wraps it
          inside the box: the flag is a cell redline's business, and a text box that was never marked
@@ -11966,7 +12175,8 @@ async function exportPdf(){
       const _ti={x:sw+2,y:sw+2};
       const inner=Math.max(8,bw-sw*2-8);
       const body=[];
-      sanitizePdfText(a.text||"").split("\n").filter(t=>t.length).forEach(t=>{
+      String(a.text||"").replace(/\r\n?/g,"\n").split("\n")
+        .map(t=>sanitizePdfText(expandTabs(t,size,a.page,markFontKey(a),clsp))).filter(t=>t.length).forEach(t=>{
         if(cwOf(t)<=inner){ body.push(t); return; }
         redlineWrapLines(t,size,a.page,inner/W,markFontKey(a),true,clsp).forEach(x=>body.push(x));
       });

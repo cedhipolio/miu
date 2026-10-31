@@ -265,3 +265,12 @@
   padding:4px 11px;font-size:var(--fs-3);font-weight:600;cursor:pointer}
 .tp-kind.on{background:var(--fp-on);color:var(--fp-on-ink);border-color:var(--fp-on)}
 .tp-scroll > .tp-note:first-child{margin:10px var(--tp-gut) 10px}
+/* v74 — Default properties panel */
+.tp-deffoot{display:flex;flex-direction:column;gap:8px;margin:12px var(--tp-gut,12px) 14px}
+.tp-defapply{appearance:none;border:0;border-radius:var(--r-md,10px);padding:10px 14px;cursor:pointer;
+  font:700 var(--fs-3,13px)/1 var(--sans,system-ui,sans-serif);color:#fff;background:var(--accent,#2f6fe0);
+  box-shadow:3px 3px 8px rgba(0,0,0,.18),-2px -2px 6px rgba(255,255,255,.55)}
+.tp-defapply:active{box-shadow:inset 2px 2px 5px rgba(0,0,0,.25)}
+.tp-defovr{color:var(--fp-muted);font-size:var(--fs-2,12px);line-height:1.4;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tp-defclr{appearance:none;border:0;background:none;padding:0;cursor:pointer;color:var(--accent,#2f6fe0);
+  font:inherit;text-decoration:underline}

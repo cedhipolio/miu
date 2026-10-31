@@ -101,6 +101,101 @@ const COP_REF_SHORT=612, COP_K_MIN=1, COP_K_MAX=4;
 
 const COP_PREF="ma.copStamp";
 
+/* v74 — the calendar the date field opens */
+function copParseDate(s){
+  const m=/^\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*$/.exec(String(s||""));
+  if(!m)return null;
+  let y=+m[3]; if(y<100)y+=2000;
+  const d=new Date(y,+m[1]-1,+m[2]); return isNaN(d)?null:d;
+}
+function copCalendar(anchor,input){
+  document.querySelectorAll(".cop-cal").forEach(n=>n.remove());
+  const sel=copParseDate(input.value)||new Date();
+  let view=new Date(sel.getFullYear(),sel.getMonth(),1);
+  const box=document.createElement("div"); box.className="cop-cal"; box.setAttribute("role","dialog");
+  box.setAttribute("aria-label","Pick a date");
+  const draw=()=>{
+    box.innerHTML="";
+    const head=document.createElement("div"); head.className="cop-calh";
+    const prev=document.createElement("button"); prev.type="button"; prev.textContent="\u2039"; prev.title="Previous month";
+    const next=document.createElement("button"); next.type="button"; next.textContent="\u203a"; next.title="Next month";
+    const ttl=document.createElement("span");
+    ttl.textContent=view.toLocaleString(undefined,{month:"long",year:"numeric"});
+    prev.onclick=e=>{ e.stopPropagation(); view=new Date(view.getFullYear(),view.getMonth()-1,1); draw(); };
+    next.onclick=e=>{ e.stopPropagation(); view=new Date(view.getFullYear(),view.getMonth()+1,1); draw(); };
+    head.appendChild(prev); head.appendChild(ttl); head.appendChild(next); box.appendChild(head);
+    const grid=document.createElement("div"); grid.className="cop-calg";
+    ["S","M","T","W","T","F","S"].forEach(t=>{ const d=document.createElement("span"); d.className="cop-caldow"; d.textContent=t; grid.appendChild(d); });
+    const first=view.getDay(), days=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
+    for(let i=0;i<first;i++)grid.appendChild(document.createElement("span"));
+    const today=new Date();
+    for(let dd=1;dd<=days;dd++){
+      const b=document.createElement("button"); b.type="button"; b.textContent=String(dd);
+      const dt=new Date(view.getFullYear(),view.getMonth(),dd);
+      if(dt.toDateString()===sel.toDateString())b.classList.add("on");
+      if(dt.toDateString()===today.toDateString())b.classList.add("today");
+      b.onclick=e=>{ e.stopPropagation(); input.value=copToday(dt);
+        input.dispatchEvent(new Event("input",{bubbles:true})); input.dispatchEvent(new Event("change",{bubbles:true}));
+        close(); };
+      grid.appendChild(b);
+    }
+    box.appendChild(grid);
+    const foot=document.createElement("div"); foot.className="cop-calf";
+    const tb=document.createElement("button"); tb.type="button"; tb.textContent="Today";
+    tb.onclick=e=>{ e.stopPropagation(); input.value=copToday(new Date());
+      input.dispatchEvent(new Event("input",{bubbles:true})); close(); };
+    foot.appendChild(tb); box.appendChild(foot);
+  };
+  const away=e=>{ if(!box.contains(e.target)&&e.target!==anchor)close(); };
+  const key=e=>{ if(e.key==="Escape"){ e.stopPropagation(); close(); } };
+  const close=()=>{ box.remove(); document.removeEventListener("pointerdown",away,true); document.removeEventListener("keydown",key,true); };
+  draw();
+  document.body.appendChild(box);
+  /* v74 — Ced: "make sure the calendar is the same color". It lives on <body>, outside the panel's
+     variables, so it borrows the panel's own computed colours — it reads as part of the stamp tab on
+     every theme. */
+  try{ const pan=document.getElementById("maPanel"), cs=pan&&getComputedStyle(pan);
+    if(cs){ const v=n=>cs.getPropertyValue(n).trim();
+      const bg=v("--mp-bg")||cs.backgroundColor, ink=v("--mp-ink")||cs.color;
+      box.style.setProperty("--cal-bg",bg); box.style.setProperty("--cal-ink",ink);
+      box.style.setProperty("--cal-sunk",v("--mp-sunk")||bg); box.style.setProperty("--cal-line",v("--mp-line")||"transparent");
+      box.style.setProperty("--cal-dim",v("--mp-dim")||ink);
+      box.style.setProperty("--cal-hi",v("--mp-hi")||"rgba(255,255,255,.06)"); box.style.setProperty("--cal-lo",v("--mp-lo")||"rgba(0,0,0,.45)"); } }catch(e){};
+  const r=anchor.getBoundingClientRect();
+  box.style.left=Math.max(8,Math.min(window.innerWidth-box.offsetWidth-8,r.right-box.offsetWidth))+"px";
+  const below=r.bottom+6, above=r.top-box.offsetHeight-6;
+  box.style.top=((below+box.offsetHeight<window.innerHeight-8||above<8)?below:above)+"px";
+  setTimeout(()=>{ document.addEventListener("pointerdown",away,true); document.addEventListener("keydown",key,true); },0);
+}
+/* v74 — Ced: "have a stamping animation on the cop stamp tab." The stamper comes down on the card, the
+   card takes the ink with a thud and a ring, and the button's own stamper knocks once. Pure CSS, a
+   second long, and skipped for anyone who has asked their system for less motion. */
+/* v74 — Ced: "the animation is just a simple loading screen, i suggest make the stamp bar a progress
+   bar overlay". The Stamp button itself becomes the progress bar for the run: a red fill sweeps across
+   it page by page, the stamp mark riding its leading edge and thumping down on each page, with the
+   count in the middle; it finishes on a tick and turns back into the button. */
+function copProgress(btn){
+  if(!btn)return {step(){},done(){},n:0};
+  btn.querySelectorAll(".cop-prog").forEach(n=>n.remove());
+  const ov=document.createElement("span"); ov.className="cop-prog"; ov.setAttribute("aria-hidden","true");
+  ov.innerHTML='<span class="cop-progfill"></span><span class="cop-progstamp"></span><span class="cop-progtxt"><span class="cop-progpill"></span></span>';
+  btn.appendChild(ov); btn.classList.add("cop-busy");
+  btn.setAttribute("aria-busy","true");
+  const fill=ov.querySelector(".cop-progfill"), mark=ov.querySelector(".cop-progstamp"), txt=ov.querySelector(".cop-progpill");
+  let reduce=false; try{ reduce=matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
+  const set=(k,label)=>{ const p=Math.max(0,Math.min(1,k));
+    ov.style.setProperty("--p",p.toFixed(4)); txt.textContent=label;
+    ov.classList.toggle("cop-txtleft",p>0.5);   /* the count sits on whichever side the stamp is not */ };
+  set(0,"Getting ready…");
+  return {
+    step(i,n,pageNo){ set(n?i/n:1, (typeof pageNo==="number"?"Stamping page "+pageNo:"Updating stamps")+"  \u2014  "+Math.min(i+1,n)+" / "+n);
+      if(!reduce){ mark.classList.remove("thump"); void mark.offsetWidth; mark.classList.add("thump"); } },
+    done(label){ set(1,"\u2713 "+(label||"Done")); ov.classList.add("cop-progdone");
+      return new Promise(r=>setTimeout(()=>{ ov.classList.add("cop-progout");
+        setTimeout(()=>{ ov.remove(); btn.classList.remove("cop-busy"); btn.removeAttribute("aria-busy"); r(); },reduce?0:260); },reduce?250:750)); }
+  };
+}
+function copStampAnim(){ /* kept for older callers — the progress bar replaced the stamper */ }
 function copToday(d){
   d=d||new Date();
   return (d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
@@ -829,6 +924,12 @@ function maRenderStampTab(body){
   { const w=document.createElement('div'); w.appendChild(dt); sec.appendChild(w); }
   const dtIn=dt.querySelector("input");
   dtIn.value=f.date;
+  /* v74 — Ced: "add a calendar on date in cop stamp." A calendar button in the field opens a month you
+     can page through; a day click writes it in the stamp's own M/D/YYYY and the card updates live. */
+  { const cb=document.createElement("button"); cb.type="button"; cb.className="cop-calbtn";
+    cb.title="Pick the date from a calendar"; cb.setAttribute("aria-label","Pick the date from a calendar");
+    dt.classList.add("cop-hascal"); dt.appendChild(cb);
+    cb.addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); copCalendar(cb,dtIn); }); }
 
   /* ---- placement ---- */
   const pl=document.createElement("label");
@@ -954,24 +1055,38 @@ function maRenderStampTab(body){
     const p=plan();
     if(!p.update.length&&!p.place.length){ setStatus("No pages in that range.",true); return; }
     go.disabled=true;
+    const prog=copProgress(go);
+    const nAll=p.place.length+(p.update.length?1:0);
+    /* a few pages stamp in a blink — each step gets a moment on the bar so the run can be followed */
+    const beat=()=>new Promise(r=>setTimeout(r,Math.max(40,Math.min(220,1400/Math.max(1,nAll)))));
     let placed=0;
+    /* v72 — Ced: "stamping the tool should be one step, not each page. so undo and redo should not
+       one page per undo, it should be instant." Every page's placement went through `historyBatch`,
+       which pushes an entry of its own, so a 16-page run took 16 undos to take back. The whole run is
+       one batch now: one entry before it, nothing pushed inside it. */
+    pushHistory();
+    _histBatch++; window._maBulk=true;
     try{
-      pushHistory();
       const now={status:stSel.value, gc:f.gc, poc:f.poc, date:dtIn.value.trim()||copToday()};
-      p.update.forEach(g=>copApplyTo(g,now));
+      if(p.update.length){ prog.step(0,nAll,"stamps"); p.update.forEach(g=>copApplyTo(g,now)); await beat(); }
+      let k=p.update.length?1:0;
       for(const pi of p.place){
         setStatus(`Stamping page ${pi+1} of ${S.pages.length}…`);
+        prog.step(k++,nAll,pi+1);
         /* eslint-disable no-await-in-loop */
         const id=await copPlaceOn(pi,f);
         if(id!=null)placed++;
+        await beat();
       }
-    }finally{ go.disabled=false; }
+    }catch(err){ try{ go.querySelectorAll(".cop-prog").forEach(n=>n.remove()); go.classList.remove("cop-busy"); }catch(_){} throw err; }
+    finally{ go.disabled=false; window._maBulk=false; _histBatch=Math.max(0,_histBatch-1); try{ updateUndoUI(); }catch(e){} }
     layoutAnnos(); drawAllLines(); updateRail(); updateCount();
     try{ autosave(); }catch(e){}
     const parts=[];
     if(placed)parts.push(placed===1?`stamped page ${p.place[0]+1}`:`stamped ${placed} pages`);
     if(p.update.length)parts.push(`updated ${p.update.length} stamp${p.update.length===1?"":"s"}`);
     setStatus(parts.length?(parts.join(" and ").replace(/^./,c=>c.toUpperCase())+"."):"Nothing to do.");
+    try{ await prog.done(parts.length?parts.join(" · ").replace(/^./,c=>c.toUpperCase()):"Nothing to do"); }catch(e){}
     relabel();
   };
   go.appendChild(sub);            /* the count rides inside the button, at its right end */

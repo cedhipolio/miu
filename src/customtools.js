@@ -76,7 +76,7 @@
   if(typeof tpOpen==="function"){
     var _tpOpen=tpOpen;
     window.tpOpen=function(tool,anchor,forSelection){
-      if(ACTIVE&&!forSelection&&tool&&!find(tool)){ try{ setMode(tool); }catch(e){} }
+      if(ACTIVE&&!forSelection&&tool&&tool!=="defaults"&&!find(tool)){ try{ setMode(tool); }catch(e){} }
       return _tpOpen.apply(this,arguments);
     };
   }
@@ -112,6 +112,16 @@
     addBtn.textContent="+";
     addBtn.onclick=function(e){ e.stopPropagation(); menu(addBtn, baseItems()); };
     row.appendChild(addBtn);
+    /* v74 — Ced: "a default settings configuration for ALL properties in all tools, in one tab".
+       The ⚙ beside + opens it; nothing changes until its Apply is pressed. */
+    var defBtn=document.createElement("button");
+    defBtn.type="button"; defBtn.className="btn ct-def";
+    defBtn.title="Default properties — set colour, width, fill and text once and apply them to every tool that has them";
+    defBtn.setAttribute("aria-label","Default properties");
+    defBtn.textContent="\u2699";
+    defBtn.onclick=function(e){ e.stopPropagation(); try{ var pp=document.getElementById("toolpop");
+      if(pp&&!pp.hasAttribute("hidden")&&TP_TOOL==="defaults")tpClose(); else tpOpenDefaults(defBtn); }catch(_){} };
+    row.appendChild(defBtn);
   }
 
   function shapeOf(base){

@@ -48,7 +48,9 @@ const TP_SPEC={
   strikerow:{title:"Strike row",     form:"stroke", preview:"line", noEnds:true},
   crossout: {title:"Cross out",      form:"stroke", preview:"line", noEnds:true},
   /* v71 — several KINDS of mark selected at once: one panel over all of them */
-  mixed:    {title:"Selection",      form:"mixed",  preview:"text"}
+  mixed:    {title:"Selection",      form:"mixed",  preview:"text"},
+  /* v74 — every tool's defaults, in one place */
+  defaults: {title:"Default properties", form:"defaults", preview:"text"}
 };
 
 /* The tick marks under each slider, straight off the screenshots. */
@@ -166,6 +168,10 @@ const TP_ANNO_KEYS=["col","colOp","sw","dash","fill","fillOp","bg","bgNone","fon
                     /* 6ht — and how its lines break */
                     "wrapMode"];
 const TP_LINE_KEYS=["col","colOp","sw","dash","lpat","le0","le1","leSz","join","hl",
+                    /* v74 — Ced: "fill in polyline not working when editing on properties." A closed run's
+                       fill and hatch are the stroke's own: without these here the panel showed the
+                       tool's fill and wrote nothing to the selected polyline */
+                    "fill","fillOp","pat","patCol","patScale","patRot","patOp",
                     /* 6gg — a measurement's own scale, units and rounding */
                     "dimScale","dimUnit","dimPrec"];
 
@@ -288,7 +294,10 @@ function tpHist(){
 
 /* Put one property where it belongs. This is the ONLY way the panels write anything. */
 function tpApply(key,value){
+  if(TP_TOOL==="defaults"){ MA_DEFAULTS[key]=value; maDefaultsSave(); tpRender(); return; }
   if(TP_SEL&&tpHasSel())return tpApplySel(key,value);
+  /* v74 — a property set on one tool is that tool's own from now on: Apply in the defaults leaves it */
+  maMarkOverride(TP_TOOL,key);
   const id=TP_FIELD_INPUT[key];
   if(id){
     const f=document.getElementById(id);
@@ -362,9 +371,11 @@ function tpHead(title){
   const acts=tpEl("div","tp-acts");
   const mk=(glyph,title,fn,on)=>{ const b=tpEl("button","tp-act"+(on?" on":""),glyph);
     b.type="button"; b.title=title; b.onclick=fn; acts.appendChild(b); return b; };
-  if(TP_TOOL!=="mixed"){
+  if(TP_TOOL!=="mixed"&&TP_TOOL!=="defaults"){
   mk("↺","Put this tool back to its defaults",()=>{
-    MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_DEFAULTS[TP_TOOL]||MA_TOOL_DEFAULTS.redline);
+    MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_DEFAULTS[TP_TOOL]||MA_TOOL_DEFAULTS.redline,
+                                          maDefaultsFor(TP_TOOL));      /* v74 — and the user's defaults */
+    try{ delete MA_OVR[TP_TOOL]; maOverridesSave(); }catch(e){}
     maSaveToolStyles(); maShowToolStyle(TP_TOOL); tpRender(); toast("Tool reset");
   });
   mk("⤾","Use this tool's style for every tool",()=>{
@@ -808,6 +819,14 @@ function tpFontPicker(current,onPick){
   };
   return btn;
 }
+/* v72 — the arrowhead's size, as a slider: one dial for both ends of a stroke */
+function tpTipSlider(now){
+  const n=tpSlider({min:0.2,max:4,step:0.01,value:Math.max(0.2,Math.min(4,now||1)),
+    ticks:[0.42,0.68,1,1.5,2,3], choices:[0.25,0.42,0.5,0.68,0.85,1,1.25,1.5,2,2.5,3,4],
+    suffix:"\u00d7", log:true, onInput:v=>tpSet("leSz",Math.round(v*100)/100)});
+  n.classList.add("tp-tips");
+  return n;
+}
 function tpChoice(items,current,onPick,cls){
   const row=tpEl("div","tp-choice"+(cls?" "+cls:""));
   items.forEach(it=>{
@@ -888,6 +907,7 @@ function tpApplyMany(props){
     return s.annos.length+s.lines.length;
   }
   MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_STYLES[TP_TOOL]||{},props);
+  Object.keys(props).forEach(k=>maMarkOverride(TP_TOOL,k));
   try{ maSaveToolStyles(); }catch(e){}
   /* the seven that live in the ribbon's hidden fields have to agree, or `maStyleNow()` would draw the
      next mark with half of the old set */
@@ -964,6 +984,7 @@ function tpBuild(){
   pop.appendChild(tpHead(TP_KIND?(spec.title+" · in the selection"):spec.title));
   const _kt=tpKindTabs(); if(_kt)pop.appendChild(_kt);
   if(spec.form==="mixed"){ tpBuildMixed(pop,st); tpFinish(pop); return; }
+  if(spec.form==="defaults"){ tpBuildDefaults(pop); tpFinish(pop); return; }
   pop.appendChild(tpPreview(spec.preview));
 
   const ink=st.col||"#fa3237";
@@ -972,7 +993,7 @@ function tpBuild(){
   /* ---------- the colour block every panel starts with ---------- */
   if(spec.form==="text"||spec.form==="callout"||spec.form==="shape"){
     pop.appendChild(tpTargets(spec.form==="text"?"Text":"Border","Fill"));
-    pop.appendChild(tpSwatches(spec.form!=="text"));
+    pop.appendChild(tpSwatches(spec.form!=="text"||TP_TARGET==="fill"));   /* v74 — a text box can have no ground too */
   }else if(spec.form==="image"){
     /* the swatches colour the FRAME; the opacity below belongs to the picture itself */
     TP_TARGET="stroke";
@@ -1057,9 +1078,12 @@ function tpBuild(){
   }
 
   /* ---------- TEXT: appearance, font, style and alignment ---------- */
-  if(spec.form==="text"||spec.form==="callout"){
-    const sec=tpSection(spec.form==="callout"?"Text appearances":"Appearance");
-    if(spec.form==="callout"){
+  /* v74 — Ced: "adding texts to shapes, the text properties are not on properties tab." A rectangle or
+     an ellipse carries words like a callout does, so it gets the callout's text sections: size, font,
+     spacing, style, alignment, vertical alignment and wrap. */
+  if(spec.form==="text"||spec.form==="callout"||spec.form==="shape"){
+    const sec=tpSection(spec.form!=="text"?"Text appearances":"Appearance");
+    if(spec.form!=="text"){
       sec._body.appendChild(tpRow("Text size",tpSlider({min:2,max:64,step:0.5,value:st.size||8,
         choices:[2,2.5,3,4,5,6,7,8,9,10,12,14,16,20,28,42,64],
         ticks:TP_SIZE_TICKS, suffix:"pt", log:true, onInput:v=>tpApply("size",v)})));
@@ -1112,7 +1136,7 @@ function tpBuild(){
       [{k:"left",t:"Left",draw:alignIcon("left")},
        {k:"center",t:"Centre",draw:alignIcon("center")},
        {k:"right",t:"Right",draw:alignIcon("right")}],
-      st.align||(spec.form==="callout"?"center":"left"),
+      st.align||(spec.form!=="text"?"center":"left"),
       k=>{ tpSet("align",k); },"tp-align")));
     /* 6hw — Ced: "add vertical centering styles on textbox." Where the block of text sits in the box
        is a property of every box that HAS a box — a callout, a shape, a text box you drew — and only
@@ -1331,18 +1355,10 @@ function tpBuild(){
        stroke with a small head at one end and a large one at the other is a drafting mistake, not a
        choice. Each chip draws the tip it means at the size it means. */
     const tipNow=(typeof st.leSz==="number"&&st.leSz>0)?st.leSz:1;
-    sec._body.appendChild(tpRow("Tip size",tpChoice(TIP_SIZES.map(t=>({k:String(t.v),t:t.t,
-      label:t.t,
-      draw:b=>tpMiniLine(b,(svg,NS)=>{
-        const l=document.createElementNS(NS,"line");
-        l.setAttribute("x1","3"); l.setAttribute("y1","10"); l.setAttribute("x2","24"); l.setAttribute("y2","10");
-        l.setAttribute("stroke","currentColor"); l.setAttribute("stroke-width","1.6");
-        svg.appendChild(l);
-        const sp=endShapePath("arrow",3,10,30,10,7*t.v); if(!sp)return;
-        const p=document.createElementNS(NS,"path"); p.setAttribute("d",sp.d);
-        p.setAttribute("fill","currentColor"); p.setAttribute("stroke","none");
-        svg.appendChild(p);
-      })})), String(tipNow), k=>tpSet("leSz",parseFloat(k)), "tp-tips")));
+    /* v72 — Ced: "make the arrowhead tip size of all tools that has one a slider instead of fixed."
+       A multiple of the stroke's own head, from a fifth of it to four times it; the old four sizes are
+       the ticks and the presets. */
+    sec._body.appendChild(tpRow("Tip size",tpTipSlider(tipNow)));
     /* 6jw — Ced: "make the corners of the lines sharp as well and not rounded, or better yet, add
        this as an editable setting each tool." One dial for the corner AND the end, because a mitred
        elbow with a round nub on the end is neither one thing nor the other. Each chip draws an elbow
@@ -1508,8 +1524,7 @@ function tpBuildMixed(pop,st){
       svg.appendChild(q);
     })})), (side==="start"?e0:e1), k=>tpSet(side==="start"?"le0":"le1",k), "tp-ends"));
     const tipNow=(typeof ended[0].leSz==="number"&&ended[0].leSz>0)?ended[0].leSz:1;
-    sec._body.appendChild(tpRow("Tip size",tpChoice(TIP_SIZES.map(t=>({k:String(t.v),t:t.t,label:t.t})),
-      String(tipNow), k=>tpSet("leSz",parseFloat(k)), "tp-tips")));
+    sec._body.appendChild(tpRow("Tip size",tpTipSlider(tipNow)));
     pop.appendChild(sec);
   }
   const adv=tpSection("Advanced settings",false);
@@ -1568,6 +1583,154 @@ function tpFaceToggle(fk,which){
   return MARK_FONTS[key]?key:fam;
 }
 
+/* =================================================================================================
+   v74 — DEFAULT PROPERTIES. Ced: "make a default settings configuration for ALL properties in all tools,
+   put them in one tab so the user can adjust there, and make those settings apply to all tools if they
+   have that property … the user is still free to change the properties separately … retain that to the
+   separate tool and do not force change the setting every time the user opens the tool. the default has
+   to have an APPLY button and should only apply when clicked and will not rule over overrides."
+
+   Three things, kept apart:
+     MA_DEFAULTS   what the defaults panel says. Editing it changes nothing else.
+     MA_OVR        per tool, the properties the user has set on THAT tool from its own panel.
+     Apply         writes each default into every tool that has that property — except where the tool
+                   carries an override for it. Nothing happens on open, on pick-up, or on its own.
+   A tool's ↺ clears its overrides and takes the defaults again.
+   ================================================================================================= */
+const MA_DEFAULTS_KEY="ma.defaults.v1", MA_OVR_KEY="ma.toolOverrides.v1";
+let MA_DEFAULTS=(()=>{ try{ return JSON.parse(localStorage.getItem(MA_DEFAULTS_KEY)||"null")||null; }catch(e){ return null; } })();
+let MA_OVR=(()=>{ try{ return JSON.parse(localStorage.getItem(MA_OVR_KEY)||"{}")||{}; }catch(e){ return {}; } })();
+function maDefaultsSave(){ try{ localStorage.setItem(MA_DEFAULTS_KEY,JSON.stringify(MA_DEFAULTS)); }catch(e){} }
+function maOverridesSave(){ try{ localStorage.setItem(MA_OVR_KEY,JSON.stringify(MA_OVR)); }catch(e){} }
+function maMarkOverride(tool,key){
+  if(!tool||tool==="defaults"||tool==="mixed"||!key)return;
+  (MA_OVR[tool]=MA_OVR[tool]||{})[key]=1; maOverridesSave();
+}
+const MA_DEF_TEXT=["font","size","lsp","lnsp"];
+/* which defaults a tool takes: by the kind of panel it has */
+function maDefaultKeysOf(tool){
+  let base=tool;
+  try{ if(!TP_SPEC[tool]&&window.MIU_CUSTOM_TOOLS){ const t=MIU_CUSTOM_TOOLS.list().find(z=>z.id===tool); if(t)base=t.base; } }catch(e){}
+  const sp=TP_SPEC[base]; if(!sp||base==="select"||base==="snapshot")return [];
+  const f=sp.form;
+  if(f==="text")return ["col","colOp","bg"].concat(MA_DEF_TEXT,["hl"]);
+  if(f==="shape")return ["col","colOp","sw","dash","fill","fillOp"].concat(MA_DEF_TEXT,["hl"]);
+  if(f==="callout")return ["col","colOp","sw","dash","fill","fillOp","join","leSz"].concat(MA_DEF_TEXT,["hl"]);
+  if(f==="stroke"){
+    const k=["col","colOp","sw","dash","join","hl"];
+    if(!sp.noEnds)k.push("leSz");
+    if(sp.fill)k.push("fill","fillOp");
+    if(sp.dim)k.push("font","size");
+    return k;
+  }
+  return [];
+}
+function maDefaultsFor(tool){
+  const o={}; if(!MA_DEFAULTS)return o;
+  maDefaultKeysOf(tool).forEach(k=>{ if(MA_DEFAULTS[k]!==undefined)o[k]=MA_DEFAULTS[k]; });
+  return o;
+}
+function maDefaultsSeed(){
+  if(MA_DEFAULTS)return MA_DEFAULTS;
+  const r=Object.assign({},MA_TOOL_DEFAULTS.box||{},MA_TOOL_STYLES.box||{});
+  MA_DEFAULTS={col:r.col||"#fa3237", colOp:(r.colOp!=null?r.colOp:1), sw:r.sw||1.5, dash:r.dash||"solid",
+    join:"sharp", leSz:1, fill:r.fill||"#ffffff", fillOp:(r.fillOp!=null?r.fillOp:1), bg:"#ffffff",
+    font:r.font||"arial", size:r.size||8, lsp:0, lnsp:1, hl:false};
+  return MA_DEFAULTS;
+}
+function maApplyDefaults(){
+  const D=maDefaultsSeed();
+  const tools=new Set(Object.keys(MA_TOOL_DEFAULTS).concat(Object.keys(MA_TOOL_STYLES||{})));
+  let nTools=0, nKept=0, nSet=0;
+  tools.forEach(t=>{
+    const keys=maDefaultKeysOf(t); if(!keys.length)return;
+    const st=MA_TOOL_STYLES[t]=Object.assign({},MA_TOOL_DEFAULTS[t]||{},MA_TOOL_STYLES[t]||{});
+    let touched=false;
+    keys.forEach(k=>{
+      if(D[k]===undefined)return;
+      if(MA_OVR[t]&&MA_OVR[t][k]){ nKept++; return; }
+      if(st[k]!==D[k]){ st[k]=D[k]; nSet++; touched=true; }
+    });
+    if(touched)nTools++;
+  });
+  maSaveToolStyles();
+  try{ maShowToolStyle(S.mode); }catch(e){}
+  return {nTools,nSet,nKept};
+}
+function tpBuildDefaults(pop){
+  const D=maDefaultsSeed();
+  pop.appendChild(tpEl("p","tp-note tp-defnote","What every tool starts from. Changes here do nothing until "+
+    "you press Apply — then each tool takes every default it has a place for, except a property you have "+
+    "set on that tool yourself, which it keeps."));
+  const swRow=(key,withNone)=>{
+    const row=tpEl("div","tp-swatches");
+    if(withNone){ const b=tpEl("button","tp-sw tp-none"+((D.fillOp||0)<=0?" on":"")); b.type="button"; b.title="No fill";
+      b.onclick=()=>tpApply("fillOp",0); row.appendChild(b); }
+    TP_COLORS.forEach(c=>{ const b=tpEl("button","tp-sw"+(String(D[key]||"").toLowerCase()===c.v?" on":"")+(c.v==="#ffffff"?" tp-white":""));
+      b.type="button"; b.style.background=c.v; b.title=c.n;
+      b.onclick=()=>{ tpApply(key,c.v); if(key==="fill"&&(D.fillOp||0)<=0)tpApply("fillOp",1); }; row.appendChild(b); });
+    const more=tpEl("button","tp-sw tp-more","…"); more.type="button"; more.title="Any other colour";
+    more.onclick=e=>{ e.stopPropagation(); tpPicker(more,D[key]||"#ffffff",v=>tpApply(key,v)); };
+    row.appendChild(more);
+    return row;
+  };
+  const s1=tpSection("Line and ink",true);
+  s1._body.appendChild(tpRow("Colour",swRow("col",false)));
+  s1._body.appendChild(tpRow("Opacity",tpSlider({min:0,max:100,step:1,value:Math.round((D.colOp!=null?D.colOp:1)*100),
+    ticks:[25,50,75],ramp:true,choices:[0,10,25,50,75,90,100],suffix:"%",onInput:v=>tpApply("colOp",v/100)})));
+  s1._body.appendChild(tpRow("Weight",tpSlider({min:0.1,max:50,step:0.05,value:D.sw||1.5,ticks:TP_WIDTH_TICKS,
+    choices:[0.25,0.5,0.75,1,1.5,2,3,4,6,8,12,24,50],suffix:"pt",log:true,onInput:v=>tpApply("sw",v)})));
+  s1._body.appendChild(tpRow("Style",tpChoice(TP_DASHES.map(d=>({k:d.k,t:d.t,draw:b=>tpMiniLine(b,(svg,NS)=>{
+    const l=document.createElementNS(NS,"line"); l.setAttribute("x1","4"); l.setAttribute("y1","10"); l.setAttribute("x2","36"); l.setAttribute("y2","10");
+    l.setAttribute("stroke","currentColor"); l.setAttribute("stroke-width","2");
+    const dd=dashCss({dash:d.k},2,1); if(dd)l.setAttribute("stroke-dasharray",dd);
+    if(d.k==="dot"||d.k==="dashdot"||d.k==="dashdotdot")l.setAttribute("stroke-linecap","round");
+    svg.appendChild(l); })})), D.dash||"solid", k=>tpApply("dash",k), "tp-lines")));
+  s1._body.appendChild(tpRow("Corners",tpChoice(JOIN_KINDS.map(j=>({k:j.v,t:j.t,label:j.t})),D.join||"sharp",k=>tpApply("join",k),"tp-joins")));
+  { const n=tpSlider({min:0.2,max:4,step:0.01,value:Math.max(0.2,Math.min(4,D.leSz||1)),
+      ticks:[0.42,0.68,1,1.5,2,3],choices:[0.25,0.42,0.5,0.68,0.85,1,1.25,1.5,2,2.5,3,4],
+      suffix:"\u00d7",log:true,onInput:v=>tpApply("leSz",Math.round(v*100)/100)});
+    s1._body.appendChild(tpRow("Arrow tip",n)); }
+  pop.appendChild(s1);
+  const s2=tpSection("Fill",true);
+  s2._body.appendChild(tpRow("Fill",swRow("fill",true)));
+  s2._body.appendChild(tpRow("Opacity",tpSlider({min:0,max:100,step:1,value:Math.round((D.fillOp!=null?D.fillOp:1)*100),
+    ticks:[25,50,75],ramp:true,choices:[0,10,25,50,75,90,100],suffix:"%",onInput:v=>tpApply("fillOp",v/100)})));
+  s2._body.appendChild(tpRow("Text ground",swRow("bg",false)));
+  pop.appendChild(s2);
+  const s3=tpSection("Text",true);
+  s3._body.appendChild(tpRow("Font",tpFontPicker(D.font||"arial",k=>tpApply("font",k))));
+  s3._body.appendChild(tpRow("Size",tpSlider({min:2,max:64,step:0.5,value:D.size||8,ticks:TP_SIZE_TICKS,
+    choices:[2,2.5,3,4,5,6,7,8,9,10,12,14,16,20,28,42,64],suffix:"pt",log:true,onInput:v=>tpApply("size",v)})));
+  s3._body.appendChild(tpRow("Letter spacing",tpSlider({min:-1,max:6,step:0.05,value:(D.lsp!=null?D.lsp:0),
+    choices:[-1,-0.5,-0.25,0,0.25,0.5,1,1.5,2,3,4,6],ticks:[-1,0,1,2,4,6],suffix:"pt",onInput:v=>tpApply("lsp",v)})));
+  s3._body.appendChild(tpRow("Line spacing",tpSlider({min:0.6,max:3,step:0.05,value:(D.lnsp!=null?D.lnsp:1),
+    choices:[0.6,0.8,0.9,1,1.15,1.25,1.5,1.75,2,2.5,3],ticks:[0.6,1,1.5,2,3],suffix:"\u00d7",onInput:v=>tpApply("lnsp",v)})));
+  const hl=tpEl("div","tp-switchrow"); hl.appendChild(tpEl("div","tp-swl","Highlight mode"));
+  const hsw=tpEl("button","tp-switch"+(D.hl?" on":"")); hsw.type="button"; hsw.onclick=()=>tpApply("hl",!D.hl);
+  hl.appendChild(hsw); s3._body.appendChild(hl);
+  pop.appendChild(s3);
+  /* what Apply will do, said before it is pressed */
+  let nOvr=0; Object.keys(MA_OVR).forEach(t=>{ nOvr+=Object.keys(MA_OVR[t]||{}).length; });
+  const foot=tpEl("div","tp-deffoot");
+  const go=tpEl("button","tp-defapply","Apply to all tools"); go.type="button";
+  go.title="Every tool takes these defaults wherever it has the property — except what you have set on a tool yourself";
+  go.onclick=()=>{ const r=maApplyDefaults();
+    toast(r.nSet?("Defaults applied — "+r.nTools+" tool"+(r.nTools===1?"":"s")+" updated"+(r.nKept?(", "+r.nKept+" of your own settings kept"):"")):
+                 ("Every tool already matches"+(r.nKept?(" — "+r.nKept+" of your own settings kept"):"")));
+    setStatus("Default properties applied"+(r.nKept?(" — "+r.nKept+" setting"+(r.nKept===1?"":"s")+" you made on a tool kept as you set "+(r.nKept===1?"it":"them")):"")+".");
+    tpRender(); };
+  foot.appendChild(go);
+  const note=tpEl("div","tp-defovr",nOvr?(nOvr+" setting"+(nOvr===1?"":"s")+" made on individual tools will be kept."):
+    "No tool has a setting of its own yet.");
+  if(nOvr){ const clr=tpEl("button","tp-defclr","Let every tool follow the defaults"); clr.type="button";
+    clr.title="Forget the settings made on individual tools, so the next Apply sets every tool";
+    clr.onclick=()=>{ MA_OVR={}; maOverridesSave(); tpRender(); toast("Every tool will follow the defaults on the next Apply"); };
+    note.appendChild(clr); }
+  foot.appendChild(note);
+  pop.appendChild(foot);
+}
+function tpOpenDefaults(anchor){ maDefaultsSeed(); tpOpen("defaults",anchor,false); }
 /* ---- open, close, position ---------------------------------------------------------------------- */
 let _tpAnchor=null;
 /* 6fe — WHILE SOMETHING IS BEING DRAGGED, DO NOT REBUILD THE PANEL. `tpBuild` replaces the whole card,
@@ -1613,8 +1776,10 @@ function tpPlace(){
 window.addEventListener("resize",()=>{ try{ tpPlace(); }catch(e){} });
 function tpOpen(tool,anchor,forSelection){
   const pop=document.getElementById("toolpop"); if(!pop)return;
-  if(maToolOf(tool)!==TP_TOOL)_tpScroll=0;   /* a different tool opens at the top of its own panel */
-  TP_TOOL=maToolOf(tool);
+  const _tid=tool==="defaults"?"defaults":maToolOf(tool);   /* v74 — the defaults panel is not a tool */
+  if(_tid!==TP_TOOL)_tpScroll=0;   /* a different tool opens at the top of its own panel */
+  TP_TOOL=_tid;
+  if(_tid==="defaults")forSelection=false;
   TP_SEL=!!forSelection&&!!tpHasSel();     /* 6fe — bound to what is selected, or to the tool */
   TP_KIND=null;
   if(TP_SEL&&tpSelKinds().size>1)TP_TOOL="mixed";   /* v71 — several kinds: the panel over all of them */
@@ -1623,7 +1788,7 @@ function tpOpen(tool,anchor,forSelection){
   _tpHistAt=0;                             /* a fresh gesture gets its own undo step */
   /* editing the TOOL means the hidden inputs have to be showing that tool — otherwise a change would
      be remembered against whichever tool was last picked. Editing a SELECTION leaves them alone. */
-  if(!TP_SEL)maShowToolStyle(TP_TOOL);
+  if(!TP_SEL&&TP_TOOL!=="defaults")maShowToolStyle(TP_TOOL);
   pop.removeAttribute("hidden"); pop.setAttribute("aria-hidden","false");
   tpBuild(); tpPlace();
   document.querySelectorAll("#tools .tool").forEach(b=>b.classList.toggle("popped",!TP_SEL&&b.dataset.mode===TP_TOOL));
@@ -1633,13 +1798,13 @@ function tpClose(){
   document.querySelectorAll(".tp-vmenu").forEach(n=>n.remove());
   const pop=document.getElementById("toolpop"); if(!pop)return;
   TP_SEL=false; TP_KIND=null;
-  if(TP_TOOL==="mixed")TP_TOOL="redline";
+  if(TP_TOOL==="mixed"||TP_TOOL==="defaults")TP_TOOL="redline";
   pop.setAttribute("hidden",""); pop.setAttribute("aria-hidden","true");
   document.querySelectorAll("#tools .tool.popped").forEach(b=>b.classList.remove("popped"));
 }
 function tpToggle(tool,anchor){
   const pop=document.getElementById("toolpop");
-  if(!pop.hasAttribute("hidden")&&!TP_SEL&&TP_TOOL===maToolOf(tool))tpClose();
+  if(!pop.hasAttribute("hidden")&&!TP_SEL&&TP_TOOL===(tool==="defaults"?"defaults":maToolOf(tool)))tpClose();
   else tpOpen(tool,anchor);
 }
 

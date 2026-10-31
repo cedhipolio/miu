@@ -1628,32 +1628,76 @@ function skEdWire(a,cv,g,ov,orig,bar,bar2,stage,box,foot,wrap,ring,opts){
     autoBusy=true;
     setStatus("Auto: reading the picture…");
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r())));
-    let res=null;
-    try{ res=skAutoSolid(g,cv,autoMinLen); } finally { autoBusy=false; }
-    if(!res){ setStatus("Nothing to work on — the picture is empty.",true); return; }
-    /* 6mg — it looked and did not find one. The picture is left exactly as it was: there is nothing
-       to undo and nothing to discover afterwards. */
-    if(res.noSubject){
+    let res=null, knocked=null, subj=null;
+    const before=g.getImageData(0,0,cv.width,cv.height);
+    /* v74 — AN OPAQUE PICTURE. Ced: "it's not even working at all now." A plain capture, a pasted
+       photo or a scan has no transparency: every pixel is "ink" to a test on alpha, so Auto saw one
+       solid block and answered "the picture is empty". The paper is found first — the colour the
+       picture's own border is made of — and taken out, softly at the edges, so what is left is the
+       drawing on its own, exactly what a Redline capture already is. */
+    try{ knocked=skKnockPaper(g,cv); }catch(e){ knocked=null; }
+    /* v74 — THE SUBJECT FIRST. Practised on Ced's NOH5197 Final Construction Drawings: an RRH, an
+       antenna, a domed SPD, a shelter, each snapped the way a snapshot is taken — the thing in the
+       middle, with the mount rails, leaders, dimension and sector labels of the sheet round it. The
+       contour test found "no subject" in five of six (half the ink was the sheet's), and the sixth
+       came back with a filled tower behind the shelter. Now the thing in the middle is found first, as
+       a body — the dense or enclosed ink, with the hairlines that cross it opened away — and what
+       does not belong to it goes; then the old pass tidies what is left and fills it. */
+    /* order: the line pass first, while it can still see each line whole; then the subject; then
+       the fill, which is the subject's whole silhouette */
+    try{ res=skAutoSolid(g,cv,autoMinLen); }catch(e){ res=null; }
+    let nLine=0;
+    if(res&&!res.noSubject&&res.nStray){ skMaskErase(g,cv,res.stray); nLine=res.nStray; }
+    try{ subj=skAutoSubject(g,cv); }catch(e){ subj=null; }
+    autoBusy=false;
+    const nSub=(subj&&subj.nDrop)||0;
+    if(nSub)skMaskErase(g,cv,subj.drop);
+    if(!subj&&(!res||res.noSubject)){
+      try{ g.putImageData(before,0,0); }catch(e){}
+      if(!res){ setStatus("Nothing to work on — the picture is empty.",true); return; }
       setStatus("Auto found no subject in this picture — only "+res.keptPct+"% of the ink hangs "+
                 "together as one closed shape, so taking the rest would have taken the picture. "+
                 "Nothing was changed. Auto is for a drawing with a shape in it; for a region of "+
                 "text or a loose sketch, use Erase line or the Wand.",true);
       return;
     }
-    push();
-    if(res.nStray)skMaskErase(g,cv,res.stray);
-    skMaskFill(g,cv,res.solid,fillCol);
+    /* v74 — Ced: "make sure the shape is filled with white. it seems the tool only makes white portions
+       inside some concrete shapes." The fill was only the spaces the drawing CLOSES; an RRH drawn as
+       fins, ports and brackets closes few of them, so it came out spotted. The ground now goes behind
+       the subject's whole silhouette — everything inside its outer edge — as well as every closed
+       space the line pass found. */
+    const W=cv.width, H=cv.height;
+    const ink=skInkMask(g,cv,40);
+    /* the silhouette is drawn from the subject's ink inside its bodies only, so a stub of a passing line
+       outside them cannot close a corner of paper into the fill; its edge then follows the ink, not the
+       coarse body */
+    let silInk=ink;
+    if(subj&&subj.body){ silInk=new Uint8Array(ink.length); for(let p=0;p<ink.length;p++)if(ink[p]&&subj.body[p])silInk[p]=1; }
+    const sil=skSilhouette(silInk,W,H,(subj&&subj.r1)||3);
+    const solid=new Uint8Array(W*H); let nFill=0;
+    /* v74 — Ced, next: "now there are extra white colors on areas not enclosed." With a subject found,
+       the ground goes only where its BODY is — the closed silhouette, held to the bodies the subject
+       stage found plus a stroke — so a triangle of paper boxed in by a stub of leader, or the blocky
+       edge of the coarse pass, is never painted. Without one, the closed spaces the line pass found. */
+    for(let p=0;p<solid.length;p++){
+      if(subj&&subj.body){ if(sil[p])solid[p]=1; }
+      else if(res&&!res.noSubject&&res.solid[p]&&sil[p])solid[p]=1;
+      if(solid[p]&&!ink[p])nFill++;
+    }
+    res={nStray:nLine+nSub, nFill, nClosed:(res&&res.nClosed)||0, nEnds:(res&&res.nEnds)||0};
+    { /* the undo step holds the picture as it was before Auto touched it */
+      const now=g.getImageData(0,0,W,H);
+      g.putImageData(before,0,0); push(); g.putImageData(now,0,0); }
+    skMaskFill(g,cv,solid,fillCol);
     mask=null; skMaskShow(ov,mask); say();
     picChanged=true;
     /* What it did, and — because this is the part that matters — what it could not. A line that
        enters the shape on one side and leaves on the other has both ends on the contour, which
        makes it part of a closed loop, which makes it indistinguishable from a real member by the
        only test there is. Saying so beats letting Ced wonder whether the tool missed it. */
-    setStatus("Auto: "+res.nStray.toLocaleString()+" pixels of outside line removed and "+
-              res.nFill.toLocaleString()+" filled behind the drawing — the shape was found by its "+
-              res.nClosed.toLocaleString()+" closed lines against "+res.nEnds.toLocaleString()+
-              " with a free end. A line that crosses right through the shape is left: it closes on "+
-              "the outline at both ends, so take it with Erase line. Undo puts all of this back.");
+    setStatus("Auto: "+res.nStray.toLocaleString()+" pixels of the sheet taken off the subject and "+
+              res.nFill.toLocaleString()+" filled behind it. Anything it left, Erase line or the eraser "+
+              "takes in a stroke; Undo puts all of this back.");
   },false,"Find the subject, take the stray lines off it, and fill it behind the ink — one press","auto");
   bWand   =mkb(gSel,"Wand",edIco("wand"),()=>setTool("wand"),false,
                "Click a space to select it — Shift adds another","wand");
@@ -3510,6 +3554,48 @@ const AUTO_MIN_KEEP=0.50;
 /* v71 — every pixel of `m` that lies on a straight run at least `minLen` long, at any angle. Sampled on
    a copy fattened by one pixel, so a line a degree off the sampling angle still reads as one run, and
    a gap of `gap` pixels is stepped over, so a dashed or broken line counts as the line it is. */
+/* v74 — WORDS. Ced: "improve the auto in edit photo, it is still not working well." On a real
+   capture v71 ran a leader's straight run on into its label, and then took the label's letters as
+   what the line left behind: "NEW PIPE (TYP)" and "CROSSOVER PLATE" went with their leaders. A letter
+   is a small piece of ink with another small piece beside it on the same line; those pieces are found
+   here, and nothing Auto does to lines ever takes them. */
+function skWordMask(ink,w,h,gmax){
+  const lab=new Int32Array(w*h), q=new Int32Array(w*h), comps=[];
+  let id=0;
+  for(let p0=0;p0<ink.length;p0++){
+    if(!ink[p0]||lab[p0])continue;
+    id++; let qh=0,qt=0; q[qt++]=p0; lab[p0]=id;
+    let x0=w,y0=h,x1=0,y1=0, big=false;
+    while(qh<qt){
+      const p=q[qh++], x=p%w, y=(p/w)|0;
+      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+      if(x1-x0>gmax||y1-y0>gmax)big=true;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue; const X=x+dx, Y=y+dy;
+        if(X<0||Y<0||X>=w||Y>=h)continue; const k=Y*w+X;
+        if(ink[k]&&!lab[k]){ lab[k]=id; q[qt++]=k; }
+      }
+    }
+    comps.push(big?null:{id,x0,y0,x1,y1,cx:(x0+x1)/2,cy:(y0+y1)/2,h:y1-y0+1,w:x1-x0+1});
+  }
+  const small=comps.filter(Boolean);
+  /* a glyph is at least 3px tall and has a neighbour of its own size beside it on the same line */
+  const keep=new Set();
+  small.sort((a,b)=>a.cx-b.cx);
+  for(let i=0;i<small.length;i++){
+    const a=small[i]; if(a.h<3)continue;
+    for(let j=i+1;j<small.length;j++){
+      const b=small[j];
+      if(b.x0-a.x1>Math.max(a.h,b.h)*1.2)break;
+      if(b.h<3)continue;
+      const hh=Math.max(a.h,b.h);
+      if(Math.abs(a.cy-b.cy)<=hh*0.6&&Math.min(a.h,b.h)>=hh*0.35){ keep.add(a.id); keep.add(b.id); }
+    }
+  }
+  const out=new Uint8Array(w*h);
+  if(keep.size)for(let p=0;p<lab.length;p++)if(lab[p]&&keep.has(lab[p]))out[p]=1;
+  return out;
+}
 function skStraightRuns(m,w,h,minLen,gap,along,dOff){
   dOff=dOff||6;
   /* measured on a copy no bigger than a quarter-million pixels — a cell is ink if any pixel under it
@@ -3678,6 +3764,7 @@ function skAutoSolid(g,cv,minLen,rounds){
     /* and it goes round: a line taken can open a region that only it was closing — two grid lines and
        a leader boxing in a corner of paper — and the next look sees the leader for what it is */
     const origStray=Uint8Array.from(strayAll), takenAll=new Uint8Array(w*h);
+    const words=skMaskGrow(skWordMask(ink0,w,h,Math.max(14,Math.min(90,Math.round(Math.max(2*L*f,24)*0.45)))),w,h,1);
     const seen=new Uint8Array(w*h), q=new Int32Array(w*h);
     for(let round=0;round<3;round++){
     const live=new Uint8Array(w*h);
@@ -3694,7 +3781,7 @@ function skAutoSolid(g,cv,minLen,rounds){
     for(let p=0;p<cand.length;p++)if(cand[p]&&dist[p]>=rT)seed[p]=1;
     const bodyOut=skMaskGrow(seed,w,h,Math.ceil(rT));
     const thin=new Uint8Array(w*h);
-    for(let p=0;p<cand.length;p++)if(cand[p]&&!bodyOut[p])thin[p]=1;
+    for(let p=0;p<cand.length;p++)if(cand[p]&&!bodyOut[p]&&!words[p])thin[p]=1;
     const minLen=Math.max(2*L*f, 24);
     /* v71 — Ced: "auto edit is not getting rid of lines outside the concrete shapes anymore." v66
        judged each thin piece WHOLE, and on a real sheet the lines outside a shape are never alone: a
@@ -3752,7 +3839,8 @@ function skAutoSolid(g,cv,minLen,rounds){
             if(left[k]&&!seen2[k]){ seen2[k]=1; q[qt++]=k; }
           }
         }
-        if(touchTake&&!touchKeep&&qt<=nMax&&Math.max(x1-x0,y1-y0)<=span)pieces.push(q.slice(0,qt));
+        let isWord=false; for(let k=0;k<qt;k++)if(words[q[k]]){ isWord=true; break; }
+        if(!isWord&&touchTake&&!touchKeep&&qt<=nMax&&Math.max(x1-x0,y1-y0)<=span)pieces.push(q.slice(0,qt));
       }
       /* a piece with other ink of its own kind right beside it is a letter in a word, not a tick */
       const dc=new Uint8Array(w*h); pieces.forEach(P=>P.forEach(k=>{ dc[k]=1; }));
@@ -3762,7 +3850,7 @@ function skAutoSolid(g,cv,minLen,rounds){
       pieces.forEach(P=>{ if(!P.some(k=>nearOther[k]))P.forEach(k=>{ take[k]=1; }); });
     }
     let fresh=0;
-    for(let p=0;p<take.length;p++)if(take[p]&&cand[p]&&!takenAll[p]){ takenAll[p]=1; fresh++; }
+    for(let p=0;p<take.length;p++)if(take[p]&&cand[p]&&!takenAll[p]&&!words[p]){ takenAll[p]=1; fresh++; }
     if(!fresh)break;
     }
     }
@@ -4057,6 +4145,165 @@ function skMaskShow(ov,mask){
 /* 6gq — EVERYTHING THE WAND HAS SELECTED, TAKEN OUT. The mask is drawn once onto a canvas of its own
    and composited with `destination-out`, for the same reason the restore brush does it that way: the
    composite modes that reach outside the shape being drawn must be applied in a single operation. */
+/* v74 — take the paper out of an opaque picture. Returns the original pixels (for undo) when it did,
+   null when the picture already has transparency or no clear paper colour. */
+/* v74 — THE THING IN THE MIDDLE. Returns {drop, nDrop}: the ink that does not belong to the subject, or
+   null when no body can be found (a loose sketch, a page of text) — then Auto carries on as before.
+   Worked on a copy no bigger than AUTO_MAX_PX; the answer is brought back to full size against the
+   real ink. Every size is in units of the picture's own line weight or of the picture itself. */
+function skAutoSubject(g,cv){
+  const w=cv.width,h=cv.height;
+  const ink0=skInkMask(g,cv,40);
+  let total=0; for(let p=0;p<ink0.length;p++)total+=ink0[p];
+  if(total<50)return null;
+  const f=Math.max(1,Math.ceil(Math.sqrt((w*h)/AUTO_MAX_PX)));
+  const sm=(f>1)?skMaskShrink(ink0,w,h,f):{m:ink0,w:w,h:h};
+  const ws=sm.w, hs=sm.h, ink=sm.m;
+  const grow=(m,r)=>skMaskGrow(m,ws,hs,r);
+  const inv=m=>{ const o=new Uint8Array(m.length); for(let p=0;p<m.length;p++)o[p]=m[p]?0:1; return o; };
+  const erode=(m,r)=>inv(grow(inv(m),r));
+  /* the drawing's line weight, off its ridges (the lower third: lines, not masses) */
+  const dist=skDistIn(ink,ws,hs), rv=[];
+  for(let y=1;y<hs-1;y++)for(let x=1;x<ws-1;x++){ const p=y*ws+x, d=dist[p]; if(d<0.9)continue;
+    if(d>=dist[p-1]&&d>=dist[p+1]&&d>=dist[p-ws]&&d>=dist[p+ws])rv.push(d); }
+  rv.sort((a,b)=>a-b);
+  const lw=rv.length?Math.max(1.5,2*rv[Math.floor(rv.length*0.33)]):2;
+  const R1=Math.max(2,Math.round(lw*2));
+  /* close the detail into masses, fill what is enclosed, then open away everything thinner than a
+     body: hairlines, rails, leaders and the shafts of arrows */
+  const filled=skMaskHoles(erode(grow(ink,R1),R1),ws,hs);
+  const R2=Math.max(3,Math.round(Math.min(ws,hs)*0.03));
+  const opened=grow(erode(filled,R2),R2);
+  /* the bodies */
+  const lab=new Int32Array(ws*hs), q=new Int32Array(ws*hs), blobs=[];
+  for(let p0=0;p0<opened.length;p0++){
+    if(!opened[p0]||lab[p0])continue;
+    const id=blobs.length+1; let qh=0,qt=0; q[qt++]=p0; lab[p0]=id;
+    let sx=0,sy=0,edge=false;
+    while(qh<qt){ const p=q[qh++], x=p%ws, y=(p/ws)|0; sx+=x; sy+=y;
+      if(x===0||y===0||x===ws-1||y===hs-1)edge=true;
+      if(x>0&&opened[p-1]&&!lab[p-1]){ lab[p-1]=id; q[qt++]=p-1; }
+      if(x<ws-1&&opened[p+1]&&!lab[p+1]){ lab[p+1]=id; q[qt++]=p+1; }
+      if(y>0&&opened[p-ws]&&!lab[p-ws]){ lab[p-ws]=id; q[qt++]=p-ws; }
+      if(y<hs-1&&opened[p+ws]&&!lab[p+ws]){ lab[p+ws]=id; q[qt++]=p+ws; } }
+    blobs.push({id, area:qt, cx:sx/qt, cy:sy/qt, edge});
+  }
+  if(!blobs.length)return null;
+  const diag=Math.hypot(ws,hs);
+  let main=null;
+  blobs.forEach(b=>{ const d=Math.hypot(b.cx-ws/2,b.cy-hs/2)/diag;
+    b.score=b.area*Math.max(0.05,1-2*d); if(!main||b.score>main.score)main=b; });
+  if(main.area<ws*hs*0.004)return null;
+  /* with it: whatever body touches it, and any other body of a like size that is whole in the frame */
+  const mainM=new Uint8Array(ws*hs); for(let p=0;p<lab.length;p++)if(lab[p]===main.id)mainM[p]=1;
+  const near=grow(mainM,R2), take=new Set([main.id]);
+  for(let p=0;p<lab.length;p++)if(lab[p]&&near[p])take.add(lab[p]);
+  blobs.forEach(b=>{ if(!b.edge&&b.area>=main.area*0.35)take.add(b.id); });
+  const sel=new Uint8Array(ws*hs); for(let p=0;p<lab.length;p++)if(lab[p]&&take.has(lab[p]))sel[p]=1;
+  /* two reaches: the body's own edge (`near`), and how far an appendage may stand off it (`far`). A
+     piece of ink joined to the body that ends inside `far` — a handle, a bolt, a row of fins, a tab —
+     is the subject's and stays whole. A piece that runs on past `far` is a line passing by — a leader,
+     a rail, a dimension — and only its part inside `near` stays. */
+  const nearR=Math.round(R2*0.6+R1), farR=Math.max(3*R2,Math.round(Math.min(ws,hs)*0.12));
+  const up=m=>(f>1)?skMaskBlow(m,ws,hs,f,w,h):m;
+  const nearUp=up(grow(sel,nearR)), farUp=up(grow(sel,farR)), selUp=up(sel);
+  const farEdge=up((()=>{ const a=grow(sel,farR), b=grow(sel,Math.max(1,farR-2)); const o=new Uint8Array(ws*hs);
+    for(let p=0;p<o.length;p++)if(a[p]&&!b[p])o[p]=1; return o; })());
+  const inF=new Uint8Array(w*h); for(let p=0;p<ink0.length;p++)if(ink0[p]&&farUp[p])inF[p]=1;
+  const keep=new Uint8Array(w*h), Q=new Int32Array(w*h);
+  const flood=(seedOk,allowed,mark)=>{ let qh=0,qt=0;
+    for(let p=0;p<allowed.length;p++)if(allowed[p]&&seedOk(p)&&!mark[p]){ mark[p]=1; Q[qt++]=p; }
+    while(qh<qt){ const p=Q[qh++], x=p%w, y=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
+        const X=x+dx, Y=y+dy; if(X<0||Y<0||X>=w||Y>=h)continue; const k=Y*w+X;
+        if(allowed[k]&&!mark[k]){ mark[k]=1; Q[qt++]=k; } } } };
+  /* the body and its edge */
+  const inN=new Uint8Array(w*h); for(let p=0;p<ink0.length;p++)if(ink0[p]&&nearUp[p])inN[p]=1;
+  flood(p=>selUp[p],inN,keep);
+  /* the appendages: each piece outside the edge, joined to what is kept, and never reaching `far` */
+  const out=new Uint8Array(w*h); for(let p=0;p<inF.length;p++)if(inF[p]&&!keep[p]&&!nearUp[p])out[p]=1;
+  const keepNear=skMaskGrow(keep,w,h,1), seen=new Uint8Array(w*h);
+  const lines=[];
+  for(let p0=0;p0<out.length;p0++){
+    if(!out[p0]||seen[p0])continue;
+    let qh=0,qt=0; Q[qt++]=p0; seen[p0]=1; let joined=false, reaches=false;
+    while(qh<qt){ const p=Q[qh++], x=p%w, y=(p/w)|0;
+      if(keepNear[p])joined=true; if(farEdge[p])reaches=true;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
+        const X=x+dx, Y=y+dy; if(X<0||Y<0||X>=w||Y>=h)continue; const k=Y*w+X;
+        if(out[k]&&!seen[k]){ seen[k]=1; Q[qt++]=k; } } }
+    if(joined&&!reaches)for(let k=0;k<qt;k++)keep[Q[k]]=1;
+    else if(joined&&reaches&&qt>=8){
+      /* a line passing by: where it is straight, its run on into the edge zone goes too, up to the body */
+      let mx=0,my=0; for(let k=0;k<qt;k++){ mx+=Q[k]%w; my+=(Q[k]/w)|0; } mx/=qt; my/=qt;
+      let sxx=0,syy=0,sxy=0;
+      for(let k=0;k<qt;k++){ const x=Q[k]%w-mx, y=((Q[k]/w)|0)-my; sxx+=x*x; syy+=y*y; sxy+=x*y; }
+      const tr=sxx+syy, det=sxx*syy-sxy*sxy, l1=tr/2+Math.sqrt(Math.max(0,tr*tr/4-det)), l2=tr-l1;
+      if(l1>0&&l2/l1<0.01){
+        const ang=0.5*Math.atan2(2*sxy,sxx-syy), ux=Math.cos(ang), uy=Math.sin(ang);
+        lines.push({mx,my,ux,uy,hw:Math.max(1.5,Math.sqrt(l2/qt)*2+1.5)});
+      }
+    }
+  }
+  if(lines.length){
+    for(let p=0;p<keep.length;p++){
+      if(!keep[p]||selUp[p])continue;
+      const x=p%w-0, y=(p/w)|0;
+      for(const L of lines){ const dx=x-L.mx, dy=y-L.my; if(Math.abs(-L.uy*dx+L.ux*dy)<=L.hw){ keep[p]=0; break; } }
+    }
+  }
+  let nKeep=0; for(let p=0;p<keep.length;p++)nKeep+=keep[p];
+  /* a subject is most of a snapshot or a good part of it; a small shape among a field of loose ink
+     is not what the picture is of, and Auto leaves that picture to the passes after this one */
+  if(nKeep<total*0.25)return null;
+  /* and a page of words is not a subject: when most of what would stay is lettering, stand aside */
+  { const wm=skWordMask(ink0,w,h,Math.max(14,Math.round(Math.min(w,h)*0.06)));
+    let nw=0; for(let p=0;p<keep.length;p++)if(keep[p]&&wm[p])nw++;
+    if(nw>nKeep*0.4)return null; }
+  /* everything else goes, its soft edges with it — but not the soft edge of what stays */
+  const any=skInkMask(g,cv,0), keepEdge=skMaskGrow(keep,w,h,1);
+  const drop=new Uint8Array(w*h); let nDrop=0;
+  for(let p=0;p<any.length;p++)if(any[p]&&!keepEdge[p]){ drop[p]=1; if(ink0[p])nDrop++; }
+  /* where a fill may go: the bodies themselves and a stroke round them — never a corner of paper that a
+     stub of leader happens to box in */
+  const body=skMaskGrow(selUp,w,h,Math.max(2,Math.round(R1*f)));
+  if(nDrop<total*0.005)return {drop, nDrop:0, r1:Math.max(2,Math.round(lw*f*1.2)), body};
+  return {drop, nDrop, r1:Math.max(2,Math.round(lw*f*1.2)), body};
+}
+/* v74 — the whole of a subject: its ink closed over its own small gaps, then everything enclosed */
+function skSilhouette(ink,w,h,r){
+  r=Math.max(2,Math.round(r));
+  const g=skMaskGrow(ink,w,h,r);
+  const inv=new Uint8Array(w*h); for(let p=0;p<g.length;p++)inv[p]=g[p]?0:1;
+  const back=skMaskGrow(inv,w,h,r);
+  const closed=new Uint8Array(w*h); for(let p=0;p<back.length;p++)closed[p]=back[p]?0:1;
+  for(let p=0;p<ink.length;p++)if(ink[p])closed[p]=1;
+  return skMaskHoles(closed,w,h);
+}
+function skKnockPaper(g,cv){
+  const w=cv.width,h=cv.height; if(!w||!h)return null;
+  const im=g.getImageData(0,0,w,h), d=im.data;
+  let opaque=0; for(let k=3;k<d.length;k+=4)if(d[k]>200)opaque++;
+  if(opaque<0.9*w*h)return null;
+  /* the paper: the commonest colour round the border, in 16-level bins */
+  const bins=new Map();
+  const vote=p=>{ const k=p*4; const key=(d[k]>>4)<<8|(d[k+1]>>4)<<4|(d[k+2]>>4);
+    const b=bins.get(key)||{n:0,r:0,g:0,b:0}; b.n++; b.r+=d[k]; b.g+=d[k+1]; b.b+=d[k+2]; bins.set(key,b); };
+  for(let x=0;x<w;x++){ vote(x); vote((h-1)*w+x); }
+  for(let y=0;y<h;y++){ vote(y*w); vote(y*w+w-1); }
+  let best=null; bins.forEach(b=>{ if(!best||b.n>best.n)best=b; });
+  if(!best||best.n<0.4*(2*w+2*h))return null;
+  const pr=best.r/best.n, pg=best.g/best.n, pb=best.b/best.n;
+  const orig=new ImageData(new Uint8ClampedArray(d),w,h);
+  const LO=18, HI=60;
+  for(let k=0;k<d.length;k+=4){
+    const dd=Math.max(Math.abs(d[k]-pr),Math.abs(d[k+1]-pg),Math.abs(d[k+2]-pb));
+    const a=dd<=LO?0:(dd>=HI?1:(dd-LO)/(HI-LO));
+    d[k+3]=Math.round(d[k+3]*a);
+  }
+  g.putImageData(im,0,0);
+  return orig;
+}
 function skMaskErase(g,cv,mask){
   const w=cv.width,h=cv.height;
   const t=document.createElement("canvas"); t.width=w; t.height=h;

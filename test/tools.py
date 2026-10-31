@@ -720,21 +720,21 @@ async def main():
         results.append({"tool": "Callout stub stays square-on", "ok": all(perp),
                         "why": f"{sum(1 for x in perp if x)}/{len(perp)} drags perpendicular"})
 
-        # ---------- 6fh: Ctrl squares a RESIZE too ----------
+        # ---------- 6fh: a RESIZE can be squared too — v74: Shift does it (Ctrl grows from the centre) ----------
         await clear()
         await pick("box")
         await drag(*at(0.20, 0.30), *at(0.46, 0.38))
         await page.mouse.click(*at(0.33, 0.34))
         await page.wait_for_timeout(250)
         hx, hy = at(0.46, 0.38)
-        await page.keyboard.down("Control")
+        await page.keyboard.down("Shift")
         await drag(hx, hy, hx + 70, hy + 10, steps=8)
-        await page.keyboard.up("Control")
+        await page.keyboard.up("Shift")
         sq = await page.evaluate(
             """()=>{const a=S.annos[0]; if(!a)return null;
                     const pg=document.querySelector('.page[data-idx="0"]');
                     return {w:+(a.nw*pg.offsetWidth).toFixed(1),h:+(a.nh*pg.offsetHeight).toFixed(1)};}""")
-        results.append({"tool": "Ctrl squares a resize", "ok": bool(sq) and abs(sq["w"] - sq["h"]) < 2,
+        results.append({"tool": "Shift squares a resize", "ok": bool(sq) and abs(sq["w"] - sq["h"]) < 2,
                         "why": f'{sq and sq["w"]} x {sq and sq["h"]} px'})
 
         # ---------- 6fh: a strike can never take an ending ----------
@@ -1707,14 +1707,15 @@ async def main():
                      tpOpen('arrow',document.querySelector('#tools .tool[data-mode="arrow"]'));
                      const pop=document.getElementById('toolpop');
                      const row=pop.querySelector('.tp-tips');
-                     out.chips=row?[...row.querySelectorAll('button')].map(b=>b.title):null;
-                     const big=row&&[...row.querySelectorAll('button')].find(b=>/Large/.test(b.title));
+                     /* v72 — the tips are a slider now; its ticks are the old sizes */
+                     out.chips=row?[...row.querySelectorAll('.tp-ticks span')].map(b=>b.textContent.trim()):null;
+                     const big=row&&[...row.querySelectorAll('.tp-ticks span')].find(b=>b.textContent.trim()==="1.5");
                      if(big)big.dispatchEvent(new MouseEvent('click',{bubbles:true}));
                      out.set=MA_TOOL_STYLES.arrow.leSz;
                      tpApply('leSz',1); tpClose();
                      return out; }""")
         ok = (tips["small"] < tips["medium"] < tips["large"] and tips["deflt"] == 1
-              and tips["zoomOk"] and tips["chips"] == ["Tiny", "Small", "Medium", "Large"]
+              and tips["zoomOk"] and tips["chips"] and "0.68" in tips["chips"] and "1.5" in tips["chips"]
               and tips["set"] == 1.5)
         results.append({"tool": "Tips come in four sizes", "ok": ok, "why": json.dumps(tips)})
 
@@ -2968,8 +2969,8 @@ async def main():
                      return new Promise(res=>setTimeout(()=>{
                        const pop=document.getElementById("toolpop");
                        const row=pop&&pop.querySelector(".tp-tips");
-                       const list=row?[...row.querySelectorAll("button")].map(b=>b.title):null;
-                       const t=row&&[...row.querySelectorAll("button")].find(b=>/Tiny/i.test(b.title));
+                       const list=row?[...row.querySelectorAll(".tp-ticks span")].map(b=>b.textContent.trim()):null;
+                       const t=row&&[...row.querySelectorAll(".tp-ticks span")].find(b=>b.textContent.trim()==="0.42");
                        if(t)t.dispatchEvent(new MouseEvent("click",{bubbles:true}));
                        setTimeout(()=>{ const set=MA_TOOL_STYLES.arrow.leSz;
                          tpApply("leSz",1); tpClose();
@@ -2977,7 +2978,7 @@ async def main():
                      },240)); }""")
         tiny["chips"] = chips["list"]; tiny["set"] = chips["set"]
         ok = (tiny["sizes"][0] == "Tiny" and tiny["rising"]
-              and tiny["chips"] and "Tiny" in tiny["chips"][0] and tiny["set"] < 0.5)
+              and tiny["chips"] and tiny["chips"][0] == "0.42" and tiny["set"] < 0.5)
         results.append({"tool": "A tinier arrowhead", "ok": ok, "why": json.dumps(tiny)})
 
         # ---------- 6gt — THE PICTURE EDITOR: LASSO AND ROTATE ----------

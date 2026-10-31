@@ -231,8 +231,8 @@
             <button class="tool" data-mode="arrow" title="Drag to draw an arrow — it points where you let go. Its head, style and pattern are under its ▾ (A)">↗ Arrow</button>
             <button class="tool" data-mode="dim" title="Drag along what you want measured — it comes out as a dimension: a red run with an arrow at each end and the length written on it. Set the drawing's scale, or measure it off a known dimension, under its ▾ (D)">↔ Length</button>
             <button class="tool" data-mode="poly" title="Click a corner at a time to draw a leader with bends; double-click, or press Enter, to finish. Each segment snaps straight the same way a line does (P)">⤳ Polyline</button>
-            <button class="tool" data-mode="box" title="Drag a box — stroke, fill, hatch and opacity come from its own ▾ properties. Hold Ctrl for a perfect square. You can type inside it (B)">▢ Box</button>
-            <button class="tool" data-mode="circle" title="Drag an ellipse — same properties as the box, under its own ▾. Hold Ctrl for a true circle (O)">◯ Circle</button>
+            <button class="tool" data-mode="box" title="Drag a box — stroke, fill, hatch and opacity come from its own ▾ properties. Hold Ctrl for a perfect square. Resizing: Ctrl grows it from its centre, Shift keeps it square. You can type inside it (B)">▢ Box</button>
+            <button class="tool" data-mode="circle" title="Drag an ellipse — same properties as the box, under its own ▾. Hold Ctrl for a true circle. Resizing: Ctrl grows it from its centre, Shift keeps it round (O)">◯ Circle</button>
             <button class="tool" data-mode="snapshot" title="Snapshot — drag a region of the sheet and it comes back as a redline of itself, pasted at the same size and at the resolution of what you selected. Its colour, frame and opacity are under its ▾, and Edit picture rubs it out, selects and fills it (Shift+S)">▣ Snapshot</button>
             <button class="tool" data-mode="crossout" title="Cross out — drag a box over anything and it is struck through with an X. The two strikes are grouped and behave like any other line (X)">⤫ Cross out</button>
           </div>
@@ -378,6 +378,7 @@
   <span class="ab-font" data-abfont></span>
   <button data-valign title="Vertical alignment — top, middle or bottom of the box" aria-label="Vertical alignment">⇳</button>
   <button data-wrapm title="Wrap — fill each line, or break between words" aria-label="Wrap">↵</button>
+  <button data-atip title="Arrowhead tip size of the leader" aria-label="Arrowhead tip size">◂▸</button>
   <span class="sep"></span>
   <button data-lay="front" title="Bring to front (above other redlines)">⤒</button>
   <button data-lay="back" title="Send to back (below other redlines)">⤓</button>
@@ -405,6 +406,8 @@
   <button data-llay="under" title="Toggle below / above the redlines">⇅</button>
   <span class="sep"></span>
   <button data-larrow="1" title="Arrowhead on / off — click again for a head at both ends">↗</button>
+  <!-- v72 — Ced: "make the arrowhead tip size … a slider … add this as well on mini tool bar of those tools" -->
+  <button data-ltip="1" title="Arrowhead tip size" aria-label="Arrowhead tip size">◂▸</button>
   <button data-lstyle="1" title="Give this stroke the current tool's properties — colour, thickness, style and endings">◐</button>
   <button class="delbtn" data-ldel="1" title="Delete this stroke (Del)" aria-label="Delete"><span class="delx">✕</span></button>
 </div>
