@@ -1980,7 +1980,7 @@ function maGroupSvg(rec,maxW,maxH,opts){
     const tx=(al==="center")?(x+w/2):(al==="right"?(x+w-2):(x+2));
     /* the block sits where the mark says it does — the top of a text box, the middle of a shape */
     const blockH=lead*lines.length;
-    const frac=(a.valign==="middle")?0.5:(a.valign==="bottom"?1:(shp?0.5:0));
+    const frac=(a.valign==="top")?0:(a.valign==="bottom"?1:0.5);   /* v75 — middle unless told, as on the sheet */
     const top=y+1+Math.max(0,h-blockH-2)*frac;
     lines.forEach((t,i)=>{
       put("text",{x:tx.toFixed(2), y:(top+lead*(i+1)-lead*0.26).toFixed(2),
@@ -2220,7 +2220,10 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("pointerdown",e=>{
   const p=$("#maPanel"); if(!p||!p.classList.contains("show"))return;
   if(e.target.closest&&(e.target.closest("#maPanel")||e.target.closest("#dlg")||
-                        e.target.closest(".sk-edit")||e.target.closest("#toolpop")))return;
+                        e.target.closest(".sk-edit")||e.target.closest("#toolpop")||
+                        /* v75 — the panel's own pop-ups live on <body>: the stamp's calendar and its font list */
+                        e.target.closest(".cop-cal")||e.target.closest(".tp-vmenu")||e.target.closest(".sb-menu")||
+                        e.target.closest(".tp-pick")))return;
   const b=e.target.closest&&e.target.closest("button");
   if(b&&/^(markupsBtn|stampBtn|miniAnalyze)$/.test(b.id||""))return;   /* 6kx */
   maPanelOpen(false);

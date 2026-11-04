@@ -272,5 +272,10 @@
   box-shadow:3px 3px 8px rgba(0,0,0,.18),-2px -2px 6px rgba(255,255,255,.55)}
 .tp-defapply:active{box-shadow:inset 2px 2px 5px rgba(0,0,0,.25)}
 .tp-defovr{color:var(--fp-muted);font-size:var(--fs-2,12px);line-height:1.4;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tp-defmake{appearance:none;border:0;border-radius:var(--r-md,10px);padding:9px 12px;cursor:pointer;
+  font:600 var(--fs-2,12px)/1 var(--sans,system-ui,sans-serif);color:var(--fp-ink,inherit);background:var(--fp-btn,rgba(127,127,127,.15));
+  box-shadow:3px 3px 8px rgba(0,0,0,.18),-2px -2px 6px rgba(255,255,255,.05)}
+.tp-defmake:active{box-shadow:inset 2px 2px 5px rgba(0,0,0,.25)}
+.tp-mkdef{align-items:flex-start}
 .tp-defclr{appearance:none;border:0;background:none;padding:0;cursor:pointer;color:var(--accent,#2f6fe0);
   font:inherit;text-decoration:underline}

@@ -298,6 +298,14 @@ function tpApply(key,value){
   if(TP_SEL&&tpHasSel())return tpApplySel(key,value);
   /* v74 — a property set on one tool is that tool's own from now on: Apply in the defaults leaves it */
   maMarkOverride(TP_TOOL,key);
+  /* v75 — the tool's own "None" is undone by a colour picked after it, as on a mark */
+  { const ts=MA_TOOL_STYLES[TP_TOOL]||{};
+    if(key==="col"&&ts.colOp!=null&&ts.colOp<=0){ MA_TOOL_STYLES[TP_TOOL]=Object.assign({},ts,{colOp:1}); }
+    if((key==="fill"||key==="bg")&&ts.fillOp!=null&&ts.fillOp<=0){
+      MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_STYLES[TP_TOOL],{fillOp:1});
+      try{ const was=(typeof MA_STYLE_TOOL!=="undefined")?MA_STYLE_TOOL:null;
+        if(!was||was===TP_TOOL){ const f=document.getElementById("c_fop"); if(f)f.value=100; } }catch(e){} }
+    if(key==="bg"&&ts.bgNone)MA_TOOL_STYLES[TP_TOOL]=Object.assign({},MA_TOOL_STYLES[TP_TOOL],{bgNone:false}); }
   const id=TP_FIELD_INPUT[key];
   if(id){
     const f=document.getElementById(id);
@@ -322,6 +330,25 @@ function tpApply(key,value){
   }
   tpRender();
 }
+/* v75 — a colour picked brings back the opacity "None" took away */
+function tpRevive(s,key){
+  const isCol=(key==="col"), isFill=(key==="fill"||key==="bg"||key==="patCol");
+  const fillOn=(key==="fillOp");
+  if(!isCol&&!isFill&&!fillOn&&key!=="bgNone")return;
+  const one=(o,isLine)=>{
+    if(!o)return;
+    if(isCol&&o.colOp!=null&&o.colOp<=0)o.colOp=1;
+    if(isFill&&key!=="patCol"&&o.fillOp!=null&&o.fillOp<=0)o.fillOp=1;
+    if(!isLine&&(key==="bg"||(fillOn&&o.fillOp>0)))o.bgNone=false;
+    /* a fill picked over a mixed selection is a text box's ground: show it */
+    if(!isLine&&key==="fill"&&tpIsMixed()&&o.kind!=="img"&&(TP_SPEC[tpKindOfMark(o,false)]||{}).form==="text")o.bgNone=false;
+    if(!isLine&&key==="bgNone"&&o.bgNone===false&&o.fillOp!=null&&o.fillOp<=0)o.fillOp=1;
+  };
+  (s.annos||[]).forEach(a=>one(a,false));
+  (s.lines||[]).forEach(l=>one(l,true));
+  /* a measurement's reading follows its run */
+  (s.lines||[]).forEach(l=>{ if(l.dimFor!=null)one((S.annos||[]).find(z=>z.id===l.dimFor),false); });
+}
 /* …and the same property straight onto what is selected, touching no tool. */
 function tpApplySel(key,value){
   const s=tpSelMarks(); if(!s.annos.length&&!s.lines.length)return;
@@ -331,7 +358,7 @@ function tpApplySel(key,value){
        a text box's ground and a shape's fill alike */
     s.annos.forEach(a=>{
       if(key==="fill"&&a.kind!=="img"&&(TP_SPEC[tpKindOfMark(a,false)]||{}).form==="text"){ a.bg=value; return; }
-      if(key==="fillOp"&&a.kind!=="img"&&(TP_SPEC[tpKindOfMark(a,false)]||{}).form==="text"){ a.bgNone=value<=0; return; }
+      if(key==="fillOp"&&a.kind!=="img"&&(TP_SPEC[tpKindOfMark(a,false)]||{}).form==="text"){ a.bgNone=value<=0; if(value>0)a.fillOp=value; return; }
       if(tpMixedTakes(a,false,key))a[key]=value; });
     s.lines.forEach(l=>{
       if(tpMixedTakes(l,true,key)||((key==="fill"||key==="fillOp")&&l.closed)){ l[key]=value; try{syncArrowFlag(l);}catch(e){} } });
@@ -339,6 +366,11 @@ function tpApplySel(key,value){
   if(TP_ANNO_KEYS.indexOf(key)>=0)s.annos.forEach(a=>{ a[key]=value; });
   if(TP_LINE_KEYS.indexOf(key)>=0)s.lines.forEach(l=>{ l[key]=value; try{syncArrowFlag(l);}catch(e){} });
   }
+  /* v75 — Ced: "some color changes on border and fill are not working well on most tools." Picking
+     "None" sets the opacity to 0 — and every colour picked after it was written faithfully and drawn
+     at 0%, so the swatches looked dead. A colour picked is a colour wanted: it brings its own opacity
+     back (and a text box's ground back on) wherever that had been switched off. */
+  tpRevive(s,key);
   /* 6gg — a measurement's READING is part of the measurement: a text property set on the run (its
      colour, its size, its face) lands on the label the run owns, so restyling a length restyles the
      whole of it rather than half. */
@@ -1145,7 +1177,11 @@ function tpBuild(){
     if(spec.form==="callout"||spec.form==="text"||spec.form==="shape"){
       sec2._body.appendChild(tpRow("Vertical",tpChoice(
         [{k:"top",t:"Top",label:"⤒"},{k:"middle",t:"Middle",label:"⇳"},{k:"bottom",t:"Bottom",label:"⤓"}],
-        st.valign||(spec.form==="text"?"top":"middle"), k=>tpSet("valign",k))));
+        /* v75 — Ced: "please fix vertical alignment on text tool. it is not correct." A text box with no
+           alignment of its own sits in the MIDDLE (6kc/6l3, screen and file alike) — but this row said
+           Top, so the panel disagreed with the sheet and a press on Top looked like it did nothing
+           the first time and the wrong thing after. It reads the same answer the bar and the box do. */
+        (TP_SEL&&typeof valignOf==="function")?valignOf(tpSelMarks().annos[0]||null):(st.valign||"middle"), k=>tpSet("valign",k))));
     }
     /* 6ht — and HOW a line breaks when the box is too narrow for it: per character, the way a printed
        column fills, or between words, the way prose reads. */
@@ -1412,7 +1448,48 @@ function tpBuild(){
 /* 6g8 — the header stays put and everything under it scrolls, so the tool's name and the ✕ are
    always reachable however long the panel is. Everything above was appended flat; it is gathered
    into the scroller here, in one pass, rather than threaded through forty appends. */
+/* v75 — Ced: "add Make Default Property in the properties tab of each tool." The panel's foot: what
+   this tool (or the selected mark) is set to becomes the DEFAULT PROPERTIES — every property it has a
+   place for. As with the defaults panel itself, nothing else changes until Apply; the toast offers it. */
+/* v75 — Ced: "add Make Default Property in the properties tab of each tool."
+   v76 — Ced: "make default properties button is not applying the properties to the tool in redline
+   tools." v75 only wrote the DEFAULTS and left Apply to a second click — and that Apply, by the
+   defaults' own rule, skipped every property a tool had ever been given in its own panel, which on a
+   tool in daily use is most of them. So the press did nothing anyone could see. The button now says
+   what it does and does it in one press: this tool's (or this mark's) properties become the defaults
+   AND every tool that has a place for them takes them now — over an older setting made on that tool,
+   because this press is the newer, more deliberate choice. One undo of the tool styles is kept so a
+   mistaken press can be put back from the toast's note. The ⚙ panel's own Apply still keeps
+   per-tool settings, as it always has. */
+function tpMakeDefaultFoot(pop){
+  if(TP_TOOL==="mixed"||TP_TOOL==="defaults")return;
+  const keys=maDefaultKeysOf(TP_TOOL); if(!keys.length)return;
+  const foot=tpEl("div","tp-deffoot tp-mkdef");
+  const b=tpEl("button","tp-defmake","Make default for all tools"); b.type="button";
+  b.title="Give every tool "+(TP_SEL?"this mark's":"this tool's")+" colour, weight, fill and text, and keep them as the default properties";
+  b.onclick=()=>{
+    const st=tpStyle(), D=maDefaultsSeed();
+    const before=JSON.stringify({st:MA_TOOL_STYLES, d:MA_DEFAULTS, o:MA_OVR});
+    const used=[];
+    keys.forEach(k=>{ if(st[k]!=null){ D[k]=st[k]; used.push(k); } });
+    maDefaultsSave();
+    const r=maApplyDefaults(used);
+    tpRender();
+    const name=TP_SEL?"the selected mark":((TP_SPEC[TP_TOOL]||{}).title||TP_TOOL);
+    toast(r.nSet?("Every tool now uses "+name+"'s properties — "+r.nTools+" tool"+(r.nTools===1?"":"s")+" updated"):"Every tool already uses these properties");
+    setStatus("Default properties set from "+name+" and given to every tool that has them. Marks already on the sheet are unchanged.");
+    const f2=document.querySelector("#toolpop .tp-mkdef"); if(!f2)return;
+    const un=tpEl("button","tp-defclr","Undo"); un.type="button"; un.title="Put every tool back as it was before this press";
+    un.onclick=()=>{ try{ const o=JSON.parse(before); Object.keys(MA_TOOL_STYLES).forEach(k=>delete MA_TOOL_STYLES[k]);
+        Object.assign(MA_TOOL_STYLES,o.st); MA_DEFAULTS=o.d; MA_OVR=o.o||{}; maSaveToolStyles(); maDefaultsSave(); maOverridesSave();
+        maShowToolStyle(S.mode); tpRender(); toast("Tools put back"); }catch(e){} };
+    f2.appendChild(un);
+  };
+  foot.appendChild(b);
+  pop.appendChild(foot);
+}
 function tpFinish(pop){
+  try{ tpMakeDefaultFoot(pop); }catch(e){}
   const head0=pop.firstChild;
   /* v71 — the kind tabs stay pinned under the header with it */
   const head=(head0&&head0.nextSibling&&head0.nextSibling.classList&&head0.nextSibling.classList.contains("tp-kinds"))
@@ -1638,8 +1715,9 @@ function maDefaultsSeed(){
     font:r.font||"arial", size:r.size||8, lsp:0, lnsp:1, hl:false};
   return MA_DEFAULTS;
 }
-function maApplyDefaults(){
+function maApplyDefaults(forceKeys){
   const D=maDefaultsSeed();
+  const force=new Set(forceKeys||[]);
   const tools=new Set(Object.keys(MA_TOOL_DEFAULTS).concat(Object.keys(MA_TOOL_STYLES||{})));
   let nTools=0, nKept=0, nSet=0;
   tools.forEach(t=>{
@@ -1648,13 +1726,18 @@ function maApplyDefaults(){
     let touched=false;
     keys.forEach(k=>{
       if(D[k]===undefined)return;
-      if(MA_OVR[t]&&MA_OVR[t][k]){ nKept++; return; }
+      if(MA_OVR[t]&&MA_OVR[t][k]){
+        if(!force.has(k)){ nKept++; return; }
+        delete MA_OVR[t][k];            /* v76 — "make this the default" outranks an older per-tool choice */
+      }
       if(st[k]!==D[k]){ st[k]=D[k]; nSet++; touched=true; }
     });
     if(touched)nTools++;
   });
   maSaveToolStyles();
+  if(force.size)maOverridesSave();
   try{ maShowToolStyle(S.mode); }catch(e){}
+  try{ document.querySelectorAll("#tools .tool[data-mode]").forEach(b=>{ const st=MA_TOOL_STYLES[b.dataset.mode]; if(st&&st.col)b.style.setProperty("--tool-col",st.col); }); }catch(e){}
   return {nTools,nSet,nKept};
 }
 function tpBuildDefaults(pop){

@@ -65,6 +65,17 @@ const COP_RED=(typeof MA_RED!=="undefined")?MA_RED:"#fa3237";
 const COP_FONT_TITLE="arialbold";
 const COP_FONT_ROW="arialbold";
 const COP_FONT=COP_FONT_ROW;                /* the default where a face is not named */
+/* v75 — Ced: "please allow users to change the font of stamp. add the fonts on the tool in there."
+   The stamp's face is the card's own field now, one face for all four lines, any face the tool
+   offers; Arial Bold is still where it starts. */
+function copFace(f){
+  const k=f&&f.font;
+  if(!(k&&typeof MARK_FONTS!=="undefined"&&MARK_FONTS[k]))return COP_FONT_ROW;
+  /* v75 — Ced: "in stamp, make sure its bold." Whatever face is picked, the stamp wears its bold. */
+  try{ const fam=tpFontFamOf(k), ital=/ital/.test(k.slice(fam.length));
+    const b=fam+(ital?"bolditalic":"bold"); if(MARK_FONTS[b])return b; if(MARK_FONTS[fam+"bold"])return fam+"bold"; }catch(e){}
+  return k;
+}
 const COP_STATUSES=["REDLINED","AS-BUILT"];
 
 /* The calibration, in points on a letter page — see THE SIZE RULE above.
@@ -192,7 +203,7 @@ function copProgress(btn){
       if(!reduce){ mark.classList.remove("thump"); void mark.offsetWidth; mark.classList.add("thump"); } },
     done(label){ set(1,"\u2713 "+(label||"Done")); ov.classList.add("cop-progdone");
       return new Promise(r=>setTimeout(()=>{ ov.classList.add("cop-progout");
-        setTimeout(()=>{ ov.remove(); btn.classList.remove("cop-busy"); btn.removeAttribute("aria-busy"); r(); },reduce?0:260); },reduce?250:750)); }
+        setTimeout(()=>{ ov.remove(); btn.classList.remove("cop-busy"); btn.removeAttribute("aria-busy"); r(); },reduce?0:200); },reduce?200:550)); }
   };
 }
 function copStampAnim(){ /* kept for older callers — the progress bar replaced the stamper */ }
@@ -208,11 +219,12 @@ function copPrefs(){
     gc:typeof o.gc==="string"?o.gc:"",
     poc:typeof o.poc==="string"?o.poc:"",
     place:["auto","tr","tl","br","bl"].indexOf(o.place)>=0?o.place:"auto",
+    font:(typeof o.font==="string"&&o.font)?o.font:COP_FONT_ROW,
     date:copToday()                         /* never remembered — today is what today means */
   };
 }
 function copSavePrefs(f){
-  try{ localStorage.setItem(COP_PREF,JSON.stringify({status:f.status,gc:f.gc,poc:f.poc,place:f.place})); }
+  try{ localStorage.setItem(COP_PREF,JSON.stringify({status:f.status,gc:f.gc,poc:f.poc,place:f.place,font:f.font})); }
   catch(e){}
 }
 
@@ -323,6 +335,7 @@ function copBase(sizePt,L,fontKey){
    `kOverride` re-derives the whole thing at a different scale, which is how a stamp the user has
    resized by hand keeps the size they gave it when its text changes. */
 function copSpec(f,pi,kOverride){
+  const FT=copFace(f), FR=FT;
   const k=(kOverride>0)?kOverride:copScale(pi);
   const rowPt=COP_ROW_PT*k, titlePt=rowPt*COP_TITLE_R;
   const title=String(f.status||"REDLINED");
@@ -335,10 +348,10 @@ function copSpec(f,pi,kOverride){
   /* The rhythm is set by a CAP, not by each line's own ink: "JOSHUA BEAVER" and "10/6/2026" must sit
      on the same pitch as "TSC CONSTRUCTION LLC" whatever letters they happen to contain, or a row of
      digits would ride higher than the row above it. */
-  const capT=copGlyphInk("H",titlePt,COP_FONT_TITLE).asc;
-  const capR=copGlyphInk("H",rowPt,COP_FONT_ROW).asc;
+  const capT=copGlyphInk("H",titlePt,FT).asc;
+  const capR=copGlyphInk("H",rowPt,FR).asc;
   /* the one thing read off the real text: how far the bottom row drops below its baseline */
-  const descLast=copGlyphInk(rows[rows.length-1],rowPt,COP_FONT_ROW).desc;
+  const descLast=copGlyphInk(rows[rows.length-1],rowPt,FR).desc;
 
   /* BASELINES, measured down from the top of the box. Caps have no descender, so a line's ink runs
      from `baseline - cap` to `baseline`, which is what makes the margins come out even. */
@@ -351,8 +364,8 @@ function copSpec(f,pi,kOverride){
   /* LENGTH is the one dimension that moves: the box is cut to its longest line, with the same margin
      either side. The advance width is used rather than the ink width, so a glyph with a wide right
      bearing cannot be the one thing that touches the rule. */
-  let longest=copTextPt(title,titlePt,pi,COP_FONT_TITLE);
-  rows.forEach(r=>{ longest=Math.max(longest,copTextPt(r,rowPt,pi,COP_FONT_ROW)); });
+  let longest=copTextPt(title,titlePt,pi,FT);
+  rows.forEach(r=>{ longest=Math.max(longest,copTextPt(r,rowPt,pi,FR)); });
   let w=longest+(border+M)*2;
   if(w<h*1.15)w=h*1.15;                       /* a floor that only stops the box turning portrait */
 
@@ -361,9 +374,9 @@ function copSpec(f,pi,kOverride){
      uses for every other piece of text in this tool. */
   const titleL=titlePt*COP_LINE, rowL=rowPt*COP_LINE;
   const lineTop=(baseline,sizePt,L,face)=>baseline-(L-copBase(sizePt,L,face));
-  const top=[lineTop(base[0],titlePt,titleL,COP_FONT_TITLE)];
+  const top=[lineTop(base[0],titlePt,titleL,FT)];
   for(let i=0;i<rows.length;i++)
-    top.push(lineTop(base[i+1],rowPt,rowL,COP_FONT_ROW));
+    top.push(lineTop(base[i+1],rowPt,rowL,FR));
 
   return {
     k, w, h, border,
@@ -371,7 +384,7 @@ function copSpec(f,pi,kOverride){
     capT, capR, descLast, base,
     titlePt, rowPt, titleL, rowL,
     inner:Math.max(1,w-(border+M)*2),         /* the width every row box gets */
-    title, rows, top
+    title, rows, top, face:FT
   };
 }
 
@@ -393,7 +406,7 @@ function copRec(f,pi,kOverride){
     nx:0, ny:0, nw:nx(sp.w), nh:ny(sp.h),
     text:"", shape:"rect", maKind:"rect", copRole:"box",
     col:COP_RED, sw:sp.border, fill:"#ffffff", fillOp:1, colOp:1,
-    size:sp.rowPt, align:"center", font:COP_FONT_ROW,
+    size:sp.rowPt, align:"center", font:sp.face,
     manualW:true, wrap:false, nowrap:false, onCell:false, fullcell:false,
     under:false, lineNh:null, lines:1, group:1, z:1
   });
@@ -404,7 +417,7 @@ function copRec(f,pi,kOverride){
       nx:nx(sp.pad-COP_EDX), ny:ny(top-COP_EDY),
       nw:nx(sp.inner+COP_EDX*2), nh:ny(lineH+COP_EDY*2),
       text:String(text||""), maKind:"text", copRole:role,
-      col:COP_RED, colOp:1, bgNone:true, sw:0, size:sizePt, font:fontKey||COP_FONT_ROW,
+      col:COP_RED, colOp:1, bgNone:true, sw:0, size:sizePt, font:fontKey||sp.face,
       align:"left", alignSet:true,
       /* 6k4 — a stamp's line is ONE line. Without this the stylesheet's `break-all` folds the end of
          the longest row onto a second line the box is too short to show. */
@@ -412,10 +425,10 @@ function copRec(f,pi,kOverride){
       under:false, lineNh:null, lines:1, pLines:1, group:1, z:z
     });
   };
-  line(sp.title,sp.titlePt,sp.top[0],sp.titleL,"title",2,COP_FONT_TITLE);
-  line(sp.rows[0],sp.rowPt,sp.top[1],sp.rowL,"gc",3,COP_FONT_ROW);
-  line(sp.rows[1],sp.rowPt,sp.top[2],sp.rowL,"poc",4,COP_FONT_ROW);
-  line(sp.rows[2],sp.rowPt,sp.top[3],sp.rowL,"date",5,COP_FONT_ROW);
+  line(sp.title,sp.titlePt,sp.top[0],sp.titleL,"title",2,sp.face);
+  line(sp.rows[0],sp.rowPt,sp.top[1],sp.rowL,"gc",3,sp.face);
+  line(sp.rows[1],sp.rowPt,sp.top[2],sp.rowL,"poc",4,sp.face);
+  line(sp.rows[2],sp.rowPt,sp.top[3],sp.rowL,"date",5,sp.face);
 
   return {kind:"group", name:"COP stamp", pw:d.w, ph:d.h, annos, lines:[], _spec:sp};
 }
@@ -426,7 +439,24 @@ function copRec(f,pi,kOverride){
    because that is the space the old tool reasoned in and the space MIU's normalised coordinates
    already describe, so nothing has to be converted twice.
    --------------------------------------------------------------------------------------------- */
+/* v75 — Ced: "the stamping is too slow sometimes." Every page was rendered by pdf.js TWICE per press
+   (once for the header-band search at 1000px, once for the blank-space search at 950px), and again on
+   every later press. On a dense construction drawing one render is most of a second. Now one render
+   per page serves both searches (`_copRast`, the last two pages kept), and the spot each search
+   finds is remembered per page and stamp size (`P._copSpots`): the raster is the PDF's own page, which
+   no mark ever changes, so a second press on the same document places without rendering at all. */
+const _copRast=new Map();
 async function copRaster(pi,maxPx,cap){
+  maxPx=1000; cap=1.6;                    /* v75 — one resolution for both searches, so one render */
+  const P0=S.pages[pi];
+  const dd=copPageDims(pi), dk=dd.w.toFixed(1)+"x"+dd.h.toFixed(1);
+  const hit=_copRast.get(pi);
+  if(hit&&hit.page===(P0&&P0.page)&&hit.dk===dk)return hit.r;
+  const r=await copRaster0(pi,maxPx,cap);
+  if(r){ _copRast.set(pi,{page:P0&&P0.page,dk,r}); while(_copRast.size>2)_copRast.delete(_copRast.keys().next().value); }
+  return r;
+}
+async function copRaster0(pi,maxPx,cap){
   const P=S.pages[pi]; if(!P||!P.page)return null;
   const d=copPageDims(pi);
   const scale=Math.min(cap||1.6,(maxPx||1000)/Math.max(d.w,d.h));
@@ -673,12 +703,19 @@ async function copFindSpot(pi,sp,place){
   if(place==="auto"){
     const type=copDocType();
     const forced=(type==="RFDS");
-    try{
-      /* AUTO tries the header band first and falls through when the page has none — a missing band
-         is itself the signal that this is not an RFDS layout. RFDS forces it; CDs and MA skip it. */
-      if(forced||type==="Auto")spot=await copBandSpot(pi,sp.w,sp.h);
-      if(!spot)spot=await copOpenSpot(pi,sp.w,sp.h,forced);
-    }catch(e){ spot=null; }
+    const P=S.pages[pi];
+    const key=type+"|"+sp.w.toFixed(2)+"|"+sp.h.toFixed(2)+"|"+d.w.toFixed(1)+"x"+d.h.toFixed(1);
+    const memo=P&&P._copSpots&&P._copSpots.page===P.page?P._copSpots:null;
+    if(memo&&memo.m.has(key))spot=memo.m.get(key);
+    else{
+      try{
+        /* AUTO tries the header band first and falls through when the page has none — a missing band
+           is itself the signal that this is not an RFDS layout. RFDS forces it; CDs and MA skip it. */
+        if(forced||type==="Auto")spot=await copBandSpot(pi,sp.w,sp.h);
+        if(!spot)spot=await copOpenSpot(pi,sp.w,sp.h,forced);
+      }catch(e){ spot=null; }
+      if(P){ if(!memo)P._copSpots={page:P.page,m:new Map()}; P._copSpots.m.set(key,spot); }
+    }
   }
   if(!spot)spot=copCornerSpot(place==="auto"?"tr":place,sp.w,sp.h,pi);
   return {
@@ -741,7 +778,8 @@ function copReadStamp(gid){
     status:(p.title&&p.title.text)||"REDLINED",
     gc:(p.gc&&p.gc.text)||"",
     poc:(p.poc&&p.poc.text)||"",
-    date:(p.date&&p.date.text)||""
+    date:(p.date&&p.date.text)||"",
+    font:(p.title&&p.title.font)||COP_FONT_ROW
   };
 }
 
@@ -773,17 +811,17 @@ function copApplyTo(gid,f){
     a.text=String(text||"");
     a.size=sizePt;
     a.col=COP_RED;
-    a.font=fontKey||COP_FONT_ROW;
+    a.font=fontKey||sp.face;
     a.nx=x0+nx(sp.pad-COP_EDX);
     a.ny=y0+ny(top-COP_EDY);
     a.nw=nx(sp.inner+COP_EDX*2);
     a.nh=ny(lineH+COP_EDY*2);
     a.manualW=true; a.nowrap=true; a.wrap=false;
   };
-  put("title",sp.title,sp.titlePt,sp.top[0],sp.titleL,COP_FONT_TITLE);
-  put("gc",sp.rows[0],sp.rowPt,sp.top[1],sp.rowL,COP_FONT_ROW);
-  put("poc",sp.rows[1],sp.rowPt,sp.top[2],sp.rowL,COP_FONT_ROW);
-  put("date",sp.rows[2],sp.rowPt,sp.top[3],sp.rowL,COP_FONT_ROW);
+  put("title",sp.title,sp.titlePt,sp.top[0],sp.titleL,sp.face);
+  put("gc",sp.rows[0],sp.rowPt,sp.top[1],sp.rowL,sp.face);
+  put("poc",sp.rows[1],sp.rowPt,sp.top[2],sp.rowL,sp.face);
+  put("date",sp.rows[2],sp.rowPt,sp.top[3],sp.rowL,sp.face);
   return true;
 }
 
@@ -848,7 +886,11 @@ function copPaintPreview(host){
     box.appendChild(t);
   };
   /* the preview wears whatever face the page will use, so the two cannot disagree about weight */
-  const bT=(COP_FONT_TITLE==="arialbold"), bR=(COP_FONT_ROW==="arialbold");
+  /* v75 — and it wears the card's chosen face */
+  const _F=(typeof MARK_FONTS!=="undefined"&&MARK_FONTS[sp.face])||{};
+  box.style.fontFamily=_F.css||"Arial, sans-serif";
+  box.style.setProperty("--cop-pvw",_F.weight||"400"); box.style.fontStyle=_F.style||"normal";
+  const bT=false, bR=false;
   put(sp.title,sp.titlePt,sp.top[0],sp.titleL,bT);
   put(sp.rows[0],sp.rowPt,sp.top[1],sp.rowL,bR);
   put(sp.rows[1],sp.rowPt,sp.top[2],sp.rowL,bR);
@@ -930,6 +972,18 @@ function maRenderStampTab(body){
     cb.title="Pick the date from a calendar"; cb.setAttribute("aria-label","Pick the date from a calendar");
     dt.classList.add("cop-hascal"); dt.appendChild(cb);
     cb.addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); copCalendar(cb,dtIn); }); }
+
+  /* ---- font (v75) ---- */
+  const fo=document.createElement("div");
+  fo.className="ma-f cop-font";
+  fo.innerHTML=`<span>Font</span>`;
+  { const w=document.createElement('div'); w.appendChild(fo); sec.appendChild(w); }
+  const paintFont=()=>{ [...fo.querySelectorAll(".tp-fontpick,.cop-fontpick")].forEach(n=>n.remove());
+    let pk=null;
+    try{ pk=tpFontPicker(copFace(f),k=>{ f.font=k; touched(); paintFont(); }); }catch(e){ pk=null; }
+    if(pk){ pk.classList.add("cop-fontpick"); fo.appendChild(pk); }
+  };
+  paintFont();
 
   /* ---- placement ---- */
   const pl=document.createElement("label");
@@ -1058,7 +1112,9 @@ function maRenderStampTab(body){
     const prog=copProgress(go);
     const nAll=p.place.length+(p.update.length?1:0);
     /* a few pages stamp in a blink — each step gets a moment on the bar so the run can be followed */
-    const beat=()=>new Promise(r=>setTimeout(r,Math.max(40,Math.min(220,1400/Math.max(1,nAll)))));
+    /* v75 — one painted frame per page, nothing more: the bar keeps up with the work, never slows it */
+    const beat=()=>new Promise(r=>{ let done=false; const go=()=>{ if(!done){ done=true; r(); } };
+      try{ requestAnimationFrame(go); }catch(e){} setTimeout(go,30); });
     let placed=0;
     /* v72 — Ced: "stamping the tool should be one step, not each page. so undo and redo should not
        one page per undo, it should be instant." Every page's placement went through `historyBatch`,
@@ -1067,7 +1123,7 @@ function maRenderStampTab(body){
     pushHistory();
     _histBatch++; window._maBulk=true;
     try{
-      const now={status:stSel.value, gc:f.gc, poc:f.poc, date:dtIn.value.trim()||copToday()};
+      const now={status:stSel.value, gc:f.gc, poc:f.poc, date:dtIn.value.trim()||copToday(), font:copFace(f)};
       if(p.update.length){ prog.step(0,nAll,"stamps"); p.update.forEach(g=>copApplyTo(g,now)); await beat(); }
       let k=p.update.length?1:0;
       for(const pi of p.place){

@@ -296,8 +296,18 @@ svg.rotguide .rg-lift{fill:rgba(18,104,209,.10);stroke:rgba(18,104,209,.35);stro
 .cop-pv{position:relative;background:#fff;border:1px solid #fa3237;border-radius:0;
   transform-origin:top left;box-sizing:border-box}
 .cop-pv-l{position:absolute;white-space:nowrap;color:#fa3237;
-  font-family:Arial,Helvetica,"Liberation Sans",sans-serif;font-weight:400}
+  font-family:inherit;font-weight:var(--cop-pvw,700)}
 .cop-pv-l.b{font-weight:700}
+.cop-pv{font-family:Arial,Helvetica,"Liberation Sans",sans-serif}
+#maPanel .cop-font{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+#maPanel .cop-font{margin:0 0 9px}
+#maPanel .cop-font > span{flex:1 0 100%;display:block;font-size:var(--fs-2);letter-spacing:.07em;text-transform:uppercase;color:var(--mp-dim,var(--faint));margin:0 0 -3px 1px}
+#maPanel .cop-font .cop-fontpick{justify-content:space-between;text-align:left}
+#maPanel .cop-font .cop-fontpick{flex:1 1 auto;min-width:0}
+#maPanel .cop-boldbtn{flex:0 0 auto;width:34px;height:32px;border:0;border-radius:var(--r-md,8px);cursor:pointer;
+  font:800 14px/1 Arial,sans-serif;color:var(--mp-ink,var(--ink));background:var(--mp-raise,rgba(127,127,127,.15));
+  box-shadow:2px 2px 5px var(--mp-lo,rgba(0,0,0,.35)),-2px -2px 5px var(--mp-hi,rgba(255,255,255,.05))}
+#maPanel .cop-boldbtn.on{color:#fff;background:#d33c3f;box-shadow:inset 2px 2px 4px rgba(0,0,0,.35)}
 .cop-pv-cap{font-size:10px;letter-spacing:.04em;color:#cfd4da;text-transform:none}
 .cop-other{margin-top:5px}
 

@@ -9893,7 +9893,9 @@ document.addEventListener("keydown",e=>{ if((e.key==="Delete"||e.key==="Backspac
   if(bg)bg.onclick=()=>{
     if(S.sel==null)return;
     const a=S.annos.find(z=>z.id===S.sel); if(!a)return;
-    pushHistory(); a.bgNone=!a.bgNone; layoutAnnos();
+    pushHistory(); a.bgNone=!a.bgNone;
+    if(!a.bgNone&&a.fillOp!=null&&a.fillOp<=0)a.fillOp=1;   /* v75 — "on" means a ground you can see */
+    layoutAnnos();
     setStatus(a.bgNone?"No ground — the page reads through this mark.":"Ground on — this mark hides what is under it.");
   };
   const st=bar.querySelector("[data-style]");
@@ -9925,6 +9927,8 @@ function abSyncText(){
      a picture has no text to align, size or ground and no tool style to take. */
   bar.querySelectorAll("[data-al],[data-fs],[data-bgoff],[data-style]").forEach(n=>n.classList.toggle("ab-off",!texty));
   /* and a divider never stands at either end of a run of hidden controls */
+  /* v75 — the outline thickness, on a mark that has an outline */
+  { const sb=bar.querySelector("[data-asw]"); if(sb)sb.hidden=!(a&&a.kind!=="img"&&isShape(a)); }
   { let seen=false, pendingSep=null;
     [...bar.children].forEach(n=>{
       if(n.classList.contains("sep")){ n.classList.add("ab-off"); if(seen)pendingSep=n; seen=false; return; }
@@ -10023,7 +10027,7 @@ function tipRebar(){
 function tipPopClose(){
   let had=false;
   document.querySelectorAll(".tip-pop").forEach(n=>{ had=true; try{ n._off&&n._off(); }catch(e){} n.remove(); });
-  document.querySelectorAll("[data-ltip].on,[data-atip].on").forEach(b=>b.classList.remove("on"));
+  document.querySelectorAll("[data-ltip].on,[data-atip].on,[data-lsw].on,[data-asw].on").forEach(b=>b.classList.remove("on"));
   if(had)tipRebar();
 }
 /* v72b — Ced: "make sure the slider is not in the way of the redline … follow the neumorphism … make
@@ -10067,11 +10071,68 @@ function tipPopOpen(anchor){
   setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
   box._off=()=>document.removeEventListener("pointerdown",away,true);
 }
+/* =================================================================================================
+   v75 — THE THICKNESS, ON THE BAR. Ced: "Also allow line thickness to be edited on the mini toolbar."
+   The same inline slider as the tip size, in the bar's own style, writing `sw` — the weight the
+   properties panel writes — live as it is dragged, one undo step per drag. On a stroke it is the
+   stroke's weight; on a shape or a callout it is the outline's (and a callout's leader follows).
+   ================================================================================================= */
+function swTargetsOfSel(){
+  const out=[];
+  if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); if(l)out.push(l); }
+  else if(S.sel!=null){ const a=S.annos.find(x=>x.id===S.sel);
+    if(a&&a.kind!=="img"&&isShape(a)){ out.push(a);
+      try{ const l=maCalloutLeaderOf(a); if(l)out.push(l); }catch(e){} } }
+  return out;
+}
+function swPopOpen(anchor){
+  tipPopClose();
+  const ts=swTargetsOfSel();
+  if(!ts.length)return;
+  const now=(ts[0].sw!=null?ts[0].sw:markSw(ts[0]));
+  const box=document.createElement("span"); box.className="tip-pop tip-inline sw-pop"; box.setAttribute("role","group");
+  box.setAttribute("aria-label","Line thickness");
+  const rng=document.createElement("input"); rng.type="range"; rng.min="0"; rng.max="1000"; rng.step="1";
+  rng.setAttribute("aria-label","Line thickness");
+  /* log scale, as in the panel: 0.25pt and 50pt are both within reach */
+  const LO=Math.log(0.1), HI=Math.log(50);
+  const toV=r=>{ const v=Math.exp(LO+(HI-LO)*(r/1000)); return v<2?Math.round(v*20)/20:(v<10?Math.round(v*4)/4:Math.round(v)); };
+  const toR=v=>Math.round((Math.log(Math.max(0.1,Math.min(50,v)))-LO)/(HI-LO)*1000);
+  rng.value=String(toR(now));
+  const fill=()=>rng.style.setProperty("--fill",(+rng.value/10)+"%");
+  fill();
+  const val=document.createElement("span"); val.className="tip-v"; val.textContent=(+now).toFixed(now<2?2:1).replace(/\.?0+$/,"")+"pt";
+  let pushed=false;
+  const apply=()=>{
+    const v=toV(+rng.value);
+    if(!pushed){ try{ pushHistory(); }catch(e){} pushed=true; }
+    swTargetsOfSel().forEach(o=>{ o.sw=v; });
+    val.textContent=String(v)+"pt"; fill();
+    layoutAnnos(); drawAllLines();
+  };
+  rng.addEventListener("input",apply);
+  rng.addEventListener("change",()=>{ pushed=false; try{ autosave(); }catch(e){} });
+  rng.addEventListener("keydown",e=>{ e.stopPropagation(); if(e.key==="Escape")tipPopClose(); });
+  box.appendChild(rng); box.appendChild(val);
+  anchor.after(box);
+  anchor.classList.add("on");
+  tipRebar();
+  const bar=anchor.closest("#linebar,#annobar");
+  const away=e=>{ if(!box.contains(e.target)&&e.target!==anchor&&!(bar&&bar.contains(e.target)))tipPopClose(); };
+  setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
+  box._off=()=>document.removeEventListener("pointerdown",away,true);
+}
+(function(){
+  const lb=$("#linebar").querySelector("[data-lsw]");
+  if(lb)lb.onclick=e=>{ e.stopPropagation(); const open=!!document.querySelector(".sw-pop"); tipPopClose(); if(!open)swPopOpen(lb); };
+  const ab=$("#annobar")&&$("#annobar").querySelector("[data-asw]");
+  if(ab)ab.onclick=e=>{ e.stopPropagation(); const open=!!document.querySelector(".sw-pop"); tipPopClose(); if(!open)swPopOpen(ab); };
+})();
 (function(){
   const lb=$("#linebar").querySelector("[data-ltip]");
-  if(lb)lb.onclick=e=>{ e.stopPropagation(); if(document.querySelector(".tip-pop"))tipPopClose(); else tipPopOpen(lb); };
+  if(lb)lb.onclick=e=>{ e.stopPropagation(); const open=!!document.querySelector(".tip-pop:not(.sw-pop)"); tipPopClose(); if(!open)tipPopOpen(lb); };
   const ab=$("#annobar")&&$("#annobar").querySelector("[data-atip]");
-  if(ab)ab.onclick=e=>{ e.stopPropagation(); if(document.querySelector(".tip-pop"))tipPopClose(); else tipPopOpen(ab); };
+  if(ab)ab.onclick=e=>{ e.stopPropagation(); const open=!!document.querySelector(".tip-pop:not(.sw-pop)"); tipPopClose(); if(!open)tipPopOpen(ab); };
 })();
 /* And the tool's properties applied to it, for a stroke drawn before you settled on the colour. */
 (function(){
@@ -11858,6 +11919,16 @@ async function exportPdf(){
       /* the mark's centre, still on screen — the placement below works from the centre because that
          is the one point a rotation leaves alone */
       const cnx=(a.nx*W+boxW/2)/W, cny=(a.ny*H-topAdj+boxH/2)/H;
+      /* v75 — Ced: "texts on textboxes with smaller height than the text size, the texts are not being
+         shown as full." On screen a text box's words overflow it (6kf) — up, down or both, by its
+         vertical alignment — but the file drew them into an appearance the size of the BOX, and a
+         viewer clips an appearance to its BBox: a box shorter than one line came out as three red
+         specks. The appearance now grows by exactly the overflow the screen shows, on the side the
+         screen shows it, and the box's own ground and rule stay where the box is. */
+      const _freeOv=isFreeBox(a), _blk0=lineH*nL;
+      let ovTop=0, ovBot=0;
+      if(_freeOv&&_blk0>boxH+0.01){ const ex=_blk0-boxH, f=vAlignFrac(a,freeVAlignDflt(a)); ovTop=ex*f; ovBot=ex*(1-f); }
+      const BH=boxH+ovTop+ovBot;
       /* A mark with no ground paints none: the drawing underneath reads through it. A mark with one
          paints it first, which is what hides the printed value a correction replaces. */
       /* 6f6 — the ground can be part-transparent, and the ink has its own opacity too; both need a
@@ -11866,11 +11937,11 @@ async function exportPdf(){
       if(gOp<1)gsT.GSg=alphaGs(gOp);
       if(tOp<1)gsT.GSc=ctx.register(ctx.obj({Type:"ExtGState", ca:tOp, CA:tOp}));
       if(a.hl)gsT.GSh=ctx.register(ctx.obj({Type:"ExtGState", BM:PDFName.of("Multiply")}));
-      let ops=a.bgNone?"":`q ${a.hl?"/GSh gs ":""}${gOp<1?"/GSg gs ":""}${bg[0]} ${bg[1]} ${bg[2]} rg 0 0 ${boxW} ${boxH} re f Q\n`;
+      let ops=a.bgNone?"":`q ${a.hl?"/GSh gs ":""}${gOp<1?"/GSg gs ":""}${bg[0]} ${bg[1]} ${bg[2]} rg 0 ${ovBot.toFixed(3)} ${boxW} ${boxH} re f Q\n`;
       /* A box mark is a ruled frame: the fill above is its ground, this is its rule. Drawn inset by
          half the stroke so the whole line lands inside the annotation's own rectangle — a stroke
          centred on the edge would be clipped in half by the appearance stream's bounding box. */
-      if(a.box)ops+=`q ${col[0]} ${col[1]} ${col[2]} RG 1 w 0.5 0.5 ${(boxW-1).toFixed(2)} ${(boxH-1).toFixed(2)} re S Q\n`;
+      if(a.box)ops+=`q ${col[0]} ${col[1]} ${col[2]} RG 1 w 0.5 ${(0.5+ovBot).toFixed(2)} ${(boxW-1).toFixed(2)} ${(boxH-1).toFixed(2)} re S Q\n`;
       ops+=`q ${a.hl?"/GSh gs ":""}${tOp<1?"/GSc gs ":""}BT /TR ${size} Tf ${col[0]} ${col[1]} ${col[2]} rg\n`;
       if(lsp)ops+=`${lsp.toFixed(3)} Tc\n`;
       /* 6hi — WHERE THE BLOCK SITS IN THE BOX, and it is the screen that decides.
@@ -11884,7 +11955,7 @@ async function exportPdf(){
       const freeV=isFreeBox(a);
       const blockH=lineH*nL, padV=freeV?0:1;   /* 6kn */
       const top=freeV
-        ? (padV+(Math.max(0,boxH-blockH-padV*2))*vAlignFrac(a,freeVAlignDflt(a)))   /* 6l3 */
+        ? (padV+(Math.max(0,BH-blockH-padV*2))*vAlignFrac(a,freeVAlignDflt(a)))   /* 6l3 · v75 BH */
         : 2;
       const decoT=[];
       let hzNow=100;
@@ -11913,7 +11984,7 @@ async function exportPdf(){
            `vAlignFrac` is the same rule the grid on screen is given, so the two cannot part. */
         const ty=(!freeV&&a.nh&&!a.wrap&&nL<=1)
           ? (boxH-size*0.78)/2
-          : boxH-top-(li+1)*lineH+cssBaseline(size,fk,lineH);
+          : BH-top-(li+1)*lineH+cssBaseline(size,fk,lineH);
         ops+=`1 0 0 1 ${tx.toFixed(2)} ${ty.toFixed(2)} Tm (${pdfEsc(ln)}) Tj\n`;
         if(a.uline)decoT.push([tx,ty-size*0.14,tx+tw]);
         if(a.strikeout)decoT.push([tx,ty+size*0.28,tx+tw]);
@@ -11929,10 +12000,13 @@ async function exportPdf(){
       const phi=(spinOf(pg)-(a.rot||0))%360;
       const th=phi*Math.PI/180, cth=Math.cos(th), sth=Math.sin(th);
       const ctr=toPdf(pg,cnx,cny);
-      const rw=Math.abs(boxW*cth)+Math.abs(boxH*sth), rh=Math.abs(boxW*sth)+Math.abs(boxH*cth);
+      /* v75 — the grown appearance's centre sits off the box's by half the difference of the two
+         overflows, along the box's own up, turned with it */
+      { const dy=(ovTop-ovBot)/2; if(dy){ ctr.x+=-sth*dy; ctr.y+=cth*dy; } }
+      const rw=Math.abs(boxW*cth)+Math.abs(BH*sth), rh=Math.abs(boxW*sth)+Math.abs(BH*cth);
       const rect=[ctr.x-rw/2, ctr.y-rh/2, ctr.x+rw/2, ctr.y+rh/2];
       const matrix=phi?[cth,sth,-sth,cth,0,0]:null;
-      const ap=appearance(boxW,boxH,ops,fnt,matrix,Object.keys(gsT).length?gsT:null);
+      const ap=appearance(boxW,BH,ops,fnt,matrix,Object.keys(gsT).length?gsT:null);
       const da=`${col[0]} ${col[1]} ${col[2]} rg /TR ${size} Tf`;
       /* Stamp our own fingerprint on the annotation. The subject payload can be stripped by another
          editor or a re-save; these keys travel with the annotation itself, so a file that has been through
@@ -11959,7 +12033,7 @@ async function exportPdf(){
         MARL:PDFString.of("1"), MAData:PDFString.of(_tagEnc(tag)),
         AP: ctx.obj({ N: ap })
       };
-      emitMark(a,pg,ap,rect,matrix,boxW,boxH,_dict);
+      emitMark(a,pg,ap,rect,matrix,boxW,BH,_dict);
     };
     /* A STROKE — a strike, a free line, an arrow or a many-cornered leader — written as the PDF
        annotation that matches its shape: `/Line` for two bare points, `/PolyLine` for anything with a

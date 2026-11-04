@@ -549,6 +549,14 @@ html .sk-edit .sk-edb.sk-edok svg, html .sk-edit .sk-edb.sk-edok .sk-edg{color:#
     background:var(--accent,#3b82f6); box-shadow:2px 2px 4px var(--emb-lo,rgba(0,0,0,.5)), -2px -2px 4px var(--emb-hi,rgba(255,255,255,.08))}
   .tip-inline .tip-v{min-width:40px; text-align:right; font-variant-numeric:tabular-nums}
 
+  /* v75 — the thickness button: three rules of growing weight */
+  :root{--i-mb-sw:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='4' width='18' height='1.5' rx='.75'/%3E%3Crect x='3' y='9.5' width='18' height='3' rx='1.5'/%3E%3Crect x='3' y='16' width='18' height='5' rx='2'/%3E%3C/svg%3E")}
+  #linebar button[data-lsw], #annobar button[data-asw]{font-size:0!important; -webkit-text-stroke:0;
+    display:inline-flex; align-items:center; justify-content:center}
+  #linebar button[data-lsw] i, #annobar button[data-asw] i{display:none}
+  #linebar button[data-lsw]::before, #annobar button[data-asw]::before{content:""; width:17px; height:17px;
+    flex:none; background:currentColor; -webkit-mask:var(--i-mb-sw) center/contain no-repeat; mask:var(--i-mb-sw) center/contain no-repeat}
+  #annobar button[data-asw][hidden]{display:none!important}
   /* v74 — a control the selected mark cannot use is not on its bar */
   #annobar .ab-off{display:none!important}
 
