@@ -121,6 +121,8 @@
               title="Day / night — the knob shows which is on (Shift+D)" aria-label="Day or night mode"><span class="thm-tr"><span class="thm-s">☀</span><span class="thm-m">☾</span><span class="thm-k"></span></span></button>
       <button type="button" class="btn sm mb-btn" id="miniPal" data-click="#palBtn"
               title="Appearance — night, day or system, and the colour theme" aria-label="Appearance">◐</button>
+      <button type="button" class="btn sm thm-tog mode-tog mb-thm" id="miniMode" role="switch" aria-checked="false" aria-label="Mark It Up is on"
+              title="Mark It Up is on — click for RFDS mode (Shift+M)"><span class="thm-tr"><span class="mt-i mt-miu"><i></i></span><span class="mt-i mt-rfds"><i></i></span><span class="thm-k"></span></span></button>
       <button type="button" class="btn sm mb-btn" id="miniSide" data-click="#ribSideBtn"
               title="Move the ribbon — top, or down the right" aria-label="Move the ribbon">⇅</button>
       <span class="mb-sep"></span>
@@ -314,7 +316,7 @@
             <button class="btn sm" id="facingBtn" disabled title="Show two pages side by side (per-page buttons move to Organize pages)">▥ Two-up</button>
             <button class="btn sm" id="pageViewBtn" disabled title="Page view — scrolling settles on one page at a time, with no animation">▤ Page view</button>
             <!-- and the same for appearance: the day/night switch and the theme picker are one idea -->
-            <span class="keep"><button class="btn sm thm-tog" id="themeBtn" title="Day / night — the knob shows which is on (Shift+D)" aria-label="Day or night mode"><span class="thm-tr"><span class="thm-s">☀</span><span class="thm-m">☾</span><span class="thm-k"></span></span></button><button class="btn sm" id="palBtn" title="Appearance — night, day or system, and the colour theme">◐ Theme</button></span>
+            <span class="keep"><button class="btn sm thm-tog" id="themeBtn" title="Day / night — the knob shows which is on (Shift+D)" aria-label="Day or night mode"><span class="thm-tr"><span class="thm-s">☀</span><span class="thm-m">☾</span><span class="thm-k"></span></span></button><button class="btn sm" id="palBtn" title="Appearance — night, day or system, and the colour theme">◐ Theme</button></span><!-- v78 — RFDS mode: the same switch as day/night, its ends the two tools' own icons --><button type="button" class="btn sm thm-tog mode-tog" id="modeBtn" role="switch" aria-checked="false" aria-label="Mark It Up is on" title="Mark It Up is on — click for RFDS mode, the RFDS redlining tool (Shift+M)"><span class="thm-tr"><span class="mt-i mt-miu"><i></i></span><span class="mt-i mt-rfds"><i></i></span><span class="thm-k"></span></span></button>
             <button class="btn sm" id="orgBtn" disabled title="Choose which pages go into the exported PDF">⧉ Organize pages</button>
             <!-- 6gc — flip the ribbon between the top and the right without going through Appearance.
                  The standing preference lives there; this is the one you reach for mid-job. -->
