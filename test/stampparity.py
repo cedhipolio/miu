@@ -134,7 +134,7 @@ async def main():
     a = ap.parse_args()
 
     OUT.mkdir(exist_ok=True)
-    WRAP.write_text("<!doctype html><html><head></head><body>\n"
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"
                     + pathlib.Path(a.packed).read_text(encoding="utf-8") + "\n</body></html>",
                     encoding="utf-8")
 

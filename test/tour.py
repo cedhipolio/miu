@@ -14,7 +14,7 @@ OUT = pathlib.Path(sys.argv[3] if len(sys.argv) > 3 else HERE / "_shots"); OUT.m
 WRAP = HERE / "_wrapped_tour.html"
 
 async def main():
-    WRAP.write_text("<!doctype html><html><head></head><body>\n" + PACKED.read_text(encoding="utf-8") + "\n</body></html>", encoding="utf-8")
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n" + PACKED.read_text(encoding="utf-8") + "\n</body></html>", encoding="utf-8")
     errors = []
     async with async_playwright() as p:
         b = await p.chromium.launch(args=["--no-sandbox"])

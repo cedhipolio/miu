@@ -14,7 +14,7 @@ def wrap(packed: pathlib.Path) -> pathlib.Path:
     """The artifact source carries no <html> skeleton — add one so a browser can load it."""
     body = packed.read_text(encoding="utf-8")
     WRAP.write_text(
-        "<!doctype html><html><head></head><body>\n" + body + "\n</body></html>",
+        "<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n" + body + "\n</body></html>",
         encoding="utf-8",
     )
     return WRAP

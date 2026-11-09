@@ -4,7 +4,7 @@
 Mirrors the packer the RFDS tool used: each asset is gzipped + base64'd into a
 <script type="text/plain"> block and inflated at load by the boot script.
 """
-import base64, gzip, json, os, subprocess, sys
+import base64, gzip, html as _html, json, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "src")
@@ -14,7 +14,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "mount-analysis-r
 # layer are separate files to work on and one script to run, which is what keeps them in one scope.
 with open(os.path.join(SRC, "manifest.json"), encoding="utf-8") as _f:
     _M = json.load(_f)
-ASSETS = [tuple(b) for b in _M["blobs"]]   # the one list, shared with build.mjs
+ASSETS = [list(b) for b in _M["blobs"]]   # the one list, shared with build.mjs
 OURS = _M["ours"]
 
 
@@ -35,8 +35,11 @@ def main():
     for name in OURS:
         check_js(os.path.join(SRC, name))
     parts = [open(os.path.join(SRC, "shell.html"), "rb").read().decode("utf-8")]
-    for sid, names in ASSETS:
-        parts.append(f'<script id="{sid}" type="text/plain">{pack(names)}</script>\n')
+    for blob in ASSETS:
+        sid, names, attrs = blob[0], blob[1], (blob[2] if len(blob) > 2 else {})
+        # v85 — a blob may carry attributes for its tag (pk-rfds: the RFDS build's title, sha, embed date)
+        at = "".join(f' {k}="{_html.escape(str(v), quote=True)}"' for k, v in attrs.items())
+        parts.append(f'<script id="{sid}" type="text/plain"{at}>{pack(names)}</script>\n')
     parts.append(open(os.path.join(SRC, "boot.html"), "rb").read().decode("utf-8"))
     html = "".join(parts)
     open(OUT, "w", encoding="utf-8").write(html)

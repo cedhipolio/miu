@@ -69,7 +69,7 @@ async def main():
     photo = tmp / "photo.png"
     if not make_photo(photo):
         sys.exit(2)
-    WRAP.write_text("<!doctype html><html><head></head><body>\n"
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"
                     + PACKED.read_text(encoding="utf-8") + "\n</body></html>", encoding="utf-8")
     fails = []
     async with async_playwright() as p:

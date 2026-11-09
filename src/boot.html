@@ -55,6 +55,21 @@
     finally{ window.removeEventListener("error",onErr); }
     if(topErr && id==="pk-app")throw topErr;
   };
+  /* v81 — THE WORKSPACE. Opened directly, this page becomes the holder of tabs (pk-ws): every tab is
+     a copy of a tool in its own frame, and this document — captured here, before anything has touched
+     it — is what a Mark It Up tab is made from. A tab (`__MIU_CHILD`) boots as the app below. If the
+     workspace cannot run here it stands down and this page boots as a single Mark It Up, as before.
+     `__MIU_SINGLE` asks for that single Mark It Up outright — the test suites set it, since they drive
+     the app in the page they opened. */
+  if(!window.__MIU_CHILD&&!window.__MIU_SINGLE&&document.getElementById("pk-ws")&&typeof DecompressionStream!=="undefined"){
+    try{
+      window.__MIU_SHELL_HTML="<!doctype html>\n"+document.documentElement.outerHTML;
+      const code=await inflate("pk-ws");
+      const el=document.createElement("script"); el.textContent=code; document.head.appendChild(el);
+      if(typeof window.MIU_WS_START==="function"&&await window.MIU_WS_START())return;
+    }catch(e){ try{ console.warn("workspace unavailable:",e); }catch(_){} }
+    window.__MIU_SHELL_HTML=null;
+  }
   try{
     if(typeof DecompressionStream==="undefined")
       return fail("This browser is too old to open the tool.",new Error("DecompressionStream is not available"));

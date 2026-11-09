@@ -4670,6 +4670,134 @@ async def t_v74_poly(T):
     return ok, g
 
 
+@case("v75 A colour picked after None shows, on the border and on the fill")
+async def t_v75_revive(T):
+    """v75 — Ced: "some color changes on border and fill are not working well on most tools." None set
+    the opacity to 0 and every colour picked after it was drawn at 0%."""
+    await T.reset()
+    await T.pick("box"); await T.drag(T.at(0.35, 0.55), T.at(0.55, 0.65)); await T.key("Escape", 2)
+    await T.pick("text"); await T.drag(T.at(0.1, 0.55), T.at(0.3, 0.6)); await T.page.keyboard.type("Hi"); await T.key("Escape", 2)
+    g = {}
+    for kind, idx in (("box", 0), ("text", 1)):
+        await T.page.evaluate("(i)=>{selectAnno(S.annos[i].id)}", idx); await T.page.wait_for_timeout(150)
+        await T.page.evaluate("(k)=>tpOpen(k,document.getElementById('annobar'),true)", kind); await T.page.wait_for_timeout(200)
+        await T.page.evaluate("""()=>{ const t=[...document.querySelectorAll('#toolpop .tp-target')];
+            t[0].click(); const sw=x=>{const b=document.querySelector('#toolpop .tp-swatches .tp-sw[title="'+x+'"]'); b&&b.click();};
+            sw('No line'); sw('Blue');
+            [...document.querySelectorAll('#toolpop .tp-target')][1].click(); sw('No fill'); sw('Green'); tpClose(); }""")
+        g[kind] = await T.page.evaluate("(i)=>{const a=S.annos[i]; return [a.col,a.colOp,a.fill,a.bg,a.fillOp,!!a.bgNone]}", idx)
+    ok = (g["box"][0] == "#2f6fe0" and g["box"][1] == 1 and g["box"][2] == "#12b886" and g["box"][4] == 1
+          and g["text"][3] == "#12b886" and g["text"][4] == 1 and not g["text"][5])
+    return ok, g
+
+
+@case("v75 A text box shorter than its line exports its whole line")
+async def t_v75_short(T):
+    """v75 — Ced: "texts on textboxes with smaller height than the text size, the texts are not being
+    shown as full." The appearance was clipped to the box."""
+    await T.reset()
+    await T.pick("text"); await T.drag(T.at(0.3, 0.5), T.at(0.5, 0.53)); await T.page.keyboard.type("asdasdsad"); await T.key("Escape", 2)
+    await T.page.evaluate("()=>{const a=S.annos[0]; a.size=14; a.nh=0.004; a.valign='middle'; layoutAnnos();}")
+    import tempfile, os, pypdf
+    async with T.page.expect_download(timeout=60000) as dl:
+        await T.page.evaluate("()=>exportPdf()")
+    d = await dl.value
+    path = os.path.join(tempfile.mkdtemp(), "t.pdf"); await d.save_as(path)
+    got = {}
+    for a in pypdf.PdfReader(path).pages[0].get("/Annots") or []:
+        o = a.get_object()
+        if o.get("/Subtype") == "/FreeText":
+            r = [float(v) for v in o["/Rect"]]; bb = [float(v) for v in o["/AP"]["/N"].get_object()["/BBox"]]
+            got = {"rectH": round(r[3] - r[1], 2), "bboxH": round(bb[3] - bb[1], 2)}
+    return got.get("rectH", 0) >= 14 and got.get("bboxH", 0) >= 14, got
+
+
+@case("v75 The thickness slider on the mini bar sets a box's outline and a line's weight")
+async def t_v75_swbar(T):
+    """v75 — Ced: "Also allow line thickness to be edited on the mini toolbar"."""
+    await T.reset()
+    await T.pick("box"); await T.drag(T.at(0.35, 0.55), T.at(0.55, 0.65)); await T.key("Escape", 2)
+    await T.page.evaluate("()=>selectAnno(S.annos[0].id)"); await T.page.wait_for_timeout(200)
+    vis = await T.page.evaluate("()=>{const b=document.querySelector('#annobar [data-asw]'); return !!b&&!b.hidden&&b.offsetParent!==null}")
+    await T.page.locator("#annobar [data-asw]").click(); await T.page.wait_for_timeout(200)
+    await T.page.evaluate("()=>{const r=document.querySelector('.sw-pop input'); r.value='800'; r.dispatchEvent(new Event('input',{bubbles:true}));}")
+    box = await T.page.evaluate("()=>S.annos[0].sw")
+    await T.page.keyboard.press("Escape")
+    await T.pick("line"); await T.drag(T.at(0.3, 0.75), T.at(0.5, 0.75)); await T.key("Escape", 2)
+    await T.page.evaluate("()=>selectLine(S.lines[0].id)"); await T.page.wait_for_timeout(200)
+    await T.page.locator("#linebar [data-lsw]").click(); await T.page.wait_for_timeout(200)
+    await T.page.evaluate("()=>{const r=document.querySelector('.sw-pop input'); r.value='200'; r.dispatchEvent(new Event('input',{bubbles:true}));}")
+    ln = await T.page.evaluate("()=>S.lines[0].sw")
+    await T.page.evaluate("()=>{selectAnno(S.annos[0].id)}"); await T.page.wait_for_timeout(150)
+    imgHidden = True
+    return vis and box > 8 and 0.1 < ln < 1.5, {"vis": vis, "box": box, "line": ln}
+
+
+@case("v76 Make default for all tools gives every tool the properties, over its older own setting")
+async def t_v75_mkdef(T):
+    """v76 — Ced: "make default properties button is not applying the properties to the tool in redline
+    tools." The press only wrote the defaults, and the second-step Apply skipped every tool's own settings."""
+    await T.reset()
+    keep = await T.page.evaluate("()=>JSON.stringify({st:MA_TOOL_STYLES, d:MA_DEFAULTS, o:MA_OVR})")
+    # an older setting made on Text and on Line in their own panels
+    await T.page.evaluate("()=>{ MA_OVR={}; maOverridesSave(); tpOpen('text',document.body,false); tpApply('col','#000000');"
+                          " tpOpen('line',document.body,false); tpApply('col','#22b8cf'); tpClose(); }")
+    await T.page.evaluate("()=>{ setMode('redline'); tpOpen('redline',document.querySelector('#tools .tool[data-mode=redline]'),false); tpApply('col','#8b5cf6'); tpApply('size',12); }")
+    await T.page.locator("#toolpop .tp-defmake").click(); await T.page.wait_for_timeout(250)
+    g = await T.page.evaluate("()=>({def:MA_DEFAULTS.col, text:MA_TOOL_STYLES.text.col, tsize:MA_TOOL_STYLES.text.size, line:MA_TOOL_STYLES.line.col,"
+                              " fix:MA_TOOL_STYLES.fix.col, box:MA_TOOL_STYLES.box.col, ribbon:document.getElementById('c_text').value})")
+    await T.page.locator("#toolpop .tp-mkdef .tp-defclr").click(); await T.page.wait_for_timeout(200)
+    g["undone"] = await T.page.evaluate("()=>[MA_TOOL_STYLES.text.col, MA_TOOL_STYLES.line.col]")
+    await T.page.evaluate("(k)=>{ const o=JSON.parse(k); Object.keys(o.st).forEach(t=>MA_TOOL_STYLES[t]=o.st[t]); maSaveToolStyles();"
+                          " MA_DEFAULTS=o.d; MA_OVR=o.o; maDefaultsSave(); maOverridesSave(); tpClose(); }", keep)
+    ok = (g["def"] == "#8b5cf6" and g["text"] == "#8b5cf6" and g["tsize"] == 12 and g["line"] == "#8b5cf6"
+          and g["fix"] == "#8b5cf6" and g["box"] == "#8b5cf6" and g["ribbon"] == "#8b5cf6"
+          and g["undone"] == ["#000000", "#22b8cf"])
+    return ok, g
+
+
+@case("v75 The stamp takes a font from the tool's list and stays bold")
+async def t_v75_stampfont(T):
+    await T.reset()
+    await T.page.evaluate("()=>document.getElementById('stampBtn').click()"); await T.page.wait_for_timeout(1200)
+    await T.page.locator("#maPanel .cop-fontpick").click(); await T.page.wait_for_timeout(300)
+    await T.page.locator(".tp-fontmenu .tp-fontitem", has_text="Carlito").first.click(); await T.page.wait_for_timeout(300)
+    open_ = await T.page.evaluate("()=>document.getElementById('maPanel').classList.contains('show')")
+    await T.page.evaluate("()=>document.querySelectorAll('.tp-vmenu').forEach(n=>n.remove())")
+    await T.page.locator("#maPanel .ma-stampgo").click()
+    for _ in range(100):
+        await T.page.wait_for_timeout(100)
+        if not await T.page.evaluate("()=>!!document.querySelector('.cop-prog')"): break
+    fonts = await T.page.evaluate("()=>[...new Set(S.annos.filter(a=>a.copRole&&a.copRole!=='box').map(a=>a.font))]")
+    await T.page.evaluate("()=>{ const f=copFields(); f.font='arialbold'; copSavePrefs(f); undo(); maPanelOpen(false); }")
+    return open_ and fonts == ["carlitobold"], {"panelStayed": open_, "fonts": fonts}
+
+
+@case("v77 A mark, a stroke or a snapshot being moved goes see-through, and comes back on release")
+async def t_v77_lift(T):
+    """v77 — Ced: "when moving a redline (especially snapshot, shapes, line), the opacity is no more
+    changing to less opacity. apply it again to make redlining easier"."""
+    await T.reset()
+    await T.pick("box"); await T.drag(T.at(0.3, 0.3), T.at(0.45, 0.4)); await T.key("Escape", 2)
+    await T.pick("line"); await T.drag(T.at(0.3, 0.5), T.at(0.5, 0.55)); await T.key("Escape", 2)
+    await T.pick("select")
+    q = """()=>({box:getComputedStyle(document.querySelector('.anno[data-id="'+S.annos[0].id+'"]')).opacity,
+        line:Math.max(...[...document.querySelectorAll('#pages [data-ol="'+S.lines[0].id+'"]')].map(e=>+getComputedStyle(e).opacity))})"""
+    out = {}
+    for name, (p0, p1) in {"box": ((0.375, 0.3), (0.375, 0.2)), "line": ((0.4, 0.525), (0.4, 0.6))}.items():
+        a = T.at(*p0); b = T.at(*p1)
+        await T.page.mouse.move(*a); await T.page.mouse.down()
+        for k in range(1, 6):
+            await T.page.mouse.move(a[0] + (b[0] - a[0]) * k / 5, a[1] + (b[1] - a[1]) * k / 5); await T.page.wait_for_timeout(30)
+        mid = await T.page.evaluate(q)
+        await T.page.mouse.up(); await T.page.wait_for_timeout(100)
+        out[name] = [mid, await T.page.evaluate(q)]
+        await T.key("Escape", 2)
+    ok = (float(out["box"][0]["box"]) < 0.7 and float(out["box"][1]["box"]) == 1
+          and out["line"][0]["line"] < 0.7 and out["line"][1]["line"] == 1)
+    return ok, out
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("packed")
@@ -4678,7 +4806,7 @@ async def main():
     ap.add_argument("--shots")
     a = ap.parse_args()
 
-    WRAP.write_text("<!doctype html><html><head></head><body>\n"
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"
                     + pathlib.Path(a.packed).read_text(encoding="utf-8") + "\n</body></html>",
                     encoding="utf-8")
     cases = [c for c in CASES if not a.only or a.only.lower() in c[0].lower()]

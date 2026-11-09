@@ -161,7 +161,7 @@ async def main():
     outdir = pathlib.Path(a.out); outdir.mkdir(parents=True, exist_ok=True)
 
     body = pathlib.Path(a.packed).read_text(encoding="utf-8")
-    WRAP.write_text("<!doctype html><html><head></head><body>\n" + body + "\n</body></html>",
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n" + body + "\n</body></html>",
                     encoding="utf-8")
     async with async_playwright() as p:
         b = await p.chromium.launch(args=["--no-sandbox"])

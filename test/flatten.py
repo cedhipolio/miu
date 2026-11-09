@@ -145,7 +145,7 @@ async def main():
         p = tmp / f"photo{i}.png"
         make_photo(p, 17 + i)
         photos.append(p)
-    WRAP.write_text("<!doctype html><html><head></head><body>\n"
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"
                     + PACKED.read_text(encoding="utf-8") + "\n</body></html>", encoding="utf-8")
     fails = []
     async with async_playwright() as p:

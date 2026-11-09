@@ -77,8 +77,10 @@ const pack = (names) => {
 
 function body() {
   const parts = [readFileSync(join(SRC, "shell.html"), "utf8")];
-  for (const [id, names] of ASSETS) {
-    parts.push(`<script id="${id}" type="text/plain">${pack(names)}</script>\n`);
+  for (const [id, names, attrs] of ASSETS) {
+    /* v85 — a blob may carry attributes for its tag (pk-rfds: the RFDS build's title, sha and embed date) */
+    const at = Object.entries(attrs || {}).map(([k, v]) => ` ${k}="${String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"`).join("");
+    parts.push(`<script id="${id}" type="text/plain"${at}>${pack(names)}</script>\n`);
   }
   parts.push(readFileSync(join(SRC, "boot.html"), "utf8"));
   return parts.join("");

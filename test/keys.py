@@ -31,7 +31,7 @@ TOOLS=[("s","select"),("h","pan"),("r","redline"),("e","text"),("f","fix"),("k",
 
 async def main():
     body=PACKED.read_text(encoding="utf-8")
-    WRAP.write_text("<!doctype html><html><head></head><body>\n"+body+"\n</body></html>",encoding="utf-8")
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"+body+"\n</body></html>",encoding="utf-8")
     fails=[]
     async with async_playwright() as p:
         b=await p.chromium.launch(args=["--no-sandbox"])

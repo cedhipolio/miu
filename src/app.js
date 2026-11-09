@@ -5454,7 +5454,9 @@ function drawPageLines(i){
     /* 6ha — a ghost is a picture of a mark, not a mark: it takes no hit area, no halo and no handles */
     const ghost=!!l.ghost;
     const sel=!ghost&&(S.selLine===l.id||coOwned) && !S.selMultiL.has(l.id);
-    const mk=(tag,attrs)=>{ const n=document.createElementNS("http://www.w3.org/2000/svg",tag); for(const k in attrs)n.setAttribute(k,attrs[k]); return n; };
+    const mk=(tag,attrs)=>{ const n=document.createElementNS("http://www.w3.org/2000/svg",tag); for(const k in attrs)n.setAttribute(k,attrs[k]);
+      if(l.id!=null)n.setAttribute("data-ol",String(l.id));   /* v77 — every piece of the stroke names it */
+      return n; };
     const pts=linePts(l).map(p=>[p[0]*w,p[1]*h]);
     const col=l.col||defCol;
     /* 6gt — Ced: "thickness less than 1 pt is not working properly." It was the clamp on the next
@@ -5682,7 +5684,7 @@ function startLineRotate(ev,l,pg){
     const _bw=(Math.max(..._xs)-Math.min(..._xs))*w, _bh=(Math.max(..._ys)-Math.min(..._ys))*h;
     rotGuideOpen(pg,ccx,ccy,{bw:Math.max(8,_bw),bh:Math.max(8,_bh)});
   }catch(_){}
-  const move=e=>{
+  const move=e=>{ if(!_liftOn)liftMarks([],[l.id]);
     if(!_turned){ if(Math.hypot(e.clientX-_rx,e.clientY-_ry)<=DRAG_SLOP)return; _turned=true; }
     let deg=(Math.atan2(e.clientY-ccy,e.clientX-ccx)-a0)*180/Math.PI;
     let caught=false;
@@ -5757,6 +5759,7 @@ window.addEventListener("pointermove",e=>{
   if(!_ldrag.moved){
     if(Math.hypot(e.clientX-_ldrag.cx,e.clientY-_ldrag.cy)<=DRAG_SLOP)return;
     _ldrag.moved=true;
+    liftMarks([],[_ldrag.id]);
     S.history.push(_ldrag.pre); if(S.history.length>80)S.history.shift();
     S.future=[]; updateUndoUI();
   }
@@ -8285,6 +8288,48 @@ function syncSelUI(){
    cannot exist, which matters more here than anywhere — a stuck `adjusting` would leave the user
    with no handles at all.
    ================================================================================================== */
+/* =================================================================================================
+   v77 — WHAT IS IN THE HAND GOES SEE-THROUGH. Ced: "when moving a redline (especially snapshot, shapes,
+   line), the opacity is no more changing to less opacity. apply it again to make redlining easier."
+   While a mark, a stroke or a selection is being MOVED, resized or turned, it is drawn at half
+   strength, so the drawing it is being laid onto shows through it and the spot it is going to is
+   plain. It starts at the first real movement (a click does not flicker) and ends on release.
+   It is one generated rule naming the marks by id — `.anno[data-id]` for a mark, `[data-ol]` on every
+   piece of a stroke — rather than a class on their elements, because the strokes are redrawn from
+   scratch on every frame of a drag and a class put on them would be gone a frame later.
+   ================================================================================================= */
+let _liftOn=false;
+function liftMarks(annoIds,lineIds){
+  try{
+    const sel=[];
+    const lids=new Set((lineIds||[]).filter(x=>x!=null));
+    (annoIds||[]).forEach(id=>{ if(id==null)return; sel.push(`.anno[data-id="${id}"]`);
+      /* a callout's leader and a length's run travel with their box and reading */
+      const a=S.annos.find(z=>z.id===id);
+      if(a){ try{ const l=maCalloutLeaderOf(a); if(l)lids.add(l.id); }catch(e){}
+             S.lines.forEach(l=>{ if(l.dimFor===a.id||l.coFor===a.id)lids.add(l.id); }); } });
+    lids.forEach(id=>{ sel.push(`#pages [data-ol="${id}"]`);
+      const l=S.lines.find(z=>z.id===id); if(l&&l.dimFor!=null)sel.push(`.anno[data-id="${l.dimFor}"]`); });
+    if(!sel.length)return;
+    let st=document.getElementById("liftCss");
+    if(!st){ st=document.createElement("style"); st.id="liftCss"; document.head.appendChild(st); }
+    st.textContent=sel.join(",")+"{opacity:.5!important;transition:opacity .08s}";
+    _liftOn=true;
+  }catch(e){}
+}
+function liftEnd(){
+  if(!_liftOn)return; _liftOn=false;
+  const st=document.getElementById("liftCss"); if(st)st.textContent="";
+}
+window.addEventListener("pointerup",()=>setTimeout(liftEnd,0),true);
+window.addEventListener("pointercancel",liftEnd,true);
+window.addEventListener("blur",liftEnd);
+function liftSelection(){
+  try{ const ids=[...(S.selMulti||[])], lids=[...(S.selMultiL||[])];
+    if(S.sel!=null&&ids.indexOf(S.sel)<0)ids.push(S.sel);
+    if(S.selLine!=null&&lids.indexOf(S.selLine)<0)lids.push(S.selLine);
+    liftMarks(ids,lids); }catch(e){}
+}
 let _adjOn=false;
 function adjustEnd(){
   if(!_adjOn)return;
@@ -8346,7 +8391,7 @@ function startAnnoResize(ev,a,d,ed,pg,pos){
     const dxs=e.clientX-cx, dys=e.clientY-cy;
     if(!_rsMoved){
       if(Math.hypot(dxs,dys)<=DRAG_SLOP)return;
-      _rsMoved=true;
+      _rsMoved=true; liftMarks([a.id],[]);
       S.history.push(_pre); if(S.history.length>80)S.history.shift();
       S.future=[]; updateUndoUI();
       document.body.dataset.rzLive=pos;   /* v71 — the grip in hand goes see-through (app.css) */
@@ -8602,7 +8647,8 @@ function dragMulti(e,pg){
   const move=ev=>{
     let dxp=ev.clientX-sx, dyp=ev.clientY-sy;
     /* 6gt — a click on a selection leaves it exactly where it is; see dragBody */
-    if(!moved){ if(Math.hypot(dxp,dyp)<=DRAG_SLOP)return; moved=true; }
+    if(!moved){ if(Math.hypot(dxp,dyp)<=DRAG_SLOP)return; moved=true;
+      liftMarks(startA.map(s=>s.a.id),startL.map(s=>s.l.id)); }
     if(targets&&!snapOff(ev)){ const s=applySnap(targets,bb.l+dxp,bb.t+dyp,bb.r-bb.l,bb.b-bb.t); dxp=s.l-bb.l; dyp=s.t-bb.t; drawSnapGuides(pg,s.gx,s.gy,s.gxMid,s.gyMid); }
     else if(targets)clearSnapGuides(pg);
     const dx=dxp/w, dy=dyp/h;
@@ -8793,7 +8839,7 @@ function dragBody(e,d,a,pg){
        Worse, `moved` stayed false, so nothing was pushed onto the history and Ctrl+Z could not put it
        back. Nothing happens now until the pointer has travelled past the slop, and past that point the
        gesture is a real drag and behaves exactly as it always did. */
-    if(!moved){ if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<=DRAG_SLOP)return; moved=true; }
+    if(!moved){ if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<=DRAG_SLOP)return; moved=true; liftMarks([a.id],[]); }
     if(targets&&!snapOff(ev)){ const s=applySnap(targets,nl,nt,d.offsetWidth,d.offsetHeight); nl=s.l; nt=s.t; drawSnapGuides(pg,s.gx,s.gy,s.gxMid,s.gyMid); }
     else if(targets)clearSnapGuides(pg);
     d.style.left=nl+"px";d.style.top=nt+"px";
@@ -8982,7 +9028,7 @@ function startGroupScale(ev,pg,bb,pos){
      the two stretches, so a group made half the size draws at half the weight. */
   const swK=(sx,sy)=>Math.sqrt(Math.max(0.0025,sx*sy));
   const swOf0=v=>(v!=null&&v>0)?v:parseFloat(($("#c_sw")&&$("#c_sw").value)||1.5)||1.5;
-  const move=e=>{
+  const move=e=>{ if(!_liftOn)liftSelection();
     const dx=e.clientX-cx, dy=e.clientY-cy;
     /* 6nb — an axis the handle does not touch is NOT scaled. With only corners this was moot: every
        handle held both an east/west and a north/south edge. A side pill holds one, and the old
@@ -9032,7 +9078,7 @@ function startGroupRotate(ev,pg,bb){
   });
   const L=multiLines().map(l=>({l,pts:linePts(l).map(p=>[p[0],p[1]])}));
   const hud=degHUD();
-  const move=e=>{
+  const move=e=>{ if(!_liftOn)liftSelection();
     if(!_turned){ if(Math.hypot(e.clientX-_rx,e.clientY-_ry)<=DRAG_SLOP)return; _turned=true; }
     let deg=(Math.atan2(e.clientY-cy,e.clientX-cx)-start)*180/Math.PI;
     let caught=false;
@@ -15447,7 +15493,7 @@ function startAnnoRotate(ev,a,d,pg){
      the reading follows the handle, and it says when Snap has caught the angle rather than leaving you
      to guess whether 89.6° was meant to be 90. */
   const hud=degHUD();
-  const move=e=>{
+  const move=e=>{ if(!_liftOn)liftMarks([a.id],[]);
     if(!_rotMoved){
       if(Math.hypot(e.clientX-_rx,e.clientY-_ry)<=DRAG_SLOP)return;
       _rotMoved=true;

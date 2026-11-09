@@ -24,7 +24,7 @@ PACKED=sys.argv[1]; SRCPDF=sys.argv[2]
 OUT=pathlib.Path("/tmp/claude-0/colparity")
 OUT.mkdir(parents=True, exist_ok=True)
 W=HERE/"_colparity.html"
-W.write_text("<!doctype html><html><head></head><body>\n"+
+W.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n"+
   pathlib.Path(PACKED).read_text(encoding="utf-8")+
   "\n</body></html>",encoding="utf-8")
 MARKS = """

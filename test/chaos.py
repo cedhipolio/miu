@@ -208,7 +208,7 @@ async def main():
     ap.add_argument("--seeds", default="1,2,3"); ap.add_argument("--steps", type=int, default=350)
     ap.add_argument("-v", action="store_true")
     a = ap.parse_args()
-    WRAP.write_text("<!doctype html><html><head></head><body>\n" + pathlib.Path(a.packed).read_text(encoding="utf-8")
+    WRAP.write_text("<!doctype html><html><head><script>window.__MIU_SINGLE=1</script></head><body>\n" + pathlib.Path(a.packed).read_text(encoding="utf-8")
                     + "\n</body></html>", encoding="utf-8")
     fails = 0
     async with async_playwright() as p:
