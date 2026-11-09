@@ -159,6 +159,9 @@ function stripInto(t,list,left){
     b.innerHTML='<i></i><b></b><span class="mx" role="button" aria-label="Close tab" title="Close tab">×</span>';
     b.querySelector("b").textContent=x.name;
     dressPill(b);
+    /* the tool's tone over the pill's own surface — stronger on the tab you are in */
+    if(cs){ const tone=x.tool==="rfds"?"#3d7bfd":"#fa3237";
+      b.style.background="color-mix(in srgb, "+tone+" "+(on?"22%":"13%")+", "+cs.backgroundColor+")"; }
     b.addEventListener("click",ev=>{ ev.preventDefault(); ev.stopPropagation();
       if(ev.target.closest(".mx"))return closeTab(x.id);
       if(!on)activate(x.id); });
@@ -206,6 +209,21 @@ function renderTabs(force){
   }catch(e){}
 }
 
+/* v86 — THE TAB WEARS THE MARK ON VERCEL TOO. Ced: "the logo of the tool is not showing in vercel".
+   The page's icon <link>s are in shell.html, so in the web build they land in <body>, where browsers do
+   not honour an icon — the app has always fixed that itself (claimFavicon, 6fa: move ours into <head>,
+   drop any other). Since v81 the page the browser opened is the WORKSPACE and never runs the app, so
+   nothing moved them and the tab fell back to /favicon.ico, which Vercel does not have. The workspace
+   does the same claim; tabLooks() then swaps the hrefs as you change tools. */
+function claimIcon(){
+  try{
+    const head=document.head||document.getElementsByTagName("head")[0]; if(!head)return;
+    const mine=document.getElementById("favIcon"), touch=document.getElementById("favTouch");
+    if(!mine||!mine.getAttribute("href"))return;
+    document.querySelectorAll('link[rel~="icon"],link[rel="shortcut icon"]').forEach(l=>{ if(l!==mine&&l.parentNode)l.parentNode.removeChild(l); });
+    head.appendChild(mine); if(touch)head.appendChild(touch);
+  }catch(e){}
+}
 /* ---- start ---------------------------------------------------------------------------------------- */
 async function start(){
   if(!window.__MIU_SHELL_HTML)return false;
@@ -215,6 +233,7 @@ async function start(){
     .replace(/<head([^>]*)>/i,"<head$1><script>window.__MIU_CHILD=1<\/script>");
   window.__MIU_SHELL_HTML=null;
   const st=document.createElement("style"); st.id="wsShellCss"; st.textContent=SHELL_CSS; document.head.appendChild(st);
+  claimIcon(); setTimeout(claimIcon,1200);
   const host=document.createElement("div"); host.id="wsHost"; document.body.appendChild(host); WS.host=host;
   let first="miu"; try{ if(localStorage.getItem(MODE_KEY)==="rfds"&&document.getElementById("pk-rfds"))first="rfds"; }catch(e){}
   let t=await newTab(first);

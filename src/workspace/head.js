@@ -47,7 +47,16 @@ const CHILD_CSS=`@@CSS_PART@@
 #modeTabs .mtab .mx:hover{opacity:1;background:color-mix(in srgb,currentColor 16%,transparent)}
 #modeTabs .mtab:not(.on){opacity:.72}
 #modeTabs .mtab:not(.on):hover{opacity:1}
-#modeTabs .mtab.on{outline:1.5px solid var(--accent);outline-offset:-1.5px;color:var(--ink)!important}
+/* v86 — Ced: "change the tone of the colors of tabs to make miu and rfds distinguishable on files".
+   Each tool has its own tone: Mark It Up's red (the Redline red, #fa3237) and the RFDS blue (the blue
+   of the RFDS mark). A tab is washed with its tone over the log pill's own surface (set in stripInto,
+   so it holds on every theme), its mark is drawn in it, and the tab you are in is ringed in it. */
+#modeTabs .mtab[data-tool="miu"]{--tone:#fa3237}
+#modeTabs .mtab[data-tool="rfds"]{--tone:#3d7bfd}
+#modeTabs .mtab[data-tool] i{background:var(--tone)}
+#modeTabs .mtab.on{outline:1.5px solid var(--tone,var(--accent));outline-offset:-1.5px;color:var(--ink)!important}
+#modeMenu button[data-tool="miu"] i{background:#fa3237}
+#modeMenu button[data-tool="rfds"] i{background:#3d7bfd}
 #modeTabs .mtab.mplus{justify-content:center;flex:none}
 #modeTabs .mtab.mplus b{font-size:15px;line-height:1;max-width:none}
 #modeMenu{position:fixed;z-index:4000;display:flex;flex-direction:column;gap:2px;padding:5px;border-radius:12px;

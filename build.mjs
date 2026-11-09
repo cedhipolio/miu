@@ -98,7 +98,9 @@ function standalone(inner) {
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
 <!-- no <link rel=icon> here on purpose: src/shell.html carries the app's own pen favicon as a data
-     URL and swaps it at runtime. A second icon link would race it. -->
+     URL and swaps it at runtime (the workspace moves it into <head>, v86). A second icon link would race
+     it. What a browser asks for before any script has run — /favicon.ico and /apple-touch-icon.png — is
+     served from site/ (v86), so the tab is never the blank globe. -->
 <title>Mark It Up</title>
 </head>
 <body>

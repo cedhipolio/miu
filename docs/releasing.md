@@ -14,6 +14,10 @@ Run these in order. Nothing here is optional, and the last two are the ones that
 npm run fixture    # the synthetic package CI uses; a real one in test/fixtures/ is better before a release
 export MIU_FIXTURE="test/fixtures/synthetic-mount-analysis.pdf"
 
+# 0. generated sources up to date (v78+): the workspace, and the RFDS build if a new one arrived
+python3 tools/addworkspace.py
+python3 tools/embed_rfds.py                 # or: python3 tools/embed_rfds.py path/to/new-rfds-artifact.html
+
 # 1. build both targets and prove the two packers agree
 node build.mjs --target=both
 npm run verify:packers
@@ -27,6 +31,7 @@ npm run test:behave      # behave.py      · fifty-one behaviours, real mouse an
 npm run test:keys        # keys.py        · every shortcut, on a real keyboard
 npm run test:reopen      # reopen.py      · export with photos, reopen, are they still there
 npm run test:chaos       # chaos.py       · seeded random sessions against the invariants
+npm run test:workspace   # workspace.py   · v78–v85: tabs, RFDS mode, alignment, the stamp card
 
 for s in v19 v14 v12; do
   python3 test/harness.py dist/mark-it-up.artifact.html "$MIU_FIXTURE" \
