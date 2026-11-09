@@ -54,12 +54,15 @@ async def main():
         b, pg, errs = await fresh(p)
         tabs = await pg.evaluate("MIU_WS.tabs()")
         check("workspace starts with one Mark It Up tab", len(tabs) == 1 and tabs[0]["tool"] == "miu", tabs)
+
         m = await frame_of(pg, "t1"); await m.set_input_files("#file", PDF); await pg.wait_for_timeout(1500)
         await m.click("#modeTabs .mplus"); await m.click("#modeMenu button[data-tool=rfds]"); await pg.wait_for_timeout(4500)
         r = await frame_of(pg, "t2"); await r.set_input_files("#file", PDF); await pg.wait_for_timeout(2500)
         await pg.evaluate('MIU_WS.open("miu")'); await pg.wait_for_timeout(4500)
         m2 = await frame_of(pg, "t3"); await m2.set_input_files("#file", PDF); await pg.wait_for_timeout(1500)
         tabs = await pg.evaluate("MIU_WS.tabs()")
+        tones = await m.evaluate("""()=>[...document.querySelectorAll("#modeTabs .mtab[data-tool]")].map(t=>t.dataset.tool+":"+getComputedStyle(t).backgroundColor)""")
+        check("v86 Mark It Up and RFDS tabs wear different tones", len(set(x.split(":",1)[1] for x in tones)) >= 2, tones)
         check("three tabs, each with its own document", len(tabs) == 3 and all(t["name"] for t in tabs), tabs)
         await r.evaluate("1"); await pg.evaluate('MIU_WS.activate("t2")'); await pg.wait_for_timeout(800)
         await r.click("#homeBtn"); await pg.wait_for_timeout(400)
@@ -131,6 +134,18 @@ async def main():
         check("no stamp-tool prompt after saving", not await r.evaluate('!!document.querySelector("#dlg.show")'))
         check("no page errors (stamp)", not errs, errs)
         await b.close()
+
+        # ---- v86 the WEB build (what Vercel serves) puts the page in <body>; the icon must reach <head> ----
+        web = os.path.join(os.path.dirname(os.path.abspath(ART)), "..", "public", "index.html")
+        if os.path.exists(web):
+            b = await p.chromium.launch(); pg = await b.new_page()
+            await pg.goto("file://" + os.path.abspath(web)); await pg.wait_for_timeout(4500)
+            ico = await pg.evaluate("""()=>{ const l=document.getElementById("favIcon"); return [l&&l.parentElement.tagName,
+              document.querySelectorAll('link[rel~="icon"]').length] }""")
+            check("v86 web build: the tool's icon is in <head>, and the only one", ico == ["HEAD", 1], ico)
+            await b.close()
+        else:
+            print("skip web-build icon check (no public/index.html — run node build.mjs --target=both)")
 
         # ---- falls back to a single Mark It Up if frames cannot be reached ----
         b, pg, errs = await fresh(p, init="if(window===window.top){Object.defineProperty(HTMLIFrameElement.prototype,'contentDocument',{get(){return null}});}")
