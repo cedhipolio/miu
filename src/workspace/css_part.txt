@@ -1,0 +1,28 @@
+
+.thm-tog.mode-tog .mt-i{flex:1;display:flex;align-items:center;justify-content:center;height:20px;z-index:2}
+.thm-tog.mode-tog .mt-i{color:var(--muted);opacity:.6;transition:color .15s,opacity .15s}
+.thm-tog.mode-tog .mt-i i{display:block;width:14px;height:14px;background:currentColor;
+  -webkit-mask:center/contain no-repeat;mask:center/contain no-repeat;transition:transform .15s}
+.thm-tog.mode-tog .mt-miu i{-webkit-mask-image:url("${MODE_ICO.miu}");mask-image:url("${MODE_ICO.miu}")}
+.thm-tog.mode-tog .mt-rfds i{-webkit-mask-image:url("${MODE_ICO.rfds}");mask-image:url("${MODE_ICO.rfds}")}
+html .thm-tog.mode-tog .thm-k{left:1px!important}
+html .thm-tog.mode-tog[aria-checked="true"] .thm-k{left:23px!important}
+.thm-tog.mode-tog[aria-checked="false"] .mt-miu,
+.thm-tog.mode-tog[aria-checked="true"] .mt-rfds{color:#fff;opacity:1}
+html.pal-ontel #toolbar .thm-tog.mode-tog .mt-i{color:var(--tabs-ink)}
+html.pal-ontel #toolbar .thm-tog.mode-tog[aria-checked="false"] .mt-miu,
+html.pal-ontel #toolbar .thm-tog.mode-tog[aria-checked="true"] .mt-rfds{color:var(--tabs-bg);opacity:1}
+.thm-tog.mode-tog:active .mt-i i{transform:scale(.88)}
+.thm-tog.mode-tog.mode-busy .thm-k{animation:modeBusy 1s ease-in-out infinite}
+@keyframes modeBusy{50%{opacity:.45}}
+/* the logo is a switch too: hover it and the mark steps back behind the swap arrows */
+.logo-wm.mode-logo{cursor:pointer}
+.logo-wm.mode-logo svg{transition:opacity .2s ease}
+.logo-wm.mode-logo:hover svg,.logo-wm.mode-logo:focus-within svg{opacity:.22}
+.logo-swap{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;padding:0;border:0;
+  background:var(--ink-strong,var(--ink,currentColor));-webkit-mask:url("${MODE_ICO.swap}") center/contain no-repeat;
+  mask:url("${MODE_ICO.swap}") center/contain no-repeat;opacity:0;transform:scale(.8) rotate(-25deg);
+  transition:opacity .2s ease,transform .28s cubic-bezier(.2,.8,.2,1);cursor:pointer;z-index:2}
+.logo-wm.mode-logo:hover .logo-swap,.logo-swap:focus-visible{opacity:1;transform:none}
+.logo-wm.mode-logo:active .logo-swap{transform:scale(.9) rotate(180deg)}
+@media (prefers-reduced-motion:reduce){.logo-swap{transition:opacity .15s}}

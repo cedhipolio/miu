@@ -165,6 +165,12 @@ def main():
           "});",
           "/* a family's key must be matched by its own stem, not a shorter one inside it (roboto / robotomono) */",
           "if(typeof TP_FAMS!=='undefined')TP_FAMS.sort((a,b)=>b.length-a.length);",
+          "/* v61 — the ribbon's hidden font <select> (#c_font) is the field every font write goes through:",
+          "   a value with no <option> is refused by the browser and the mark stays in Arial. Every face",
+          "   gets its option, so the picker's choice is one the field can hold. */",
+          "try{ const sel=document.getElementById('c_font'); if(sel){ const have=new Set([...sel.options].map(o=>o.value));",
+          "  Object.keys(MARK_FONTS).forEach(k=>{ if(have.has(k))return; const o=document.createElement('option');",
+          "    o.value=k; o.textContent=MARK_FONTS[k].label||k; sel.appendChild(o); }); } }catch(e){}",
           "window.MA_FONT_FAMILIES=FAMS;",
           "})();"]
     OUT.write_text("\n".join(js) + "\n", encoding="utf-8")

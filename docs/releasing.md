@@ -44,6 +44,14 @@ git add -A && git commit -m "v<N> — <what changed>"
 git push
 ```
 
+## Publishing the artifact — declare `downloads`
+
+Exports in the published artifact go through the host (`claude.use("downloads")`, see `deliverFile`
+in `src/app.js`). The host only offers that to a page that DECLARED it, so the artifact is published
+with `capabilities: {downloads: true}`; without it the export button shows the host's "File downloads
+aren't available for this artifact". A later redeploy that omits `capabilities` keeps the stored
+declaration. (v62 — Ced: "file downloads are unavailable".)
+
 ## What `release:check` asserts
 
 - `package.json`'s version moved, and `docs/CHANGELOG.md` has a `## v<N>` section — **at the top**,
