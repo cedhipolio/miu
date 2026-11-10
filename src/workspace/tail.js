@@ -160,8 +160,11 @@ function stripInto(t,list,left){
     b.querySelector("b").textContent=x.name;
     dressPill(b);
     /* the tool's tone over the pill's own surface — stronger on the tab you are in */
-    if(cs){ const tone=x.tool==="rfds"?"#3d7bfd":"#fa3237";
-      b.style.background="color-mix(in srgb, "+tone+" "+(on?"22%":"13%")+", "+cs.backgroundColor+")"; }
+    if(cs)b.style.background="color-mix(in srgb, var(--tone) "+(on?"30%":"18%")+", "+cs.backgroundColor+")";
+    /* neumorphism, as the rest of the chrome (6fi): every tab is raised like the log pill it copies, and
+       the tab you are in is pressed in — the same light and shade, turned inward */
+    if(on)b.style.boxShadow="inset var(--emb-id,2px) var(--emb-id,2px) var(--emb-ib,4px) var(--emb-page-lo, var(--emb-lo, rgba(0,0,0,.35))),"+
+      "inset calc(var(--emb-id,2px) * -1) calc(var(--emb-id,2px) * -1) var(--emb-ib,4px) var(--emb-page-hi, var(--emb-hi, rgba(255,255,255,.06)))";
     b.addEventListener("click",ev=>{ ev.preventDefault(); ev.stopPropagation();
       if(ev.target.closest(".mx"))return closeTab(x.id);
       if(!on)activate(x.id); });
@@ -174,9 +177,37 @@ function stripInto(t,list,left){
   p.addEventListener("click",ev=>{ ev.preventDefault(); ev.stopPropagation();
     if(d.getElementById("modeMenu"))closeMenu(); else openMenu(d,p); });
   bar.appendChild(p);
-  if(lr&&lr.width){ bar.style.left=left+"px"; bar.style.bottom=Math.round(d.defaultView.innerHeight-lr.bottom)+"px";
-    bar.style.height=Math.round(lr.height)+"px"; bar.style.maxWidth="calc(100vw - "+(left+16)+"px)"; }
-  else { bar.style.left="96px"; bar.style.bottom="12px"; }
+  bar.dataset.left=left; placeStrip(d,left);
+}
+/* v87 — THE STRIP SITS ON THE LOG PILL'S LINE, EXACTLY. Ced: "why isn't it aligned on logs". It took its
+   bottom from innerHeight − the pill's bottom, and innerHeight counts a horizontal scrollbar while a
+   fixed element's `bottom` does not — so whenever the sheet was wide enough to scroll sideways (zoomed in,
+   as in Ced's capture) the tabs rode a scrollbar's height above the pill. Now the strip takes the pill's
+   OWN computed bottom (and its height), and is re-placed on every poll, not only when a tab changes.
+   And nothing may cover it: it sits above the selection bar, the pager and the notices, which are lifted
+   clear of it (--ws-lift, CHILD_CSS) while it is on screen. */
+function placeStrip(d,left){
+  const bar=d&&d.getElementById("modeTabs"), logb=d&&d.getElementById("logBtn"); if(!bar)return;
+  const lr=logb&&logb.getBoundingClientRect();
+  if(lr&&lr.width){
+    const cs=d.defaultView.getComputedStyle(logb);
+    /* v87 — Ced: "the shadows are also not showing well on tabs". The strip scrolls sideways when there
+       are many tabs, so it clips — and it was exactly a pill high, which cut every tab's shadow off at
+       its edges. It now carries a margin of room on every side (PADX/PADY) for the shadow to fall into,
+       and is moved out by the same amount so the pills themselves stay on the log pill's line. */
+    const PADX=14, PADY=12;
+    const lx=(left!=null?left:Math.round(lr.right+8)), by=parseFloat(cs.bottom)||12;
+    const L=(lx-PADX)+"px", B=(by-PADY)+"px", H=(Math.round(lr.height)+PADY*2)+"px";
+    if(bar.style.padding!==PADY+"px "+PADX+"px")bar.style.padding=PADY+"px "+PADX+"px";
+    if(bar.style.left!==L)bar.style.left=L;
+    if(bar.style.bottom!==B)bar.style.bottom=B;
+    if(bar.style.height!==H)bar.style.height=H;
+    const mw="calc(100vw - "+(lx+16-PADX)+"px)"; if(bar.style.maxWidth!==mw)bar.style.maxWidth=mw;
+    /* how far a bottom-docked bar has to rise to clear the strip: the strip's top, from the window's foot */
+    const lift=by+lr.height+8;
+    d.documentElement.style.setProperty("--ws-lift",lift+"px");
+  } else { bar.style.left="96px"; bar.style.bottom="12px"; }
+  d.documentElement.classList.toggle("ws-tabs",!bar.hidden&&bar.childElementCount>0);
 }
 let _sig="", _asig="";
 function renderTabs(force){
@@ -253,7 +284,8 @@ async function start(){
   window.addEventListener("resize",()=>{ clearTimeout(rt); clearTimeout(rt2);
     rt=setTimeout(()=>{ alignAll(); renderTabs(true); },350);
     rt2=setTimeout(()=>{ alignAll(); renderTabs(true); },1100); });
-  setInterval(()=>{ try{ renderTabs(false); }catch(e){} },700);
+  setInterval(()=>{ try{ renderTabs(false); live().forEach(t=>{ const d=tdoc(t), b=d&&d.getElementById("modeTabs");
+    if(b)placeStrip(d,b.dataset.left?+b.dataset.left:null); }); }catch(e){} },700);
   window.MIU_WS={tabs:()=>WS.tabs.map(t=>({id:t.id,tool:t.tool,ready:t.ready,active:t.id===WS.active,name:(docInfo(t)||{}).name||null})),
     open:openTab,activate,close:closeTab,toggle:toggleTool,doc:id=>tdoc(byId(id)),win:id=>twin(byId(id)),active:()=>WS.active};
   return true;

@@ -62,9 +62,16 @@ html.pal-ontel #toolbar .thm-tog.mode-tog[aria-checked="true"] .mt-rfds{color:va
 @media (prefers-reduced-motion:reduce){.logo-swap{transition:opacity .15s}}
 
 /* ---- tabs: the strip sits right of the log pill, each tab wearing the pill's own look -------------- */
-#modeTabs{position:fixed;z-index:58;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
+#modeTabs{position:fixed;z-index:2147482000;box-sizing:border-box;pointer-events:none;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
   scrollbar-width:none}
 #modeTabs::-webkit-scrollbar{display:none}
+#modeTabs>*{pointer-events:auto}
+/* v87 — the bars that dock at the foot of the window rise clear of the tab strip instead of covering it:
+   the selection bar (selbar), the page pager, toasts and the notices */
+html.ws-tabs .selbar{bottom:calc(var(--ws-lift,0px) + 2px)!important}
+html.ws-tabs #pagerBar{bottom:var(--ws-lift,12px)!important}
+html.ws-tabs .toast{bottom:calc(var(--ws-lift,0px) + 8px)!important}
+html.ws-tabs #miuNotice,html.ws-tabs #miuPrevNote,html.ws-tabs #miuEditNote{bottom:calc(var(--ws-lift,0px) + 12px)!important}
 #modeTabs .mtab{display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;min-width:0;
   flex:0 1 auto;transition:color .15s,opacity .15s;position:relative}
 #modeTabs .mtab i{flex:none;width:12px;height:12px;background:currentColor;-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat}
@@ -80,12 +87,17 @@ html.pal-ontel #toolbar .thm-tog.mode-tog[aria-checked="true"] .mt-rfds{color:va
    Each tool has its own tone: Mark It Up's red (the Redline red, #fa3237) and the RFDS blue (the blue
    of the RFDS mark). A tab is washed with its tone over the log pill's own surface (set in stripInto,
    so it holds on every theme), its mark is drawn in it, and the tab you are in is ringed in it. */
-#modeTabs .mtab[data-tool="miu"]{--tone:#fa3237}
-#modeTabs .mtab[data-tool="rfds"]{--tone:#3d7bfd}
+/* v87 — Ced: "match the colors of tabs to the theme. make them different shades but still the same
+   color scheme." Both tones now come from the theme's own accent: Mark It Up wears the accent itself,
+   RFDS a shade of it drawn toward the theme's ink (lighter on night, deeper on day) — one family on every
+   palette and in day and night, still two clearly different tabs. */
+/* Ced, after: "the miu is a darker shade and rfds is lighter in tabs" — so, on every palette and in both
+   modes, Mark It Up is the accent taken DOWN and RFDS the accent taken UP. */
+#modeTabs .mtab[data-tool="miu"],#modeMenu button[data-tool="miu"]{--tone:color-mix(in srgb, var(--accent) 72%, #000)}
+#modeTabs .mtab[data-tool="rfds"],#modeMenu button[data-tool="rfds"]{--tone:color-mix(in srgb, var(--accent) 58%, #fff)}
 #modeTabs .mtab[data-tool] i{background:var(--tone)}
 #modeTabs .mtab.on{outline:1.5px solid var(--tone,var(--accent));outline-offset:-1.5px;color:var(--ink)!important}
-#modeMenu button[data-tool="miu"] i{background:#fa3237}
-#modeMenu button[data-tool="rfds"] i{background:#3d7bfd}
+#modeMenu button[data-tool] i{background:var(--tone)}
 #modeTabs .mtab.mplus{justify-content:center;flex:none}
 #modeTabs .mtab.mplus b{font-size:15px;line-height:1;max-width:none}
 #modeMenu{position:fixed;z-index:4000;display:flex;flex-direction:column;gap:2px;padding:5px;border-radius:12px;
@@ -337,7 +349,13 @@ function applyLook(t,L){
     [["pageViewBtn","pv"],["facingBtn","facing"]].forEach(([id,k])=>{ const b=d.getElementById(id);
       if(b&&!b.disabled&&b.classList.contains("on")!==!!L[k])b.click(); });
   });
-  step("page list",()=>{ const on=d.body.classList.contains("railon");
+  /* v87 — the page list only follows across when BOTH tabs hold a document. Ced: "when changing tabs or
+     closing one to home, the other tool closes the page list." An empty tab (the opening screen, or one
+     just sent Home) has no pinned list to speak of — `railon` is off there — and copying that "off" onto
+     the next tab shut its page list every time you came from an empty one. */
+  step("page list",()=>{
+    if(!L.doc||d.documentElement.classList.contains("nodoc"))return;
+    const on=d.body.classList.contains("railon");
     if(on!==L.rail){ const b=d.getElementById("railToggle"); if(b&&!b.disabled)b.click(); } });
 }
 
@@ -667,8 +685,11 @@ function stripInto(t,list,left){
     b.querySelector("b").textContent=x.name;
     dressPill(b);
     /* the tool's tone over the pill's own surface — stronger on the tab you are in */
-    if(cs){ const tone=x.tool==="rfds"?"#3d7bfd":"#fa3237";
-      b.style.background="color-mix(in srgb, "+tone+" "+(on?"22%":"13%")+", "+cs.backgroundColor+")"; }
+    if(cs)b.style.background="color-mix(in srgb, var(--tone) "+(on?"30%":"18%")+", "+cs.backgroundColor+")";
+    /* neumorphism, as the rest of the chrome (6fi): every tab is raised like the log pill it copies, and
+       the tab you are in is pressed in — the same light and shade, turned inward */
+    if(on)b.style.boxShadow="inset var(--emb-id,2px) var(--emb-id,2px) var(--emb-ib,4px) var(--emb-page-lo, var(--emb-lo, rgba(0,0,0,.35))),"+
+      "inset calc(var(--emb-id,2px) * -1) calc(var(--emb-id,2px) * -1) var(--emb-ib,4px) var(--emb-page-hi, var(--emb-hi, rgba(255,255,255,.06)))";
     b.addEventListener("click",ev=>{ ev.preventDefault(); ev.stopPropagation();
       if(ev.target.closest(".mx"))return closeTab(x.id);
       if(!on)activate(x.id); });
@@ -681,9 +702,37 @@ function stripInto(t,list,left){
   p.addEventListener("click",ev=>{ ev.preventDefault(); ev.stopPropagation();
     if(d.getElementById("modeMenu"))closeMenu(); else openMenu(d,p); });
   bar.appendChild(p);
-  if(lr&&lr.width){ bar.style.left=left+"px"; bar.style.bottom=Math.round(d.defaultView.innerHeight-lr.bottom)+"px";
-    bar.style.height=Math.round(lr.height)+"px"; bar.style.maxWidth="calc(100vw - "+(left+16)+"px)"; }
-  else { bar.style.left="96px"; bar.style.bottom="12px"; }
+  bar.dataset.left=left; placeStrip(d,left);
+}
+/* v87 — THE STRIP SITS ON THE LOG PILL'S LINE, EXACTLY. Ced: "why isn't it aligned on logs". It took its
+   bottom from innerHeight − the pill's bottom, and innerHeight counts a horizontal scrollbar while a
+   fixed element's `bottom` does not — so whenever the sheet was wide enough to scroll sideways (zoomed in,
+   as in Ced's capture) the tabs rode a scrollbar's height above the pill. Now the strip takes the pill's
+   OWN computed bottom (and its height), and is re-placed on every poll, not only when a tab changes.
+   And nothing may cover it: it sits above the selection bar, the pager and the notices, which are lifted
+   clear of it (--ws-lift, CHILD_CSS) while it is on screen. */
+function placeStrip(d,left){
+  const bar=d&&d.getElementById("modeTabs"), logb=d&&d.getElementById("logBtn"); if(!bar)return;
+  const lr=logb&&logb.getBoundingClientRect();
+  if(lr&&lr.width){
+    const cs=d.defaultView.getComputedStyle(logb);
+    /* v87 — Ced: "the shadows are also not showing well on tabs". The strip scrolls sideways when there
+       are many tabs, so it clips — and it was exactly a pill high, which cut every tab's shadow off at
+       its edges. It now carries a margin of room on every side (PADX/PADY) for the shadow to fall into,
+       and is moved out by the same amount so the pills themselves stay on the log pill's line. */
+    const PADX=14, PADY=12;
+    const lx=(left!=null?left:Math.round(lr.right+8)), by=parseFloat(cs.bottom)||12;
+    const L=(lx-PADX)+"px", B=(by-PADY)+"px", H=(Math.round(lr.height)+PADY*2)+"px";
+    if(bar.style.padding!==PADY+"px "+PADX+"px")bar.style.padding=PADY+"px "+PADX+"px";
+    if(bar.style.left!==L)bar.style.left=L;
+    if(bar.style.bottom!==B)bar.style.bottom=B;
+    if(bar.style.height!==H)bar.style.height=H;
+    const mw="calc(100vw - "+(lx+16-PADX)+"px)"; if(bar.style.maxWidth!==mw)bar.style.maxWidth=mw;
+    /* how far a bottom-docked bar has to rise to clear the strip: the strip's top, from the window's foot */
+    const lift=by+lr.height+8;
+    d.documentElement.style.setProperty("--ws-lift",lift+"px");
+  } else { bar.style.left="96px"; bar.style.bottom="12px"; }
+  d.documentElement.classList.toggle("ws-tabs",!bar.hidden&&bar.childElementCount>0);
 }
 let _sig="", _asig="";
 function renderTabs(force){
@@ -760,7 +809,8 @@ async function start(){
   window.addEventListener("resize",()=>{ clearTimeout(rt); clearTimeout(rt2);
     rt=setTimeout(()=>{ alignAll(); renderTabs(true); },350);
     rt2=setTimeout(()=>{ alignAll(); renderTabs(true); },1100); });
-  setInterval(()=>{ try{ renderTabs(false); }catch(e){} },700);
+  setInterval(()=>{ try{ renderTabs(false); live().forEach(t=>{ const d=tdoc(t), b=d&&d.getElementById("modeTabs");
+    if(b)placeStrip(d,b.dataset.left?+b.dataset.left:null); }); }catch(e){} },700);
   window.MIU_WS={tabs:()=>WS.tabs.map(t=>({id:t.id,tool:t.tool,ready:t.ready,active:t.id===WS.active,name:(docInfo(t)||{}).name||null})),
     open:openTab,activate,close:closeTab,toggle:toggleTool,doc:id=>tdoc(byId(id)),win:id=>twin(byId(id)),active:()=>WS.active};
   return true;

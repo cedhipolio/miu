@@ -33,9 +33,16 @@ const log=(...a)=>{ try{ console.info("[workspace]",...a); }catch(e){} };
 /* ---- what goes into every tab --------------------------------------------------------------------- */
 const CHILD_CSS=`@@CSS_PART@@
 /* ---- tabs: the strip sits right of the log pill, each tab wearing the pill's own look -------------- */
-#modeTabs{position:fixed;z-index:58;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
+#modeTabs{position:fixed;z-index:2147482000;box-sizing:border-box;pointer-events:none;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
   scrollbar-width:none}
 #modeTabs::-webkit-scrollbar{display:none}
+#modeTabs>*{pointer-events:auto}
+/* v87 — the bars that dock at the foot of the window rise clear of the tab strip instead of covering it:
+   the selection bar (selbar), the page pager, toasts and the notices */
+html.ws-tabs .selbar{bottom:calc(var(--ws-lift,0px) + 2px)!important}
+html.ws-tabs #pagerBar{bottom:var(--ws-lift,12px)!important}
+html.ws-tabs .toast{bottom:calc(var(--ws-lift,0px) + 8px)!important}
+html.ws-tabs #miuNotice,html.ws-tabs #miuPrevNote,html.ws-tabs #miuEditNote{bottom:calc(var(--ws-lift,0px) + 12px)!important}
 #modeTabs .mtab{display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;min-width:0;
   flex:0 1 auto;transition:color .15s,opacity .15s;position:relative}
 #modeTabs .mtab i{flex:none;width:12px;height:12px;background:currentColor;-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat}
@@ -51,12 +58,17 @@ const CHILD_CSS=`@@CSS_PART@@
    Each tool has its own tone: Mark It Up's red (the Redline red, #fa3237) and the RFDS blue (the blue
    of the RFDS mark). A tab is washed with its tone over the log pill's own surface (set in stripInto,
    so it holds on every theme), its mark is drawn in it, and the tab you are in is ringed in it. */
-#modeTabs .mtab[data-tool="miu"]{--tone:#fa3237}
-#modeTabs .mtab[data-tool="rfds"]{--tone:#3d7bfd}
+/* v87 — Ced: "match the colors of tabs to the theme. make them different shades but still the same
+   color scheme." Both tones now come from the theme's own accent: Mark It Up wears the accent itself,
+   RFDS a shade of it drawn toward the theme's ink (lighter on night, deeper on day) — one family on every
+   palette and in day and night, still two clearly different tabs. */
+/* Ced, after: "the miu is a darker shade and rfds is lighter in tabs" — so, on every palette and in both
+   modes, Mark It Up is the accent taken DOWN and RFDS the accent taken UP. */
+#modeTabs .mtab[data-tool="miu"],#modeMenu button[data-tool="miu"]{--tone:color-mix(in srgb, var(--accent) 72%, #000)}
+#modeTabs .mtab[data-tool="rfds"],#modeMenu button[data-tool="rfds"]{--tone:color-mix(in srgb, var(--accent) 58%, #fff)}
 #modeTabs .mtab[data-tool] i{background:var(--tone)}
 #modeTabs .mtab.on{outline:1.5px solid var(--tone,var(--accent));outline-offset:-1.5px;color:var(--ink)!important}
-#modeMenu button[data-tool="miu"] i{background:#fa3237}
-#modeMenu button[data-tool="rfds"] i{background:#3d7bfd}
+#modeMenu button[data-tool] i{background:var(--tone)}
 #modeTabs .mtab.mplus{justify-content:center;flex:none}
 #modeTabs .mtab.mplus b{font-size:15px;line-height:1;max-width:none}
 #modeMenu{position:fixed;z-index:4000;display:flex;flex-direction:column;gap:2px;padding:5px;border-radius:12px;

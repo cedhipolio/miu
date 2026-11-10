@@ -132,7 +132,13 @@ function applyLook(t,L){
     [["pageViewBtn","pv"],["facingBtn","facing"]].forEach(([id,k])=>{ const b=d.getElementById(id);
       if(b&&!b.disabled&&b.classList.contains("on")!==!!L[k])b.click(); });
   });
-  step("page list",()=>{ const on=d.body.classList.contains("railon");
+  /* v87 — the page list only follows across when BOTH tabs hold a document. Ced: "when changing tabs or
+     closing one to home, the other tool closes the page list." An empty tab (the opening screen, or one
+     just sent Home) has no pinned list to speak of — `railon` is off there — and copying that "off" onto
+     the next tab shut its page list every time you came from an empty one. */
+  step("page list",()=>{
+    if(!L.doc||d.documentElement.classList.contains("nodoc"))return;
+    const on=d.body.classList.contains("railon");
     if(on!==L.rail){ const b=d.getElementById("railToggle"); if(b&&!b.disabled)b.click(); } });
 }
 
