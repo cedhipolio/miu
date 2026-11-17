@@ -121,7 +121,29 @@ function alignAllInner(){
 function docInfo(t){
   const d=tdoc(t); if(!d||!d.documentElement||d.documentElement.classList.contains("nodoc"))return null;
   const f=d.getElementById("miniFname"), n=d.getElementById("miniName");
-  return {name:(f&&f.textContent||"").trim()||(n&&n.value||"").trim()||"Untitled.pdf"};
+  const name=(f&&f.textContent||"").trim()||(n&&n.value||"").trim()||"Untitled.pdf";
+  return {name, title:tabTitle(t,d)};
+}
+/* v88 — THE TAB NAMES ITSELF. Ced: "make miu and rfds tabs autopopulate. for miu, make the tool know if it
+   is construction drawings, mount analysis, or structural analysis so it shows as the tab title. show MIU
+   if unknown file." A Mark It Up tab is titled with what its document is (miuDocKind, read off the pages)
+   and an RFDS tab with what its detection banner says (Final / Preliminary RFDS); either is followed by
+   the site code once one is known, so two mount analyses in two tabs can still be told apart. A file
+   that is none of the three is just "MIU". The file name stays on the tab's tooltip. */
+const EMPTY={miu:"MIU",rfds:"RFDS"};
+function tabTitle(t,d){
+  const w=d.defaultView, site=((d.getElementById("s_site")||{}).value||"").trim().toUpperCase();
+  let kind="";
+  try{
+    if(t.tool==="miu"){ kind=(typeof w.miuDocKind==="function"&&w.miuDocKind())||""; }
+    else{
+      const tag=d.getElementById("detectTag"), band=d.getElementById("detectBanner");
+      const s=(band&&band.classList.contains("show")&&tag&&tag.textContent||"").trim();
+      kind=/PRELIM/i.test(s)?"Preliminary RFDS":/FINAL/i.test(s)?"Final RFDS":"RFDS";
+    }
+  }catch(e){}
+  if(!kind)return EMPTY[t.tool];
+  return site&&site.length<=24?kind+" · "+site:kind;
 }
 const PILL=["height","boxSizing","borderRadius","paddingTop","paddingRight","paddingBottom","paddingLeft","fontFamily",
   "fontSize","fontWeight","letterSpacing","textTransform","background","color","boxShadow","borderTop","borderRight","borderBottom","borderLeft"];
@@ -155,9 +177,9 @@ function stripInto(t,list,left){
     const on=x.id===t.id;
     const b=d.createElement("button"); b.type="button"; b.className="mtab"+(on?" on":""); b.dataset.tool=x.tool; b.dataset.tab=x.id;
     b.setAttribute("role","tab"); b.setAttribute("aria-selected",on?"true":"false");
-    b.title=NAME[x.tool]+" — "+x.name;
+    b.title=NAME[x.tool]+" — "+x.title+(x.name!==NAME[x.tool]?"\n"+x.name:"");
     b.innerHTML='<i></i><b></b><span class="mx" role="button" aria-label="Close tab" title="Close tab">×</span>';
-    b.querySelector("b").textContent=x.name;
+    b.querySelector("b").textContent=x.title;
     dressPill(b);
     /* the tool's tone over the pill's own surface — stronger on the tab you are in */
     if(cs)b.style.background="color-mix(in srgb, var(--tone) "+(on?"30%":"18%")+", "+cs.backgroundColor+")";
@@ -212,7 +234,7 @@ function placeStrip(d,left){
 let _sig="", _asig="";
 function renderTabs(force){
   const L=live();
-  const list=WS.tabs.map(t=>{ const i=docInfo(t); return {id:t.id,tool:t.tool,name:i?i.name:NAME[t.tool]}; });
+  const list=WS.tabs.map(t=>{ const i=docInfo(t); return {id:t.id,tool:t.tool,name:i?i.name:NAME[t.tool],title:i?i.title:EMPTY[t.tool]}; });
   const sig=JSON.stringify(list)+"|"+WS.active+"|"+L.map(t=>{ const d=tdoc(t); return d.documentElement.className+"/"+d.body.className; }).join(",")+"|"+innerWidth+"x"+innerHeight;
   if(!force&&sig===_sig)return;
   /* v82 — something changed inside a tab on its own (a document opened, a tool's Home, the ribbon moved):
@@ -225,7 +247,7 @@ function renderTabs(force){
      its own". Now: a document opened or closed, the ribbon moved or folded, the page list pinned, the
      theme, the window size. */
   const KEEP=/^(nodoc|ribbonright|colmax|railon|chromehide|light|pal-[a-z]+)$/;
-  const asig=JSON.stringify(list.map(x=>[x.id,x.name]))+"|"+L.map(t=>{ const d=tdoc(t);
+  const asig=JSON.stringify(list.map(x=>x.id))+"|"+L.map(t=>{ const d=tdoc(t);
       return [...d.documentElement.classList,...d.body.classList].filter(c=>KEEP.test(c)).sort().join("."); }).join(",")+"|"+innerWidth+"x"+innerHeight;
   const changed=_asig!==""&&asig!==_asig; _asig=asig;
   if(changed&&!force){ alignAll(); setTimeout(()=>{ try{ alignAll(); }catch(e){} },500); }
@@ -286,7 +308,7 @@ async function start(){
     rt2=setTimeout(()=>{ alignAll(); renderTabs(true); },1100); });
   setInterval(()=>{ try{ renderTabs(false); live().forEach(t=>{ const d=tdoc(t), b=d&&d.getElementById("modeTabs");
     if(b)placeStrip(d,b.dataset.left?+b.dataset.left:null); }); }catch(e){} },700);
-  window.MIU_WS={tabs:()=>WS.tabs.map(t=>({id:t.id,tool:t.tool,ready:t.ready,active:t.id===WS.active,name:(docInfo(t)||{}).name||null})),
+  window.MIU_WS={tabs:()=>WS.tabs.map(t=>({id:t.id,tool:t.tool,ready:t.ready,active:t.id===WS.active,name:(docInfo(t)||{}).name||null,title:(docInfo(t)||{title:EMPTY[t.tool]}).title})),
     open:openTab,activate,close:closeTab,toggle:toggleTool,doc:id=>tdoc(byId(id)),win:id=>twin(byId(id)),active:()=>WS.active};
   return true;
 }

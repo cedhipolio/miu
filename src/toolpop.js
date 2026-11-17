@@ -46,7 +46,9 @@ const TP_SPEC={
      at both ends and are not offered the choice. */
   cross:    {title:"Strike text",    form:"stroke", preview:"line", noEnds:true},
   strikerow:{title:"Strike row",     form:"stroke", preview:"line", noEnds:true},
-  crossout: {title:"Cross out",      form:"stroke", preview:"line", noEnds:true},
+  /* v88 — Ced: "the cross out and line mini toolbars should be the same property edits." A cross out is
+     two ordinary lines, so its panel is the Line panel: endings, tip size and pattern included. */
+  crossout: {title:"Cross out",      form:"stroke", preview:"line"},
   /* v71 — several KINDS of mark selected at once: one panel over all of them */
   mixed:    {title:"Selection",      form:"mixed",  preview:"text"},
   /* v74 — every tool's defaults, in one place */

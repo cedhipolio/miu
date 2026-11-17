@@ -36,7 +36,7 @@
   /* ---- the panel: Mark It Up's #maPanel, built the way maRenderStampTab builds it ---- */
   const pan=document.createElement("div"); pan.id="maPanel"; pan.setAttribute("aria-hidden","true"); pan.dataset.ma="stamp";
   pan.innerHTML='<div class="mk-head"><b id="maTitle">COP stamp</b><span class="ma-site" id="maSite"></span>'+
-    '<button class="btn sm" id="maClose" title="Close (Esc)">✕</button></div><div class="ma-body" id="maBody"></div>';
+    '<button class="btn sm" id="maClose" title="Close (Esc)" style="justify-content:center;align-items:center">✕</button></div><div class="ma-body" id="maBody"></div>';
   document.body.appendChild(pan);
   const body=pan.querySelector("#maBody");
   const sec=document.createElement("div"); sec.className="ma-sec"; body.appendChild(sec);

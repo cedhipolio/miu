@@ -48,7 +48,7 @@ html.ws-tabs #miuNotice,html.ws-tabs #miuPrevNote,html.ws-tabs #miuEditNote{bott
 #modeTabs .mtab i{flex:none;width:12px;height:12px;background:currentColor;-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat}
 #modeTabs .mtab[data-tool="miu"] i{-webkit-mask-image:url("${ICO.miu}");mask-image:url("${ICO.miu}")}
 #modeTabs .mtab[data-tool="rfds"] i{-webkit-mask-image:url("${ICO.rfds}");mask-image:url("${ICO.rfds}")}
-#modeTabs .mtab b{font:inherit;overflow:hidden;text-overflow:ellipsis;max-width:180px;min-width:0}
+#modeTabs .mtab b{font:inherit;overflow:hidden;text-overflow:ellipsis;max-width:240px;min-width:0}
 #modeTabs .mtab .mx{flex:none;width:16px;height:16px;margin-right:-5px;border-radius:999px;display:inline-grid;
   place-items:center;font:700 13px/1 system-ui,sans-serif;opacity:.55;text-transform:none}
 #modeTabs .mtab .mx:hover{opacity:1;background:color-mix(in srgb,currentColor 16%,transparent)}

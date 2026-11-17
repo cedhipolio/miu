@@ -64,7 +64,7 @@ build.mjs       the packer — canonical, what CI and Vercel run
 build.py        the same packer in Python, for local work and the test suite
 scripts/        verify-packers.mjs, serve.mjs, release-check.mjs
 tools/          make_fixture.py, addfonts.py, addmarkups.py, traceicon.py, composeicon.py,
-                addworkspace.py, embed_rfds.py
+                addworkspace.py, embed_rfds.py, rfds-patches/ (code appended to the RFDS app)
 test/           the Playwright suite (see "Testing")
 docs/           changelog and deployment notes
 ```
@@ -91,7 +91,7 @@ down and the page boots as a single Mark It Up. `window.__MIU_SINGLE=1` asks for
 suite in `test/` sets it, except `test/workspace.py`, which tests the workspace itself.
 
 **Updating the RFDS tool** — `python3 tools/embed_rfds.py path/to/new-rfds-artifact.html`, then build.
-It keeps the file as `assets/rfds/rfds-artifact.html`, re-applies the named PATCHES (the stamp red),
+It keeps the file as `assets/rfds/rfds-artifact.html`, re-applies the named PATCHES (the stamp red, the per-sector report) and the APPENDS in `tools/rfds-patches/`,
 reports any it can no longer find, and writes `src/rfds.html`. Mark It Up's own sources are untouched.
 On a built file without the repo: `python3 tools/embed_rfds.py --into dist/mark-it-up.artifact.html new.html`.
 

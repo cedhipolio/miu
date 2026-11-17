@@ -5833,8 +5833,10 @@ function selectLine(id){ if(id!==S.selLine){ try{ tipPopClose(); }catch(e){} } S
 /* 6gc — and a STROKE's bar clears the stroke, the same way. It used to be placed off the first point
    and the middle one, which on a leader that rises to the right put it straight over the line. */
 function positionLineBar(l,pg){
+  /* v89 — or several: a cross out's two strokes share the one bar (xoutLines) */
+  const LS=Array.isArray(l)?l:[l]; l=LS[0];
   const bar=$("#linebar"); const r=pg.getBoundingClientRect();
-  const p=linePts(l), w=pg.offsetWidth, h=pg.offsetHeight;
+  const p=[].concat(...LS.map(linePts)), w=pg.offsetWidth, h=pg.offsetHeight;
   const xs=p.map(q=>r.left+q[0]*w), ys=p.map(q=>r.top+q[1]*h);
   let top0=Math.min(...ys), bot=Math.max(...ys);
   /* v71 — Ced: "the mini toolbar in length tool is covering the text part". A length's reading sits
@@ -5852,8 +5854,39 @@ function positionLineBar(l,pg){
   const ins=_chromeInset();
   if(top<Math.max(8,ins.top))top=bot+18;
   fitFloatingBar(bar,Math.max(8,Math.min(...xs)-14),top);
-  try{ const tb=bar.querySelector("[data-ltip]"); if(tb){ const e=endsOf(l); tb.hidden=!(e[0]||e[1]); } }catch(e){}
+  try{ const tb=bar.querySelector("[data-ltip]"); if(tb){ tb.hidden=!LS.some(x=>{ const e=endsOf(x); return e[0]||e[1]; }); } }catch(e){}
 }
+/* =================================================================================================
+   v89 — A CROSS OUT GETS THE LINE'S BAR. Ced: "mini toolbar for cross out in miu is still not the same".
+   A cross out is two strokes, grouped, so selecting it made a two-mark multi-selection and brought up
+   the multi bar ("2 selected", align, distribute) — nothing a cross out can use, and not the bar a line
+   shows. A multi-selection that is exactly one cross out — two strokes of one group, nothing else in
+   that group, crossing corner to corner of the same box — now shows the line's own bar, and every
+   button on it acts on both strokes.
+   ================================================================================================= */
+let _xoutBar=false;
+function xoutLines(){
+  if(S.sel!=null||S.selLine!=null||(S.selMulti&&S.selMulti.size)||!S.selMultiL||S.selMultiL.size!==2)return null;
+  const ls=[...S.selMultiL].map(id=>S.lines.find(x=>x.id===id)).filter(Boolean);
+  if(ls.length!==2)return null;
+  const g=ls[0].group;
+  if(g==null||ls[1].group!==g||ls[0].page!==ls[1].page)return null;
+  if(S.annos.some(a=>a.group===g)||S.lines.some(x=>x.group===g&&ls.indexOf(x)<0))return null;
+  if(ls.some(x=>x.maKind||x.coFor!=null||x.dimFor!=null||(x.pts||[]).length>2))return null;
+  const bb=x=>[Math.min(x.x1,x.x2),Math.min(x.y1,x.y2),Math.max(x.x1,x.x2),Math.max(x.y1,x.y2)];
+  const a=bb(ls[0]), b=bb(ls[1]);
+  if(a.some((v,i)=>Math.abs(v-b[i])>0.002))return null;
+  /* one falls left to right, the other rises */
+  const sl=x=>Math.sign((x.x2-x.x1)*(x.y2-x.y1));
+  if(sl(ls[0])*sl(ls[1])!==-1)return null;
+  return ls;
+}
+/* the strokes the line bar is acting on */
+function lbLines(){
+  if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); return l?[l]:[]; }
+  return (_xoutBar&&xoutLines())||[];
+}
+function hideXoutBar(){ if(_xoutBar){ _xoutBar=false; const b=$("#linebar"); if(b&&S.selLine==null)b.classList.remove("show"); } }
 
 /* ---------- text annotations ---------- */
 /* measure text width in normalized page units (deterministic — no DOM/zoom dependence) */
@@ -9153,6 +9186,12 @@ function selectionPage(){
   return pi==null?null:document.querySelector(`.page[data-idx="${pi}"]`);
 }
 function positionMultibar(){
+  const xo=xoutLines();
+  if(xo){ multibar.classList.remove("show");
+    const pg=document.querySelector(`.page[data-idx="${xo[0].page}"]`);
+    if(pg){ _xoutBar=true; positionLineBar(xo,pg); } else hideXoutBar();
+    return; }
+  hideXoutBar();
   if(multiCount()<2){ multibar.classList.remove("show"); return; }
   const pg=selectionPage(); const bb=pg?multiBBox(pg):null;
   if(!pg||!bb){ multibar.classList.remove("show"); return; }
@@ -9202,7 +9241,7 @@ function clearMulti(){
   S.selMulti.clear(); S.selMultiL.clear();
   document.querySelectorAll(".anno.multi").forEach(d=>d.classList.remove("multi"));
   if(hadL)drawAllLines();
-  multibar.classList.remove("show");
+  multibar.classList.remove("show"); hideXoutBar();
   updateGroupBtn&&updateGroupBtn();
 }
 /* 6gc — CTRL-CLICKING A SECOND MARK SELECTS BOTH.
@@ -10025,28 +10064,28 @@ function valignOf(a){
       {label:"AB C  Between words", title:"Break only between words", on:words,
        run:()=>setOn("wrapMode","words","Lines break between words.")}]); };
 })();
-$("#linebar").querySelector("[data-ldel]").onclick=()=>{ if(S.selLine==null)return; deleteSelection(); };
+$("#linebar").querySelector("[data-ldel]").onclick=()=>{ if(!lbLines().length)return; deleteSelection(); hideXoutBar(); };
 /* 6ib — up, down and the band flip, for a stroke. The same three commands the mark bar has, working on
    the same four-level stack, so "put this line behind the cloud" is one click from either end. */
 $("#linebar").querySelectorAll("[data-llay]").forEach(b=>b.onclick=()=>{
-  const l=(S.lines||[]).find(z=>z.id===S.selLine); if(!l)return;
+  const l=lbLines()[0]; if(!l)return;
   pushHistory();
   const fam=layerFamilyL(l);
   const k=b.dataset.llay;
   if(k==="under"){ const to=!l.under; fam.forEach(x=>{ x.under=to; }); }
   else stepLayer(fam,k==="up"?1:-1);
-  layoutAnnos(); drawAllLines(); selectLine(l.id); updateRail(); autosave();
+  layoutAnnos(); drawAllLines(); if(S.selLine!=null)selectLine(l.id); else positionMultibar(); updateRail(); autosave();
 });
 /* A head on the end, a head on both ends, or neither — cycled on the selected stroke, because which
    one a leader wants is only obvious once it is drawn. */
 (function(){
   const b=$("#linebar").querySelector("[data-larrow]"); if(!b)return;
   b.onclick=()=>{
-    if(S.selLine==null)return;
-    const l=S.lines.find(x=>x.id===S.selLine); if(!l)return;
+    const ls=lbLines(); const l=ls[0]; if(!l)return;
     pushHistory();
-    l.arrow=(l.arrow==="end")?"both":((l.arrow==="both")?undefined:"end");
-    drawAllLines();
+    const to=(l.arrow==="end")?"both":((l.arrow==="both")?undefined:"end");
+    ls.forEach(x=>{ x.arrow=to; });
+    drawAllLines(); if(S.selLine==null)positionMultibar();
     setStatus(l.arrow==="end"?"Arrowhead on the end.":(l.arrow==="both"?"Arrowheads on both ends.":"No arrowhead."));
   };
 })();
@@ -10061,12 +10100,14 @@ function tipLinesOfSel(){
   if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); if(l)out.push(l); }
   else if(S.sel!=null){ const a=S.annos.find(x=>x.id===S.sel);
     try{ const l=a&&maCalloutLeaderOf(a); if(l)out.push(l); }catch(e){} }
+  else out.push(...lbLines());
   return out.filter(l=>{ const e=endsOf(l); return !!(e[0]||e[1]); });
 }
 function tipRebar(){
   try{
     if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine);
       const pg=l&&document.querySelector(`.page[data-idx="${l.page}"]`); if(l&&pg)positionLineBar(l,pg); }
+    else if(_xoutBar)positionMultibar();
     else positionBar();
   }catch(e){}
 }
@@ -10125,6 +10166,7 @@ function tipPopOpen(anchor){
    ================================================================================================= */
 function swTargetsOfSel(){
   const out=[];
+  if(S.selLine==null&&S.sel==null)out.push(...lbLines());
   if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); if(l)out.push(l); }
   else if(S.sel!=null){ const a=S.annos.find(x=>x.id===S.sel);
     if(a&&a.kind!=="img"&&isShape(a)){ out.push(a);
@@ -10184,11 +10226,10 @@ function swPopOpen(anchor){
 (function(){
   const b=$("#linebar").querySelector("[data-lstyle]"); if(!b)return;
   b.onclick=()=>{
-    if(S.selLine==null)return;
-    const l=S.lines.find(x=>x.id===S.selLine); if(!l)return;
+    const ls=lbLines(); if(!ls.length)return;
     pushHistory();
-    l.col=$("#c_text").value;
-    l.sw=parseFloat(($("#c_sw")&&$("#c_sw").value)||1.5)||1.5;
+    ls.forEach(l=>{ l.col=$("#c_text").value;
+      l.sw=parseFloat(($("#c_sw")&&$("#c_sw").value)||1.5)||1.5; });
     drawAllLines();
     setStatus("Stroke restyled.");
   };
@@ -14745,6 +14786,37 @@ function maDetectSite(){
   updateFnamePreview();
   LOG("Site:",S.siteCode||"(not found)",S.siteWhy?("— "+S.siteWhy):"");
   return S.siteCode;
+}
+/* v88 — WHAT KIND OF DOCUMENT THIS IS, FOR THE TAB. Ced: "make the tool know if it is construction drawings,
+   mount analysis, or structural analysis so it shows as the tab title. show MIU if unknown file."
+   Read off the document itself — the first pages' text, the cover counting most — with the file name as a
+   second witness. Three phrases decide it; nothing else is guessed at, so a file that names none of them
+   is just "MIU". "Structural analysis" does not count when it is part of "mount structural analysis",
+   and the cover page outweighs a passing mention ("refer to the construction drawings") further in. */
+const MIU_KINDS=[
+  ["Mount Analysis",       /MOUNT\s+(?:STRUCTURAL\s+)?ANALYS[IE]S|MOUNT\s+(?:MODIFICATION\s+)?(?:REPORT|ANALYSIS)/g, /MOUNT\s*ANALYS|(^|[^A-Z0-9])MA([^A-Z0-9]|$)/],
+  ["Structural Analysis",  /(?<!MOUNT\s{1,3})STRUCTURAL\s+(?:ANALYS[IE]S|CALCULATIONS)|TOWER\s+ANALYSIS/g, /STRUCTURAL\s*ANALYS|(^|[^A-Z0-9])SA([^A-Z0-9]|$)/],
+  ["Construction Drawings",/CONSTRUCTION\s+DRAWINGS?|(?:ZONING|PRELIMINARY|FINAL)\s+DRAWINGS|(?:SHEET|DRAWING)\s+INDEX/g, /CONSTRUCTION\s*DRAWING|(^|[^A-Z0-9])CDS?([^A-Z0-9]|$)/]
+];
+function miuDocKind(){
+  if(!S.doc||!S.pages||!S.pages.length)return "";
+  if(S._kindFor===S.doc&&S._kind!=null)return S._kind;
+  const fname=String(S.name||"").toUpperCase().replace(/\.PDF$/,"").replace(/[_]+/g," ");
+  let best="", bestSc=0;
+  MIU_KINDS.forEach(([kind,rx,frx])=>{
+    let sc=0;
+    for(let pi=0;pi<Math.min(4,S.pages.length);pi++){
+      const txt=maPageTokens(pi).join(" ").toUpperCase().replace(/\s+/g," ");
+      const hits=(txt.match(rx)||[]).length;
+      sc+=Math.min(hits,4)*(pi===0?3:1);
+    }
+    if(frx.test(fname))sc+=4;
+    if(sc>bestSc){ bestSc=sc; best=kind; }
+  });
+  /* the text is only there once the first pages are read; do not remember a blank before then */
+  const read=S.pages.slice(0,Math.min(4,S.pages.length)).every(P=>P&&P.items);
+  if(read){ S._kindFor=S.doc; S._kind=best; }
+  return best;
 }
 /* What the banner says about the document that is open. */
 function maShowDetection(){
