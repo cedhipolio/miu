@@ -628,7 +628,44 @@ function tpSwatches(withNone){
   const more=tpEl("button","tp-sw tp-more","…"); more.type="button"; more.title="Any other colour";
   more.onclick=e=>{ e.stopPropagation(); tpPicker(more,cur,setCol); };
   row.appendChild(more);
+  /* v97 — Ced: "also add color picker to tools in MiU for picking colors". An eyedropper: pick any
+     colour off the screen — the drawing, a stamp, another redline — and the tool (or the selection)
+     takes it. */
+  const drop=tpEl("button","tp-sw tp-drop"); drop.type="button"; drop.title="Pick a colour from the page";
+  drop.setAttribute("aria-label","Pick a colour from the page");
+  drop.onclick=async e=>{ e.stopPropagation(); const v=await miuPickColour(); if(v)setCol(v); };
+  row.appendChild(drop);
   return row;
+}
+/* the eyedropper itself: the browser's own where it has one (it can read anywhere on the screen), and
+   otherwise a pick off the rendered pages — the next click on a page reads that pixel. Escape cancels. */
+function miuPickColour(){
+  if(typeof window.EyeDropper==="function"){
+    try{ return new window.EyeDropper().open().then(r=>r&&r.sRGBHex?String(r.sRGBHex).toLowerCase():null).catch(()=>null); }catch(e){}
+  }
+  return new Promise(res=>{
+    document.body.classList.add("picking-colour");
+    try{ setStatus("Click anywhere on a page to take its colour — Escape cancels."); }catch(e){}
+    const done=v=>{ document.body.classList.remove("picking-colour");
+      window.removeEventListener("pointerdown",down,true); window.removeEventListener("keydown",key,true); res(v); };
+    const key=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); done(null); } };
+    const down=e=>{
+      const pg=e.target&&e.target.closest&&e.target.closest(".page"); if(!pg)return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      let hex=null;
+      try{
+        const cv=[...pg.querySelectorAll("canvas")].find(c=>{ const r=c.getBoundingClientRect();
+          return e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom; });
+        if(cv){ const r=cv.getBoundingClientRect();
+          const x=Math.floor((e.clientX-r.left)*cv.width/r.width), y=Math.floor((e.clientY-r.top)*cv.height/r.height);
+          const p=cv.getContext("2d").getImageData(x,y,1,1).data;
+          hex="#"+[p[0],p[1],p[2]].map(n=>n.toString(16).padStart(2,"0")).join(""); }
+      }catch(err){ hex=null; }
+      done(hex);
+    };
+    /* on the window, so the press is taken before anything on the page (the panel's own outside-click) sees it */
+    window.addEventListener("pointerdown",down,true); window.addEventListener("keydown",key,true);
+  });
 }
 
 /* =================================================================================================

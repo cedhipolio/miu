@@ -176,6 +176,8 @@ function stripInto(t,list,left){
   if(many)list.forEach(x=>{
     const on=x.id===t.id;
     const b=d.createElement("button"); b.type="button"; b.className="mtab"+(on?" on":""); b.dataset.tool=x.tool; b.dataset.tab=x.id;
+    /* v1.102 — a tab this strip has not shown before slides in */
+    d.__wsSeen=d.__wsSeen||new Set(); if(d.__wsSeen.size&&!d.__wsSeen.has(x.id))b.classList.add("enter"); d.__wsSeen.add(x.id);
     b.setAttribute("role","tab"); b.setAttribute("aria-selected",on?"true":"false");
     b.title=NAME[x.tool]+" — "+x.title+(x.name!==NAME[x.tool]?"\n"+x.name:"");
     b.innerHTML='<i></i><b></b><span class="mx" role="button" aria-label="Close tab" title="Close tab">×</span>';
@@ -230,6 +232,121 @@ function placeStrip(d,left){
     d.documentElement.style.setProperty("--ws-lift",lift+"px");
   } else { bar.style.left="96px"; bar.style.bottom="12px"; }
   d.documentElement.classList.toggle("ws-tabs",!bar.hidden&&bar.childElementCount>0);
+}
+/* =================================================================================================
+   v94 — THE DOCUMENT GOES TO ITS TOOL. Ced: "auto read the pdf, if it is an rfds, auto change to rfds,
+   otherwise, if it isnt rfds, go to miu". When a tab finishes reading a newly opened PDF, its name and
+   first pages are read (_miuHandoff, in both tools): an RFDS opened in Mark It Up moves to an RFDS tab,
+   and anything else opened in an RFDS tab moves to Mark It Up. The move reuses an empty tab of the right
+   tool or opens one, hands it the same file, and closes the tab it was opened in. A document that already
+   carries marks is never moved, nor one whose pages have no text to read (a scan) and no RFDS in its name.
+   ================================================================================================= */
+const RFDS_MARKS=[/RFDS\s*DETAILS/i,/DESIGN\s*SUMMARY/i,/RF\s*INVENTORY/i,/PORT\s*LEVEL/i,/EQUIPMENT\s*IN\s*CALC/i,
+  /RF\s*DATA\s*SHEET|RADIO\s*FREQUENCY\s*DATA\s*SHEET/i,/ANTENNA\s*POSITION/i,/ATOLL/i,/\bRFDS\b/i];
+const OTHER_DOC=/MOUNT\s+(?:STRUCTURAL\s+)?ANALYS[IE]S|STRUCTURAL\s+ANALYS[IE]S|CONSTRUCTION\s+DRAWINGS?|TOWER\s+ANALYSIS/i;
+/* why a document was read the way it was — written to the tab's log, so a wrong call can be reported */
+/* v97 — Ced: "they should read it by the pdf name". The name decides first, either way: RFDS (or RF Data
+   Sheet) anywhere in it makes it an RFDS; a name that says mount analysis, structural analysis or
+   construction drawings (MA, SA, CD) makes it not one. Only a name that says neither is read from its pages. */
+const NOT_RFDS_NAME=/MOUNT\s*(?:STRUCTURAL\s*)?(?:ANALYS|MAPPING|MOD)|STRUCTURAL|TOWER\s*ANALYS|CONSTRUCTION|DRAWINGS?|(^|[^A-Z0-9])(MA|SA|CDS?|ZDS?)([^A-Z0-9]|$)/i;
+function rfdsVerdict(h){
+  const nm=String(h.name||"").replace(/\.pdf$/i,"").replace(/[_.\-]+/g," ");
+  if(/RFDS|RF\s*DATA\s*SHEET/i.test(nm))return {rf:true,why:"RFDS in the file name"};
+  if(NOT_RFDS_NAME.test(nm))return {rf:false,why:"the file name says another document type"};
+  const first=String(h.text||"").split("\n")[0]||"";
+  const hits=RFDS_MARKS.filter(rx=>rx.test(h.text)).map(rx=>String(rx.source).slice(0,24));
+  if(OTHER_DOC.test(first)&&hits.length<4)return {rf:false,why:"cover page names another document type"};
+  return {rf:hits.length>=2,why:hits.length+" RFDS marker(s) in the first pages"+(hits.length?" ("+hits.join(", ")+")":"")};
+}
+function isRfdsDoc(h){ return rfdsVerdict(h).rf; }
+function textless(h){ return String(h.text||"").replace(/\s+/g,"").length<40; }
+let _routing=false;
+async function autoRoute(){
+  if(_routing||window.__MIU_NOROUTE)return;   /* the test suites pin documents where they put them */
+  for(const t of live()){
+    if(!t.ready)continue;
+    let h=null; try{ const w=twin(t); h=w&&typeof w._miuHandoff==="function"?w._miuHandoff():null; }catch(e){ h=null; }
+    if(!h){ t._routeKey=null; continue; }
+    const key=h.name+"|"+(h.bytes&&h.bytes.byteLength);
+    if(t._routeKey===key)continue;
+    /* wait for the first pages' text — but not for ever: a page that never yields text is decided on
+       what there is after a few seconds */
+    if(!h.ready){ if(t._routeWait!==key){ t._routeWait=key; t._routeSince=Date.now(); }
+      if(Date.now()-t._routeSince<4000)continue; }
+    t._routeKey=key;
+    /* v97 — the whole of the first pages, read from the PDF itself; and a document is routed the first
+       time it is seen whatever marks it came in with (Ced: "the miu and rfds still do not read the type
+       of pdf uploaded" — an RFDS tab can place its own suggestions as it opens, which v94 took for work) */
+    try{ const w=twin(t); if(w&&typeof w._miuHandoffText==="function"){ const full=await w._miuHandoffText(); if(full&&full.length>String(h.text||"").length)h.text=full; } }catch(e){}
+    const v=rfdsVerdict(h), rf=v.rf;
+    try{ const w=twin(t); w.LOG&&w.LOG("Workspace: read “"+h.name+"” as "+(rf?"an RFDS":"not an RFDS")+" — "+v.why); }catch(e){}
+    /* v95 — Ced: "if a non rfds was opened in rfds tool, please go to miu". The RFDS tool is for RFDS
+       only, so in an RFDS tab anything that does not read as one goes to Mark It Up — a scan included.
+       The other way it is stricter: a scan in Mark It Up stays, since nothing says it is an RFDS. */
+    if(!rf&&textless(h)&&t.tool!=="rfds")continue;
+    const want=rf?"rfds":"miu";
+    if(want===t.tool)continue;
+    _routing=true;
+    try{ await routeTo(t,want,h,key); }catch(e){ try{ console.warn("autoRoute",e); }catch(_){} }
+    finally{ _routing=false; }
+    return;
+  }
+}
+/* v1.102 — THE NAME DECIDES BEFORE THE FILE IS OPENED. Both tools open every PDF through their own
+   `loadPdf(file)` (the drop zone, the Open button, the file field), so the workspace wraps it in each tab:
+   a file whose NAME says it belongs in the other tool is handed straight there — it is never drawn in
+   the wrong one — and a tab left empty by the hand-over goes. A name that says nothing opens where it
+   was dropped, and autoRoute reads its pages as before. */
+function nameRoute(name){
+  const nm=String(name||"").replace(/\.pdf$/i,"").replace(/[_.\-]+/g," ");
+  if(/RFDS|RF\s*DATA\s*SHEET/i.test(nm))return "rfds";
+  if(NOT_RFDS_NAME.test(nm))return "miu";
+  return null;
+}
+function interceptOpen(t){
+  const w=twin(t); if(!w||typeof w.loadPdf!=="function"||w.loadPdf.__ws)return;
+  const orig=w.loadPdf;
+  const wrapped=function(file){
+    try{
+      if(!window.__MIU_NOROUTE&&file&&typeof file==="object"&&file.name&&!_routing){
+        const want=nameRoute(file.name);
+        if(want&&want!==t.tool){ handOff(t,want,file); return Promise.resolve(); }
+      }
+    }catch(e){}
+    return orig.apply(this,arguments);
+  };
+  wrapped.__ws=true; wrapped.__orig=orig; w.loadPdf=wrapped;
+}
+async function handOff(src,want,file){
+  _routing=true;
+  try{
+    const srcEmpty=!docInfo(src);
+    let dst=WS.tabs.find(x=>x!==src&&x.tool===want&&x.ready&&!docInfo(x))||claimSpare(want);
+    if(!dst){ dst=await newTab(want); await dst.readyP; }
+    if(!dst.ready)return;
+    const w=twin(dst); const open=(w.loadPdf&&w.loadPdf.__orig)||w.loadPdf;
+    await activate(dst.id);
+    try{ await open.call(w,file); }catch(e){ log("hand-off open failed:",e&&e.message||e); }
+    try{ w.toast&&w.toast(want==="rfds"?"RFDS — opened in the RFDS tool":"Opened in Mark It Up"); }catch(e){}
+    if(srcEmpty&&WS.tabs.length>1)dropTab(src);
+    else renderTabs(true);
+  } finally { _routing=false; }
+}
+async function routeTo(src,want,h,key){
+  let dst=WS.tabs.find(x=>x!==src&&x.tool===want&&x.ready&&!docInfo(x))||claimSpare(want);
+  if(!dst){ dst=await newTab(want); await dst.readyP; }
+  if(!dst.ready)return;
+  dst._routeKey=key;
+  const w=twin(dst), d=tdoc(dst), inp=d&&d.getElementById("file"); if(!w||!inp)return;
+  const name=/\.pdf$/i.test(h.name)?h.name:(h.name+".pdf");
+  const bytes=(h.bytes.slice?h.bytes.slice(0):h.bytes);
+  const f=new w.File([bytes],name,{type:"application/pdf"});
+  const dt=new w.DataTransfer(); dt.items.add(f); inp.files=dt.files;
+  inp.dispatchEvent(new w.Event("change",{bubbles:true}));
+  await activate(dst.id);
+  /* the tab it was opened in held only this file, unmarked: it goes */
+  dropTab(src);
+  try{ w.toast&&w.toast(want==="rfds"?"This is an RFDS — opened in the RFDS tool":"Not an RFDS — opened in Mark It Up"); }catch(e){}
 }
 let _sig="", _asig="";
 function renderTabs(force){
@@ -306,6 +423,9 @@ async function start(){
   window.addEventListener("resize",()=>{ clearTimeout(rt); clearTimeout(rt2);
     rt=setTimeout(()=>{ alignAll(); renderTabs(true); },350);
     rt2=setTimeout(()=>{ alignAll(); renderTabs(true); },1100); });
+  setInterval(()=>{ try{ autoRoute(); }catch(e){} },600);
+  /* v1.102 — once the first tab is up and idle, a spare of each tool is booted behind it */
+  setTimeout(()=>{ warmSpare(t.tool==="rfds"?"miu":"rfds"); warmSpare(t.tool); },2500);
   setInterval(()=>{ try{ renderTabs(false); live().forEach(t=>{ const d=tdoc(t), b=d&&d.getElementById("modeTabs");
     if(b)placeStrip(d,b.dataset.left?+b.dataset.left:null); }); }catch(e){} },700);
   window.MIU_WS={tabs:()=>WS.tabs.map(t=>({id:t.id,tool:t.tool,ready:t.ready,active:t.id===WS.active,name:(docInfo(t)||{}).name||null,title:(docInfo(t)||{title:EMPTY[t.tool]}).title})),

@@ -283,6 +283,14 @@
   pan.addEventListener("dblclick",e=>{ if(e.target.closest(".mk-head")&&!e.target.closest("button")){ pos=null; place(); } });
   addEventListener("resize",place); addEventListener("scroll",place,true);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&pan.classList.contains("show")&&!document.querySelector(".cop-cal")){ close(); } });
+  /* v94 — Ced: "the cop stamp on rfds should automatically close once the user clicks the pdf ui". A press
+     on the document itself (a page, or the space around the pages) puts the card away; the card, its
+     calendar and the ribbon are not the document and leave it open. */
+  document.addEventListener("pointerdown",e=>{
+    if(!pan.classList.contains("show")||!e.target||!e.target.closest)return;
+    if(e.target.closest("#maPanel,.cop-cal,#stampBtn"))return;
+    if(e.target.closest(".page,#pages"))close();
+  },true);
   /* the ribbon's stamp button (and the quick bar's, which presses it) opens this card instead of the old popover */
   const btn=$("stampBtn");
   if(btn)btn.addEventListener("click",ev=>{

@@ -1,6 +1,6 @@
 
 /* ---- tabs ----------------------------------------------------------------------------------------- */
-const WS={tabs:[],active:null,seq:0,nid:0,z:10,host:null,miuHtml:null,rfdsHtml:null,busy:false};
+const WS={tabs:[],active:null,seq:0,nid:0,sid:0,z:10,host:null,miuHtml:null,rfdsHtml:null,busy:false};
 const tdoc=t=>{ try{ return t&&t.frame&&t.frame.contentDocument; }catch(e){ return null; } };
 const twin=t=>{ try{ return t&&t.frame&&t.frame.contentWindow; }catch(e){ return null; } };
 const live=()=>WS.tabs.filter(t=>t.ready&&tdoc(t));
@@ -34,6 +34,33 @@ async function miuPanelCss(){
   try{
     const txt=await inflateBlob("pk-css");
     const sh=new CSSStyleSheet(); sh.replaceSync(txt.replace(/@import[^;]+;/g,""));
+    /* v98 — Ced: "revert the rfds tool to use times new roman · the drag is showing in all redlines ·
+       the layering in rfds tool is not working · there is a problem in rfds tool textbox, especially the
+       x". v97 gave the RFDS tab ALL of Mark It Up's rules, and the marks themselves are where the two
+       tools are NOT the same: Mark It Up draws a mark's text in its own fonts, stacks marks by its own
+       variables and lays out its selection furniture (move, delete, resize, layer discs) for its own
+       markup. So the rules about the marks and the page under them stay the RFDS tool's own; Mark It Up's
+       stylesheet styles everything around them. Selector lists are split, so a rule that styles a bar
+       and a mark keeps the bar half. */
+    /* and each tool's own logo (#markR, the corner mark: Mark It Up's is tall and narrow, the RFDS one square) */
+    const MARK=/#markR\b|\.lg-|\.logo\b|\.logo-|\.anno\b|annoui|selui|\.page\b|svg\.draw|\.gframe|textlayer|#pages\b|\.ed\b|\.mov\b|\.rz\b|\.rot\b|\.lup\b|\.ldn\b|\.edp\b|(^|[\s>+~,])\.x\b|\.lgrip|\.ggrip|\.cellmark|\.multi\b|\.strike|\.hl\b/;
+    /* v99 — Ced: "the textbox ui was reverted as well on rfds tool. i asked to copy the design language of
+       miu text box ui". The FURNITURE of a selected mark — its frame, resize handles, delete, rotate, move
+       and layer discs — is Mark It Up's after all; only what the mark IS (its text, font, stacking) stays
+       the RFDS tool's own. */
+    const FURN=x=>/^\.(rot|mov)$/.test(x)||/\.anno\b/.test(x)&&/(\.(x|rot|mov|rz|lup|ldn)\b)|^(html\s+)?\.anno\.sel$/.test(x)&&
+                  !/\.ed\b|annoui|selui|gframe|\.multi\b|cellmark|\.page\b|svg\.draw/.test(x);
+    const keepCss=rules=>{ let out="";
+      for(const r of rules){
+        if(r.selectorText!==undefined){
+          const sels=r.selectorText.split(/,(?![^(]*\))/).map(x=>x.trim()).filter(x=>x&&(!MARK.test(x)||FURN(x)));
+          if(sels.length)out+=sels.join(",")+"{"+r.style.cssText+"}\n";
+        } else if(r.cssRules&&r.media){ const inner=keepCss(r.cssRules); if(inner)out+="@media "+r.media.mediaText+"{"+inner+"}\n"; }
+        else if(r.cssRules&&r.conditionText!==undefined){ const inner=keepCss(r.cssRules); if(inner)out+="@supports "+r.conditionText+"{"+inner+"}\n"; }
+        else out+=r.cssText+"\n";
+      }
+      return out; };
+    MIU_ALL_CSS=keepCss(sh.cssRules);
     const KEYS=["#maPanel",".mk-head",".ma-",".cop-","#maBody","#maTitle","#maSite","#maClose","#maFoot","#maScope","#maRange",
                 "#copStatus","#copGc","#copPoc","#copDate","#copPlace"];
     const hit=sel=>KEYS.some(k=>sel.indexOf(k)>=0);
@@ -157,12 +184,21 @@ const typing=x=>!!(x&&(x.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(x.t
 function dress(t){
   const d=tdoc(t); if(!d||!d.head||d.__wsDressed)return;
   d.__wsDressed=true;
+  /* v97 — ONE DESIGN LANGUAGE. Ced: "please make all the design languages ONE. like the themes tab, apply
+     the Miu to the RFDS one". The two tools grew from one codebase and still share their element ids and
+     class names, so the most faithful way to make the RFDS tool look like Mark It Up is to give it Mark It
+     Up's own stylesheet, whole, after its own: everything the two share (the ribbon, the mini bars, a
+     selected mark's handles, the theme panel, dialogs, menus) is drawn by Mark It Up's rules, and what
+     only the RFDS tool has (the analysis panel, the report, the detection banner) keeps its own. The
+     workspace's own adjustments still come last. */
+  if(t.tool==="rfds"&&MIU_ALL_CSS){ const a=d.createElement("style"); a.id="wsMiuAllCss"; a.textContent=MIU_ALL_CSS; d.head.appendChild(a); }
   const st=d.createElement("style"); st.id="wsCss"; st.textContent=CHILD_CSS+(t.tool==="rfds"?PARITY_CSS:""); d.head.appendChild(st);
   if(t.tool==="rfds"){
     /* Mark It Up's COP stamp, in place of the RFDS build's own (v83) */
     if(MIU_PANEL_CSS){ const c=d.createElement("style"); c.id="wsMiuPanelCss"; c.textContent=cardVarsFor(d)+MIU_PANEL_CSS; d.head.appendChild(c); }
     try{ const sc=d.createElement("script"); sc.textContent=RFDS_STAMP_JS; d.head.appendChild(sc); }catch(e){ log("stamp card not added:",e&&e.message||e); }
   }
+  try{ interceptOpen(t); }catch(e){ log("open hook not added:",e&&e.message||e); }
   const flip=ev=>{ if(ev){ ev.preventDefault(); ev.stopPropagation(); } toggleTool(); };
   const rfds=t.tool==="rfds";
   if(rfds){
@@ -216,15 +252,17 @@ function whenReady(t,ms){
     tick();
   });
 }
-async function newTab(tool){
+async function newTab(tool,opts){
+  opts=opts||{};
   const from=byId(WS.active);
   seedLook(tool,from&&lookOf(from));               /* so it boots in the right look: no flash of another */
-  const t={id:"t"+(++WS.nid),tool,frame:null,ready:false,loaded:false,used:0,applied:null};
+  /* v1.102 — a SPARE is booted ahead of time and kept out of the tab list until it is wanted */
+  const t={id:opts.spare?("s"+(++WS.sid)):("t"+(++WS.nid)),tool,frame:null,ready:false,loaded:false,used:0,applied:null,spare:!!opts.spare};
   const fr=document.createElement("iframe");
   fr.title=tool==="rfds"?"RFDS Redlining Tool":"Mark It Up";
   fr.setAttribute("allow","clipboard-read; clipboard-write; fullscreen");
   fr.dataset.tab=t.id; t.frame=fr;
-  WS.tabs.push(t); WS.host.appendChild(fr);
+  if(!t.spare)WS.tabs.push(t); WS.host.appendChild(fr);
   t.readyP=new Promise(res=>{
     fr.addEventListener("load",async()=>{
       /* every load — including a tool's own Home, which reloads its frame — dresses it again */
@@ -266,7 +304,37 @@ async function activate(id,opts){
   tabLooks(to);
   try{ to.frame.focus(); twin(to).focus(); }catch(e){}
 }
-async function openTab(tool){ const t=await newTab(tool); await activate(t.id); return t; }
+/* =================================================================================================
+   v1.102 — SEAMLESS. Ced: "Please make the RFDS and Other PDF uploads more seamless, along with the
+   transitions and tab openings and closing".
+   · A spare tab of each tool is booted quietly in the background once the workspace is idle, and is
+     taken the moment one is needed — a new tab, or a PDF that belongs in the other tool — so the tool
+     is already up when it fades in instead of booting in front of you. It is replaced a little later.
+   · A PDF is sent to its tool BEFORE it is opened, by its name (see interceptOpen): it never opens in the
+     wrong tool first. A name that says nothing still falls to autoRoute, which reads the pages.
+   · Tabs slide in when they open and fade out when they close (CHILD_CSS, stripInto, closeTab).
+   ================================================================================================= */
+WS.spare={}; WS.sid=0;
+function claimSpare(tool){
+  const t=WS.spare[tool];
+  if(!t||!t.ready||!tdoc(t))return null;
+  delete WS.spare[tool];
+  t.spare=false; t.id="t"+(++WS.nid); t.frame.dataset.tab=t.id;
+  WS.tabs.push(t);
+  setTimeout(()=>warmSpare(tool),4000);
+  return t;
+}
+let _warmT={};
+function warmSpare(tool){
+  if(window.__MIU_NOWARM||WS.spare[tool])return;
+  clearTimeout(_warmT[tool]);
+  _warmT[tool]=setTimeout(async()=>{
+    if(WS.spare[tool]||WS.busy)return warmSpare(tool);
+    try{ const t=await newTab(tool,{spare:true}); WS.spare[tool]=t; const ok=await t.readyP;
+      if(!ok){ try{ t.frame.remove(); }catch(e){} delete WS.spare[tool]; } }catch(e){ log("spare tab not warmed:",e&&e.message||e); }
+  },1500);
+}
+async function openTab(tool){ const t=claimSpare(tool)||await newTab(tool); await activate(t.id); return t; }
 async function toggleTool(){
   if(WS.busy)return;
   const cur=byId(WS.active), other=cur&&cur.tool==="rfds"?"miu":"rfds";
@@ -295,6 +363,12 @@ async function closeTab(id){
     const next=WS.tabs.filter(x=>x!==t&&x.ready).sort((a,b)=>b.used-a.used)[0];
     if(next)await activate(next.id);
   }
+  dropTab(t);
+}
+/* v1.102 — a tab leaves the strip with a fade (in every tab's copy of the strip), then its frame goes */
+async function dropTab(t){
+  live().forEach(x=>{ const b=tdoc(x).querySelector('#modeTabs .mtab[data-tab="'+t.id+'"]'); if(b)b.classList.add("leave"); });
+  await new Promise(r=>setTimeout(r,170));
   WS.tabs=WS.tabs.filter(x=>x!==t);
   setTimeout(()=>{ try{ t.frame.remove(); }catch(e){} },420);
   alignAll(); renderTabs(true);

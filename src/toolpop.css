@@ -279,3 +279,10 @@
 .tp-mkdef{align-items:flex-start}
 .tp-defclr{appearance:none;border:0;background:none;padding:0;cursor:pointer;color:var(--accent,#2f6fe0);
   font:inherit;text-decoration:underline}
+/* v97 — the eyedropper swatch */
+.tp-drop{background:var(--fp-btn);color:var(--fp-muted);display:inline-flex;align-items:center;justify-content:center}
+.tp-drop::before{content:"";width:14px;height:14px;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.7 3.3a3 3 0 0 0-4.2 0l-2.8 2.8-1-1a1 1 0 0 0-1.4 1.4l.7.7-7.6 7.6a2 2 0 0 0-.6 1.2l-.3 2.6-1.1 1.1a1 1 0 0 0 1.4 1.4l1.1-1.1 2.6-.3a2 2 0 0 0 1.2-.6l7.6-7.6.7.7a1 1 0 0 0 1.4-1.4l-1-1 2.8-2.8a3 3 0 0 0 0-4.2zM8.4 18.2l-2.3.3.3-2.3 7.5-7.5 2 2z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.7 3.3a3 3 0 0 0-4.2 0l-2.8 2.8-1-1a1 1 0 0 0-1.4 1.4l.7.7-7.6 7.6a2 2 0 0 0-.6 1.2l-.3 2.6-1.1 1.1a1 1 0 0 0 1.4 1.4l1.1-1.1 2.6-.3a2 2 0 0 0 1.2-.6l7.6-7.6.7.7a1 1 0 0 0 1.4-1.4l-1-1 2.8-2.8a3 3 0 0 0 0-4.2zM8.4 18.2l-2.3.3.3-2.3 7.5-7.5 2 2z'/%3E%3C/svg%3E") center/contain no-repeat}
+.tp-drop:hover{color:var(--fp-ink,currentColor)}
+body.picking-colour #pages, body.picking-colour .page, body.picking-colour .page *{cursor:crosshair!important}

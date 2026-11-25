@@ -749,9 +749,60 @@ function copRemoveFrom(pi){
   doomed.forEach(id=>{ try{ S.selMulti.delete(id); }catch(e){} });
   return gs.length;
 }
+/* =================================================================================================
+   v100 — ONE STAMP SIZE, AND EVERY STAMP IN A CLEAR SPACE. Ced: "resizing the cop stamp on MiU should auto
+   readjust all the cop stamps and should reapply them on the correct spaces (auto find clear space)".
+   Resizing one stamp sets the size for all of them: its new height against the size the page would have
+   given it is a ratio (S.copKrel), every stamp in the document is redrawn at its own page's scale times
+   that ratio, and each one is placed again by the same search a new stamp uses — a bigger stamp needs a
+   different clear space than the one it had. Stamps placed afterwards keep the ratio.
+   ================================================================================================= */
+function copKFor(pi){
+  const r=(S.copKrel>0)?S.copKrel:1;
+  return Math.max(0.2,Math.min(COP_K_MAX*2,copScale(pi)*r));
+}
+function copStampGroupOfSelection(){
+  const A=multiAnnos(), L=multiLines();
+  if(L.length||!A.length)return null;
+  const g=A[0].group;
+  return (g!=null&&A.every(a=>a.copRole&&a.group===g))?g:null;
+}
+async function copRescaleAll(gid){
+  /* v1.103 — ONE UNDO STEP. Ced: "resizing the cop stamp, this should also be just one step. ctrl z undoes
+     all the resizing in one." The resize pushed the step when it began; the redraw and re-placing of every
+     stamp below would push more of their own (each placement is a mark being added), so whatever they push
+     is taken back off and the one step the resize took stands for all of it. */
+  const h0=S.history.length;
+  try{ return await _copRescaleAll(gid); }
+  finally{ if(S.history.length>h0)S.history.length=h0; S.future=[]; try{ updateUndoUI(); }catch(e){} }
+}
+async function _copRescaleAll(gid){
+  const p=copPartsOf(gid); if(!p.box)return 0;
+  const pi0=p.box.page, d0=copPageDims(pi0);
+  const f0=Object.assign({},copFields(),copReadStamp(gid)||{});
+  const natural=copSpec(f0,pi0,copScale(pi0));
+  const curH=(p.box.nh||0)*d0.h;
+  if(!(curH>1&&natural.h>0))return 0;
+  S.copKrel=Math.max(0.2,Math.min(4,curH/natural.h));
+  const gs=copStampsOn(null), pages=[];
+  gs.forEach(g=>{ const q=copPartsOf(g); if(q.box&&pages.indexOf(q.box.page)<0)pages.push(q.box.page); });
+  const fieldsOf={}; gs.forEach(g=>{ const q=copPartsOf(g); if(q.box)fieldsOf[q.box.page]=Object.assign({},copFields(),copReadStamp(g)||{},{place:"auto"}); });
+  try{ clearMulti(); selectAnno(null); }catch(e){}
+  let n=0;
+  for(const pi of pages){
+    copRemoveFrom(pi);
+    const f=fieldsOf[pi];
+    const rec=copRec(f,pi,copKFor(pi));
+    const at=await copFindSpot(pi,rec._spec,"auto");
+    maPlaceMarkup(rec,pi,at.nx,at.ny,"tl"); n++;
+  }
+  try{ layoutAnnos(); updateRail(); autosave(); }catch(e){}
+  try{ setStatus(n+" stamp"+(n===1?"":"s")+" resized together and placed in clear space again."); }catch(e){}
+  return n;
+}
 async function copPlaceOn(pi,f){
   copRemoveFrom(pi);                      /* 6kl — one stamp per page, always the newest */
-  const rec=copRec(f,pi);
+  const rec=copRec(f,pi,(S.copKrel>0&&S.copKrel!==1)?copKFor(pi):undefined);
   const at=await copFindSpot(pi,rec._spec,f.place||"auto");
   return maPlaceMarkup(rec,pi,at.nx,at.ny,"tl");
 }

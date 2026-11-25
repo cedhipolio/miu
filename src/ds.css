@@ -621,3 +621,62 @@ html .sk-edit .sk-edb.sk-edok svg, html .sk-edit .sk-edb.sk-edok .sk-edg{color:#
   @keyframes copProgIn{from{opacity:0}}
   @keyframes copProgOut{to{opacity:0}}
   @media (prefers-reduced-motion: reduce){ #maPanel .cop-progfill{animation:none; transition:none} #maPanel .cop-progstamp{transition:none} }
+
+  /* v94 — the multi bar's own property controls wear the same marks as the line and text bars */
+  #multibar button[data-mbsw], #multibar button[data-mbprops], #multibar button[data-mbarrow]{font-size:0!important; -webkit-text-stroke:0;
+    display:inline-flex; align-items:center; justify-content:center}
+  #multibar button[data-mbsw] i{display:none}
+  #multibar button[data-mbsw]::before{content:""; width:17px; height:17px; flex:none; background:currentColor;
+    -webkit-mask:var(--i-mb-sw) center/contain no-repeat; mask:var(--i-mb-sw) center/contain no-repeat}
+  #multibar button[data-mbprops]::before{content:""; width:16px; height:16px; flex:none; background:currentColor;
+    -webkit-mask:var(--i-props) center/contain no-repeat; mask:var(--i-props) center/contain no-repeat}
+  #multibar button[data-mbarrow]::before{content:""; width:14px; height:14px; flex:none; background:currentColor; transform:rotate(45deg);
+    -webkit-mask:var(--i-mb-layer) center/contain no-repeat; mask:var(--i-mb-layer) center/contain no-repeat}
+
+  /* v94 — Ced's icon for the multi bar's horizontal aligns: two solid triangles. Centre is his picture
+     (the two halves meeting in the middle); left and right lean both triangles to that edge. */
+  :root{
+    --i-al2-c:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M224 96v320c0 10-11 16-19 10L9 266c-7-5-7-15 0-20L205 86c8-6 19 0 19 10zM288 96v320c0 10 11 16 19 10l196-160c7-5 7-15 0-20L307 86c-8-6-19 0-19 10z'/%3E%3C/svg%3E");
+    --i-al2-l:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect x='8' y='64' width='44' height='384' rx='18'/%3E%3Cpath d='M272 96v320c0 10-11 16-19 10L89 266c-7-5-7-15 0-20L253 86c8-6 19 0 19 10zM488 96v320c0 10-11 16-19 10L305 266c-7-5-7-15 0-20L469 86c8-6 19 0 19 10z'/%3E%3C/svg%3E");
+    --i-al2-r:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect x='460' y='64' width='44' height='384' rx='18'/%3E%3Cpath d='M240 96v320c0 10 11 16 19 10l164-160c7-5 7-15 0-20L259 86c-8-6-19 0-19 10zM24 96v320c0 10 11 16 19 10l164-160c7-5 7-15 0-20L43 86c-8-6-19 0-19 10z'/%3E%3C/svg%3E");
+  }
+  #multibar button[data-al2="left"], #multibar button[data-al2="hcenter"], #multibar button[data-al2="right"]{
+    font-size:0!important; -webkit-text-stroke:0; display:inline-flex; align-items:center; justify-content:center}
+  #multibar button[data-al2="left"]::before, #multibar button[data-al2="hcenter"]::before, #multibar button[data-al2="right"]::before{
+    content:""; width:16px; height:16px; flex:none; background:currentColor;
+    -webkit-mask:var(--al2i) center/contain no-repeat; mask:var(--al2i) center/contain no-repeat}
+  #multibar button[data-al2="left"]{--al2i:var(--i-al2-l)}
+  #multibar button[data-al2="hcenter"]{--al2i:var(--i-al2-c)}
+  #multibar button[data-al2="right"]{--al2i:var(--i-al2-r)}
+
+  /* v95 — Ced: "use the same icons changed for vertical as well". The vertical aligns are the same two
+     triangles turned a quarter: top leans them to a bar at the top, middle is his picture upright. */
+  #multibar button[data-al2="top"], #multibar button[data-al2="vmiddle"], #multibar button[data-al2="bottom"]{
+    font-size:0!important; -webkit-text-stroke:0; display:inline-flex; align-items:center; justify-content:center}
+  #multibar button[data-al2="top"]::before, #multibar button[data-al2="vmiddle"]::before, #multibar button[data-al2="bottom"]::before{
+    content:""; width:16px; height:16px; flex:none; background:currentColor; transform:rotate(90deg);
+    -webkit-mask:var(--al2i) center/contain no-repeat; mask:var(--al2i) center/contain no-repeat}
+  #multibar button[data-al2="top"]{--al2i:var(--i-al2-l)}
+  #multibar button[data-al2="vmiddle"]{--al2i:var(--i-al2-c)}
+  #multibar button[data-al2="bottom"]{--al2i:var(--i-al2-r)}
+
+  /* v95 — ONE SET OF LAYER ICONS. Ced: "match all the layering icons … use these for one layer up and down.
+     whereas use the same icon with two arrows for send to back or front". One step up or down is the
+     round chevron (the stroke bar used arrows); all the way to the front or back is the same round mark
+     with two chevrons — on the text bar, the line bar and the multi bar alike. */
+  :root{--i-mb-boxlayer2:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Cpath d='M7.6 11.4L12 7L16.4 11.4M7.6 16.6L12 12.2L16.4 16.6' fill='none' stroke='%23000' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/mask%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='11.2' mask='url(%23m)'/%3E%3C/svg%3E")}
+  #linebar [data-llay="up"], #linebar [data-llay="down"]{--mb-i:var(--i-mb-boxlayer)}
+  #linebar [data-llay="up"]::before, #linebar [data-llay="down"]::before{width:17px; height:17px}
+  #annobar [data-lay="front"], #annobar [data-lay="back"], #multibar [data-lay3="front"], #multibar [data-lay3="back"]{--mb-i:var(--i-mb-boxlayer2)}
+  #annobar [data-lay="up"], #annobar [data-lay="down"], #multibar [data-lay3="up"], #multibar [data-lay3="down"]{--mb-i:var(--i-mb-boxlayer)}
+  #linebar [data-llay="front"], #linebar [data-llay="back"]{--mb-i:var(--i-mb-boxlayer2)}
+  #annobar [data-lay="up"]::before, #annobar [data-lay="down"]::before, #annobar [data-lay="front"]::before, #annobar [data-lay="back"]::before,
+  #linebar [data-llay]::before, #multibar [data-lay3]::before{width:17px; height:17px}
+  #annobar [data-lay="down"]::before, #multibar [data-lay3="down"]::before, #linebar [data-llay="back"]::before{transform:rotate(180deg)}
+
+  /* v95 — Ced: "also change the icon of layers in redline box". The up / down discs on a selected mark's
+     left edge wear the same round chevron as every bar's one-step layer control. */
+  html .anno .lup, html .anno .ldn{font-size:0!important; -webkit-text-stroke:0}
+  html .anno .lup::before, html .anno .ldn::before{content:""; width:14px; height:14px; flex:none; background:currentColor;
+    -webkit-mask:var(--i-mb-boxlayer) center/contain no-repeat; mask:var(--i-mb-boxlayer) center/contain no-repeat}
+  html .anno .ldn::before{transform:rotate(180deg)}

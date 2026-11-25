@@ -33,7 +33,7 @@ const log=(...a)=>{ try{ console.info("[workspace]",...a); }catch(e){} };
 /* ---- what goes into every tab --------------------------------------------------------------------- */
 const CHILD_CSS=`@@CSS_PART@@
 /* ---- tabs: the strip sits right of the log pill, each tab wearing the pill's own look -------------- */
-#modeTabs{position:fixed;z-index:2147482000;box-sizing:border-box;pointer-events:none;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
+#modeTabs{position:fixed;z-index:62;box-sizing:border-box;pointer-events:none;display:flex;gap:8px;align-items:center;overflow-x:auto;overflow-y:hidden;
   scrollbar-width:none}
 #modeTabs::-webkit-scrollbar{display:none}
 #modeTabs>*{pointer-events:auto}
@@ -67,11 +67,16 @@ html.ws-tabs #miuNotice,html.ws-tabs #miuPrevNote,html.ws-tabs #miuEditNote{bott
 #modeTabs .mtab[data-tool="miu"],#modeMenu button[data-tool="miu"]{--tone:color-mix(in srgb, var(--accent) 72%, #000)}
 #modeTabs .mtab[data-tool="rfds"],#modeMenu button[data-tool="rfds"]{--tone:color-mix(in srgb, var(--accent) 58%, #fff)}
 #modeTabs .mtab[data-tool] i{background:var(--tone)}
+@keyframes wsTabIn{from{opacity:0;transform:translateY(8px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes wsTabOut{to{opacity:0;transform:translateY(6px) scale(.9);max-width:0;padding-left:0;padding-right:0;margin-right:-8px}}
+#modeTabs .mtab.enter{animation:wsTabIn .24s cubic-bezier(.2,.9,.3,1.2) both}
+#modeTabs .mtab.leave{animation:wsTabOut .17s ease-in both;pointer-events:none}
+@media (prefers-reduced-motion:reduce){#modeTabs .mtab.enter,#modeTabs .mtab.leave{animation:none}}
 #modeTabs .mtab.on{outline:1.5px solid var(--tone,var(--accent));outline-offset:-1.5px;color:var(--ink)!important}
 #modeMenu button[data-tool] i{background:var(--tone)}
 #modeTabs .mtab.mplus{justify-content:center;flex:none}
 #modeTabs .mtab.mplus b{font-size:15px;line-height:1;max-width:none}
-#modeMenu{position:fixed;z-index:4000;display:flex;flex-direction:column;gap:2px;padding:5px;border-radius:12px;
+#modeMenu{position:fixed;z-index:4450;display:flex;flex-direction:column;gap:2px;padding:5px;border-radius:12px;
   background:var(--panel,#18191b);color:var(--ink,#e8e9ec);border:1px solid var(--line,#35373b);
   box-shadow:0 14px 40px rgba(0,0,0,.35);font:600 12.5px/1.2 var(--sans,system-ui,sans-serif);min-width:190px}
 #modeMenu button{appearance:none;border:0;background:transparent;color:inherit;font:inherit;text-align:left;
@@ -82,7 +87,26 @@ html.ws-tabs #miuNotice,html.ws-tabs #miuPrevNote,html.ws-tabs #miuEditNote{bott
 #modeMenu button[data-tool="rfds"] i{-webkit-mask-image:url("${ICO.rfds}");mask-image:url("${ICO.rfds}")}
 #modeMenu small{display:block;font-weight:500;opacity:.6;margin-top:2px}
 `;
-const PARITY_CSS=`body.railon #logBtn, html.nodoc #logBtn{left:84px}
+const PARITY_CSS=`/* v99 — a selected RFDS mark wears Mark It Up's furniture; these keep it to the selected mark and
+   draw the delete badge once (the RFDS build adds its own glyph as well as the button's text) */
+.anno:not(.sel) > .mov,.anno:not(.sel) > .rot,.anno:not(.sel) > .lup,.anno:not(.sel) > .ldn,.anno:not(.sel) > .rz{display:none!important}
+.anno:not(.sel) > .x{opacity:0!important;pointer-events:none!important}
+.anno > .x::before{content:none!important}
+.anno > .x{display:flex!important;align-items:center;justify-content:center;font-size:11px!important;line-height:1!important}
+.annolayer,.annolayer-under{isolation:isolate}
+/* v1.01 — the selected mark's handles, lifted over every redline (rfds-patches/layer-steps.js) */
+.anno.miu-selmirror{position:absolute!important;z-index:100000!important;pointer-events:none!important;background:none!important;
+  border:0!important;padding:0!important;margin:0!important;box-sizing:border-box!important;min-width:0!important;min-height:0!important}
+.anno.miu-selmirror > *{pointer-events:auto}
+.miu-selhost{position:absolute;z-index:100000;pointer-events:none;overflow:visible}
+.anno.sel[data-mirrored]{box-shadow:none}
+/* v95 — the layer icons, as in Mark It Up: round chevron = one step, double = all the way */
+:root{--i-mb-boxlayer2:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Cpath d='M7.6 11.4L12 7L16.4 11.4M7.6 16.6L12 12.2L16.4 16.6' fill='none' stroke='%23000' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/mask%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='11.2' mask='url(%23m)'/%3E%3C/svg%3E")}
+#annobar [data-lay="up"],#annobar [data-lay="down"]{--mb-i:var(--i-mb-boxlayer)}
+#annobar [data-lay="front"],#annobar [data-lay="back"]{--mb-i:var(--i-mb-boxlayer2)}
+#annobar [data-lay="up"]::before,#annobar [data-lay="down"]::before,#annobar [data-lay="front"]::before,#annobar [data-lay="back"]::before{width:17px;height:17px}
+#annobar [data-lay="down"]::before,#annobar [data-lay="back"]::before{transform:rotate(180deg)}
+body.railon #logBtn, html.nodoc #logBtn{left:84px}
 body.railon #logPanel, html.nodoc #logPanel{left:84px}
 /* v83 — Ced: "make the fonts on the ribbon similar as well." Mark It Up's face, everywhere in the tab: its
    --sans stack (Helvetica Neue first), and controls that inherit it as Mark It Up's do (6e — the RFDS
@@ -94,7 +118,7 @@ button,input,select,textarea,optgroup{font-family:inherit}
 #stampPanel{display:none!important}`;
 /* Mark It Up's stamp card (#maPanel) — the RULES for it, lifted from Mark It Up's own stylesheet so the
    card in an RFDS tab is drawn by the very same CSS, filled in at start (see miuPanelCss) */
-let MIU_PANEL_CSS="";
+let MIU_PANEL_CSS="", MIU_ALL_CSS="";
 const RFDS_STAMP_JS=@@RFDS_STAMP_JS@@;
 /* the workspace page itself: only the frames (and, until the first tab is up, the boot screen) */
 const SHELL_CSS=`

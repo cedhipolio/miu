@@ -8177,6 +8177,42 @@ function markHandles(d,a,pg,ed){
   return d;
 }
 const SEL_FURNITURE=".x,.rz,.rot,.mov,.lup,.ldn,.edp";
+/* v96 — Ced: "a double click in a text box should make it editable … even without aiming to the input of
+   the box". The selected mark's resize handles and outline sit over its edges in the selection layer,
+   and a double-click that landed on one of them never reached the text. A double-click on that
+   furniture (not on a button: delete, rotate, move, layer, edit picture) now opens the mark's text,
+   caret and all, the same as a double-click on the words. */
+function _openMarkText(id){
+  const a=S.annos.find(z=>z.id===id); if(!a||a.kind==="img")return false;
+  if(a.group!=null&&!groupOpenIs(a.group))return false;      // a closed group opens first (the frame's rule)
+  const real=[...document.querySelectorAll('.anno[data-id="'+id+'"]')].find(n=>!n.closest(".annoui"));
+  const ed=real&&real.querySelector(".ed"); if(!ed)return false;
+  real.classList.add("editing"); ed.focus();
+  try{ document.getSelection().selectAllChildren(ed); }catch(e){}
+  return true;
+}
+/* the handles re-render under the pointer as a resize starts, so the browser never sees the two presses
+   land on one element and sends no dblclick: the double press is counted here instead, and the second
+   one opens the text rather than starting another resize */
+let _rzPress=null;
+document.addEventListener("pointerdown",ev=>{
+  const t=ev.target; if(!t||!t.closest||ev.button!==0)return;
+  const h=t.closest(".rz"), host=h&&h.closest(".anno");
+  const id=host?+(host.dataset.sel!=null?host.dataset.sel:host.dataset.id):NaN, now=Date.now();
+  if(!host||isNaN(id)){ _rzPress=null; return; }
+  if(_rzPress&&_rzPress.id===id&&now-_rzPress.t<450&&Math.hypot(ev.clientX-_rzPress.x,ev.clientY-_rzPress.y)<8){
+    _rzPress=null;
+    if(_openMarkText(id)){ ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); }
+    return;
+  }
+  _rzPress={id,t:now,x:ev.clientX,y:ev.clientY};
+},true);
+document.addEventListener("dblclick",ev=>{
+  const t=ev.target; if(!t||!t.closest)return;
+  if(t.closest(".x,.rot,.mov,.lup,.ldn,.edp,button"))return;
+  const host=t.closest(".anno"); if(!host||!host.closest(".annoui"))return;
+  if(_openMarkText(+(host.dataset.sel!=null?host.dataset.sel:host.dataset.id))){ ev.preventDefault(); ev.stopPropagation(); }
+},true);
 function selUIFrameFor(id){
   const a=S.annos.find(z=>z.id===id); if(!a)return null;
   const pg=document.querySelector(`.page[data-idx="${a.page}"]`); if(!pg)return null;
@@ -8791,8 +8827,13 @@ function visiblePageIdx(){
   });
   return best==null?currentPageIdx():best;
 }
-function selectAllOnPage(){
+/* v94 — Ced: "ctrl a in miu should not automatically select the stamp, double ctrl a should". Ctrl+A takes
+   every mark on the page except the COP stamp (the five marks that carry `copRole`); a second Ctrl+A
+   within a moment (or on a page with nothing but the stamp) takes the stamp too. */
+let _selAllAt=0;
+function selectAllOnPage(withStamp){
   if(!S.doc)return;
+  if(withStamp==null){ const now=Date.now(); withStamp=(now-_selAllAt)<700; _selAllAt=withStamp?0:now; }
   /* 6ey — and the caret comes back to the document. 6ex let the CHORDED keys through while a ribbon field
      held the caret, so Ctrl+A now selects — but Delete keeps the wide guard (it has to: Delete must not
      remove a mark while you edit a search term), so the pair came apart: Ctrl+A worked and the Delete
@@ -8802,8 +8843,11 @@ function selectAllOnPage(){
   const pi=visiblePageIdx();
   clearMulti(); selectAnno(null); S.selLine=null; $("#linebar").classList.remove("show");
   ensurePageRendered(pi);                                     // marks can only paint on a rendered page
-  S.annos.forEach(a=>{ if(a.page===pi)S.selMulti.add(a.id); });
-  S.lines.forEach(l=>{ if(l.page===pi)S.selMultiL.add(l.id); });
+  const stampG=new Set(); if(!withStamp)S.annos.forEach(a=>{ if(a.copRole&&a.group!=null)stampG.add(a.group); });
+  const isStamp=o=>stampG.size&&(o.copRole||(o.group!=null&&stampG.has(o.group)));
+  S.annos.forEach(a=>{ if(a.page===pi&&!isStamp(a))S.selMulti.add(a.id); });
+  S.lines.forEach(l=>{ if(l.page===pi&&!isStamp(l))S.selMultiL.add(l.id); });
+  if(!withStamp&&!multiCount()&&stampG.size){ S.annos.forEach(a=>{ if(a.page===pi)S.selMulti.add(a.id); }); }
   setTimeout(()=>{ paintMulti(); positionMultibar(); },60);
   paintMulti();
   const n=multiCount();
@@ -9088,8 +9132,11 @@ function startGroupScale(ev,pg,bb,pos){
     });
     layoutAnnos(); drawAllLines(); paintMulti();
   };
+  const stampG=(typeof copStampGroupOfSelection==="function")?copStampGroupOfSelection():null;   /* v100 */
   const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
-                 dropSnapCache(); };
+                 dropSnapCache();
+                 /* v100 — a COP stamp resized: every stamp takes the size, and each is placed in clear space again */
+                 if(stampG!=null){ try{ copRescaleAll(stampG); }catch(e){} } };
   window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
 }
 /* Turn everything selected about the centre of the frame, with the angle shown. */
@@ -9229,8 +9276,9 @@ function positionMultibar(){
      in, "align tops" still had a line to act on and still tore a cross-out apart; the control has to go
      the moment a line is in the set. */
   const linesOnly=(S.selMultiL.size>0);
-  multibar.querySelectorAll('[data-al2="top"],[data-al2="vmiddle"],[data-al2="bottom"],[data-dist="v"],[data-tal],[data-mbsize],[data-lay2],[data-lay3],[data-lay2grp]')
+  multibar.querySelectorAll('[data-al2="top"],[data-al2="vmiddle"],[data-al2="bottom"],[data-dist="v"],[data-tal],[data-mbsize]')
     .forEach(b=>{ b.style.display=linesOnly?"none":""; });
+  try{ mbSync(); }catch(e){}
   const als=[...new Set(multiAnnos().map(a=>a.align||"center"))];
   multibar.querySelectorAll("[data-tal]").forEach(b=>b.classList.toggle("on",als.length===1&&als[0]===b.dataset.tal));
   multibar.classList.add("show");
@@ -9841,6 +9889,7 @@ annobar.querySelectorAll("[data-lay]").forEach(b=>b.onclick=()=>{ const a=S.anno
     const fam=layerFamily(a); const to=!a.under;
     fam.forEach(x=>{ x.under=to; });
   }
+  else if(b.dataset.lay==="up"||b.dataset.lay==="down")stepLayer(layerFamily(a),b.dataset.lay==="up"?1:-1);
   else layerMarks(layerFamily(a),b.dataset.lay);
   layoutAnnos(); drawAllLines(); selectAnno(a.id); updateRail(); autosave(); });
 multibar.querySelectorAll("[data-lay2]").forEach(b=>b.onclick=()=>{
@@ -9862,7 +9911,10 @@ multibar.querySelectorAll("[data-lay2]").forEach(b=>b.onclick=()=>{
 multibar.querySelectorAll("[data-lay3]").forEach(b=>b.onclick=()=>{
   const list=[...multiAnnos(),...multiLines()]; if(!list.length){ toast("Select some redlines first"); return; }
   pushHistory();
-  const n=layerMarks(list,b.dataset.lay3);
+  const k=b.dataset.lay3;
+  if(k==="up"||k==="down"){ stepLayer(list,k==="up"?1:-1);
+    layoutAnnos(); drawAllLines(); paintMulti(); positionMultibar(); updateRail(); autosave(); return; }
+  const n=layerMarks(list,k);
   layoutAnnos(); drawAllLines(); paintMulti(); positionMultibar(); updateRail(); autosave();
   toast((b.dataset.lay3==="front"?"Brought ":"Sent ")+n+" mark"+(n===1?"":"s")+
         (b.dataset.lay3==="front"?" to the front":" to the back"));
@@ -9870,6 +9922,43 @@ multibar.querySelectorAll("[data-lay3]").forEach(b=>b.onclick=()=>{
 multibar.querySelectorAll("[data-al2]").forEach(b=>b.onclick=()=>alignSelected(b.dataset.al2));
 multibar.querySelectorAll("[data-dist]").forEach(b=>b.onclick=()=>distributeSelected(b.dataset.dist));
 multibar.querySelector("[data-mbsize]").onclick=matchSizeSelected;
+/* =================================================================================================
+   v94 — THE MULTI BAR CARRIES WHAT THE SELECTION HAS. Ced: "when multiple items are selected, make sure
+   the mini toolbar has the properties similar to the items selected". It offered aligning and spacing
+   and nothing about the marks themselves. Now: text size for every selected text, thickness for every
+   stroke and outline, an arrowhead for every stroke, and the properties panel bound to the selection —
+   each shown only when the selection holds something it acts on (mbSync, from positionMultibar).
+   ================================================================================================= */
+function mbTexts(){ return multiAnnos().filter(a=>a.kind!=="img"&&a.kind!=="stamp"&&!a.st); }
+function mbStrokes(){ return multiLines().filter(l=>l.maKind!=="dim"); }
+function mbSync(){
+  const T=mbTexts(), L=mbStrokes(), SH=multiAnnos().filter(a=>a.kind!=="img"&&isShape(a));
+  multibar.querySelectorAll("[data-mbfs]").forEach(b=>{ b.style.display=T.length?"":"none"; });
+  const sw=multibar.querySelector("[data-mbsw]"); if(sw)sw.style.display=(L.length||SH.length)?"":"none";
+  const ar=multibar.querySelector("[data-mbarrow]"); if(ar)ar.style.display=L.length?"":"none";
+}
+multibar.querySelectorAll("[data-mbfs]").forEach(b=>b.onclick=()=>{
+  const T=mbTexts(); if(!T.length)return;
+  pushHistory();
+  T.forEach(a=>{ a.size=Math.max(2,Math.min(64,(a.size||8)+(+b.dataset.mbfs))); try{ fitCellBox(a); }catch(e){} });
+  layoutAnnos(); paintMulti(); positionMultibar(); autosave();
+});
+(function(){
+  const b=multibar.querySelector("[data-mbsw]");
+  if(b)b.onclick=e=>{ e.stopPropagation(); const open=!!document.querySelector(".sw-pop"); tipPopClose(); if(!open)swPopOpen(b); };
+  const a=multibar.querySelector("[data-mbarrow]");
+  if(a)a.onclick=()=>{
+    const L=mbStrokes(); if(!L.length)return;
+    pushHistory();
+    const to=(L[0].arrow==="end")?"both":((L[0].arrow==="both")?undefined:"end");
+    L.forEach(l=>{ l.arrow=to; });
+    drawAllLines(); autosave();
+    setStatus(to==="end"?"Arrowhead on the end of every selected stroke.":(to==="both"?"Arrowheads on both ends.":"No arrowheads."));
+  };
+  const p=multibar.querySelector("[data-mbprops]");
+  if(p)p.onclick=e=>{ e.stopPropagation();
+    try{ const sel=sbSel(); tpOpen(sbToolFor(sel),p,true); }catch(err){ toast("No properties for this"); } };
+})();
 /* 6i2 — the bar's own rotate: the same question the frame's grip asks, on the control that is never
    covered by anything. The turn is relative, about the middle of whatever is selected. */
 (function(){
@@ -10073,6 +10162,7 @@ $("#linebar").querySelectorAll("[data-llay]").forEach(b=>b.onclick=()=>{
   const fam=layerFamilyL(l);
   const k=b.dataset.llay;
   if(k==="under"){ const to=!l.under; fam.forEach(x=>{ x.under=to; }); }
+  else if(k==="front"||k==="back")layerMarks(fam,k);
   else stepLayer(fam,k==="up"?1:-1);
   layoutAnnos(); drawAllLines(); if(S.selLine!=null)selectLine(l.id); else positionMultibar(); updateRail(); autosave();
 });
@@ -10107,7 +10197,7 @@ function tipRebar(){
   try{
     if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine);
       const pg=l&&document.querySelector(`.page[data-idx="${l.page}"]`); if(l&&pg)positionLineBar(l,pg); }
-    else if(_xoutBar)positionMultibar();
+    else if(_xoutBar||(S.sel==null&&multiCount()))positionMultibar();
     else positionBar();
   }catch(e){}
 }
@@ -10153,7 +10243,7 @@ function tipPopOpen(anchor){
   anchor.after(box);
   anchor.classList.add("on");
   tipRebar();
-  const bar=anchor.closest("#linebar,#annobar");
+  const bar=anchor.closest("#linebar,#annobar,#multibar");
   const away=e=>{ if(!box.contains(e.target)&&e.target!==anchor&&!(bar&&bar.contains(e.target)))tipPopClose(); };
   setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
   box._off=()=>document.removeEventListener("pointerdown",away,true);
@@ -10166,7 +10256,10 @@ function tipPopOpen(anchor){
    ================================================================================================= */
 function swTargetsOfSel(){
   const out=[];
-  if(S.selLine==null&&S.sel==null)out.push(...lbLines());
+  if(S.selLine==null&&S.sel==null){ const xl=lbLines(); out.push(...xl);
+    /* v94 — and a multi-selection's strokes and outlines, from the multi bar */
+    if(!xl.length&&multiCount()){ out.push(...mbStrokes());
+      multiAnnos().forEach(a=>{ if(a.kind!=="img"&&isShape(a))out.push(a); }); } }
   if(S.selLine!=null){ const l=S.lines.find(x=>x.id===S.selLine); if(l)out.push(l); }
   else if(S.sel!=null){ const a=S.annos.find(x=>x.id===S.sel);
     if(a&&a.kind!=="img"&&isShape(a)){ out.push(a);
@@ -10205,7 +10298,7 @@ function swPopOpen(anchor){
   anchor.after(box);
   anchor.classList.add("on");
   tipRebar();
-  const bar=anchor.closest("#linebar,#annobar");
+  const bar=anchor.closest("#linebar,#annobar,#multibar");
   const away=e=>{ if(!box.contains(e.target)&&e.target!==anchor&&!(bar&&bar.contains(e.target)))tipPopClose(); };
   setTimeout(()=>document.addEventListener("pointerdown",away,true),0);
   box._off=()=>document.removeEventListener("pointerdown",away,true);
@@ -10901,7 +10994,7 @@ document.addEventListener("keydown",e=>{
    they call has been here the whole time. An audit case now clicks every button in the ribbon and
    fails on any that does nothing, so a button cannot go quiet again without the tests saying so.
    ================================================================================================= */
-$("#selAllBtn").onclick=selectAllOnPage;
+$("#selAllBtn").onclick=()=>selectAllOnPage();
 $("#saveBtn").onclick=manualSave;
 /* the cache button is live whether or not a document is open: what it clears is what the BROWSER is
    holding, which is exactly what you want to empty before opening anything */
@@ -14798,9 +14891,40 @@ const MIU_KINDS=[
   ["Structural Analysis",  /(?<!MOUNT\s{1,3})STRUCTURAL\s+(?:ANALYS[IE]S|CALCULATIONS)|TOWER\s+ANALYSIS/g, /STRUCTURAL\s*ANALYS|(^|[^A-Z0-9])SA([^A-Z0-9]|$)/],
   ["Construction Drawings",/CONSTRUCTION\s+DRAWINGS?|(?:ZONING|PRELIMINARY|FINAL)\s+DRAWINGS|(?:SHEET|DRAWING)\s+INDEX/g, /CONSTRUCTION\s*DRAWING|(^|[^A-Z0-9])CDS?([^A-Z0-9]|$)/]
 ];
+/* v94 — what the workspace needs to route a document (see tools/rfds-patches/handoff.js for the RFDS side) */
+function _miuHandoff(){
+  if(!S.doc||!S.docBytes||!S.pages||!S.pages.length)return null;
+  const n=Math.min(8,S.pages.length), txt=[];
+  for(let i=0;i<n;i++){ const P=S.pages[i]; if(P&&P.items)txt.push(P.items.map(t=>String(t.str||"")).join(" ")); }
+  return {bytes:S.docBytes,name:String(S.name||"document"),text:txt.join("\n"),
+          marks:(S.annos||[]).length+(S.lines||[]).length,ready:S.pages.slice(0,Math.min(3,S.pages.length)).every(P=>P&&P.items)};
+}
+/* v97 — and the text straight from the PDF, so the decision does not wait on (or miss) pages the tool
+   has not read yet: the first twelve pages, through pdf.js itself. Cached per document. */
+async function _miuHandoffText(){
+  if(!S.doc)return "";
+  if(S._hoFor===S.doc&&S._hoText!=null)return S._hoText;
+  const n=Math.min(12,S.doc.numPages||0), out=[];
+  for(let i=1;i<=n;i++){ try{ const pg=await S.doc.getPage(i); const tc=await pg.getTextContent();
+    out.push(tc.items.map(t=>String(t.str||"")).join(" ")); }catch(e){} }
+  S._hoFor=S.doc; S._hoText=out.join("\n"); return S._hoText;
+}
+/* v97 — Ced: "they should read it by the pdf name". The FILE NAME decides first: a name that says what the
+   document is is taken at its word, and the pages are read only when the name says nothing. */
+const MIU_NAME_KINDS=[
+  ["Mount Analysis",       /MOUNT\s*(?:STRUCTURAL\s*)?(?:ANALYS|MAPPING|MOD)|(^|[^A-Z0-9])MA([^A-Z0-9]|$)/],
+  ["Structural Analysis",  /STRUCTURAL|TOWER\s*ANALYS|(^|[^A-Z0-9])SA([^A-Z0-9]|$)/],
+  ["Construction Drawings",/CONSTRUCTION|DRAWINGS?|(^|[^A-Z0-9])(CDS?|ZDS?)([^A-Z0-9]|$)/]
+];
+function miuKindFromName(name){
+  const n=String(name||"").toUpperCase().replace(/\.PDF$/,"").replace(/[_.\-]+/g," ");
+  for(const [kind,rx] of MIU_NAME_KINDS)if(rx.test(n))return kind;
+  return "";
+}
 function miuDocKind(){
   if(!S.doc||!S.pages||!S.pages.length)return "";
   if(S._kindFor===S.doc&&S._kind!=null)return S._kind;
+  { const byName=miuKindFromName(S.name); if(byName){ S._kindFor=S.doc; S._kind=byName; return byName; } }
   const fname=String(S.name||"").toUpperCase().replace(/\.PDF$/,"").replace(/[_]+/g," ");
   let best="", bestSc=0;
   MIU_KINDS.forEach(([kind,rx,frx])=>{

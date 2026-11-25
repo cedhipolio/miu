@@ -252,6 +252,14 @@ function sbSetLock(on){
 function sbLayer(where){
   const sel=sbSel(); if(!sbCount())return;
   pushHistory();
+  /* v95 — the same stack the mini bars use, strokes included: one step, or all the way */
+  if(where==="up"||where==="down"||where==="front"||where==="back"){
+    const list=sel.annos.concat(sel.lines);
+    if(where==="up"||where==="down")stepLayer(list,where==="up"?1:-1); else layerMarks(list,where);
+    layoutAnnos(); drawAllLines(); selbarSync(); try{ autosave(); }catch(e){}
+    setStatus(where==="up"?"Up one layer.":where==="down"?"Down one layer.":where==="front"?"Brought to the front.":"Sent to the back.");
+    return;
+  }
   const zs=S.annos.map(a=>a.z||0);
   const top=zs.length?Math.max(...zs):0, bot=zs.length?Math.min(...zs):0;
   sel.annos.forEach(a=>{
@@ -622,6 +630,8 @@ function sbStackItems(){
   return [
     {sep:true},
     {head:"STACK"},
+    {label:"Up one layer",run:()=>sbLayer("up")},
+    {label:"Down one layer",run:()=>sbLayer("down")},
     {label:"Bring to front",run:()=>sbLayer("front")},
     {label:"Send to back",run:()=>sbLayer("back")},
     {sep:true},
@@ -758,7 +768,7 @@ function sbCtxPage(pi){
   const go=(id)=>{ const b=document.getElementById(id); if(b&&!b.disabled)b.click(); };
   return [
     {head:"PAGE "+(pi+1)+" OF "+n},
-    {label:"Select every mark on this page", run:()=>{ try{ selectAllOnPage(); }catch(e){} }},
+    {label:"Select every mark on this page", run:()=>{ try{ selectAllOnPage(true); }catch(e){} }},
     {label:"Paste here",  run:()=>{ try{ pasteAnnos(); }catch(e){ toast("Nothing to paste"); } }},
     {sep:true},
     /* what the tool actually keeps per page: whether it is locked against redlining, and whether it

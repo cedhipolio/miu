@@ -378,15 +378,20 @@
   <!-- v71 — Ced: "in textbox mini toolbar, add a setting to change font with the font name on the
        display, add vertical alignment and wrap as well" -->
   <span class="ab-font" data-abfont></span>
+  <!-- v94 — Ced: "in text toolbar, move the layer up and down on the right side the font selector" -->
+  <!-- v95 — Ced: "use these for one layer up and down … the same icon with two arrows for send to back or
+       front … apply this to all mini toolbars, in all redline types" -->
+  <button data-lay="up" title="Up one layer">⤒</button>
+  <button data-lay="down" title="Down one layer">⤓</button>
+  <button data-lay="front" title="Bring to front (above other redlines)">⤒</button>
+  <button data-lay="back" title="Send to back (below other redlines)">⤓</button>
+  <button data-lay="under" title="Toggle below/above strike lines">⇅</button>
+  <span class="sep"></span>
   <button data-valign title="Vertical alignment — top, middle or bottom of the box" aria-label="Vertical alignment">⇳</button>
   <button data-wrapm title="Wrap — fill each line, or break between words" aria-label="Wrap">↵</button>
   <button data-atip title="Arrowhead tip size of the leader" aria-label="Arrowhead tip size">◂▸</button>
   <!-- v75 — Ced: "allow line thickness to be edited on the mini toolbar" -->
   <button data-asw title="Outline thickness" aria-label="Outline thickness" class="swbtn"><i></i></button>
-  <span class="sep"></span>
-  <button data-lay="front" title="Bring to front (above other redlines)">⤒</button>
-  <button data-lay="back" title="Send to back (below other redlines)">⤓</button>
-  <button data-lay="under" title="Toggle below/above strike lines">⇅</button>
   <span class="sep"></span>
   <!-- 6jf — Ced: "add flip on the mini tool bar that pops on the redlines." It is on the selection bar
        and here both, because either one is the bar that pops on a redline depending on what you have
@@ -407,6 +412,8 @@
   <!-- 6ib — a stroke has a place in the stack too, and the same three controls a mark has -->
   <button data-llay="up" title="Up one layer">⤒</button>
   <button data-llay="down" title="Down one layer">⤓</button>
+  <button data-llay="front" title="Bring to front (above other redlines)">⤒</button>
+  <button data-llay="back" title="Send to back (below other redlines)">⤓</button>
   <button data-llay="under" title="Toggle below / above the redlines">⇅</button>
   <span class="sep"></span>
   <button data-larrow="1" title="Arrowhead on / off — click again for a head at both ends">↗</button>
@@ -435,6 +442,8 @@
   <span class="sep" data-lay2grp="1"></span>
   <!-- 6gu — front and back for a whole selection, which is also the only bar a GROUP ever shows: the
        block moves as one layer and keeps its own internal order. -->
+  <button data-lay3="up" title="Up one layer — the selection moves as one">⤒</button>
+  <button data-lay3="down" title="Down one layer — the selection moves as one">⤓</button>
   <button data-lay3="front" title="Bring the selection to the front — a group moves as one layer">⤒</button>
   <button data-lay3="back" title="Send the selection to the back — a group moves as one layer">⤓</button>
   <!-- 6dx — the same below/above toggle the single-selection bar has, for a whole selection at once.
@@ -449,6 +458,15 @@
        rotate grip since 6hb, and on a cross-out drawn near the foot of a page the bar itself sits over
        it — so the control was there and could not be reached. This one is always where the rest of the
        selection's actions are; a click asks for the angle, which is what the grip's own click does. -->
+  <!-- v94 — Ced: "when multiple items are selected, make sure the mini toolbar has the properties
+       similar to the items selected". Text size for the text in it, thickness and arrowheads for its
+       strokes and outlines, and the properties panel bound to the whole selection. -->
+  <button data-mbfs="-1" title="Smaller — every selected text">A−</button>
+  <button data-mbfs="1" title="Larger — every selected text">A+</button>
+  <button data-mbsw="1" title="Thickness — every selected stroke and outline" aria-label="Thickness" class="swbtn"><i></i></button>
+  <button data-mbarrow="1" title="Arrowhead on / off — every selected stroke">↗</button>
+  <button data-mbprops="1" title="Properties of the selection">◐</button>
+  <span class="sep" data-mbpropsep="1"></span>
   <button data-mbrot="1" title="Rotate the selection — type the angle">↻</button>
   <button data-mbgroup="1" title="Group or ungroup the selection (Ctrl+G)">⛓</button>
   <button class="delbtn" data-mbdel="1" title="Delete the selection (Del)" aria-label="Delete"><span class="delx">✕</span></button>
